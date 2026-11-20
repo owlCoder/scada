@@ -10,7 +10,7 @@ public sealed class IncidentServiceTests
     public void SecurityAlertCreatesOnlyOneIncident()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
-        var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Покушај", "operator");
+        var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Attempt", "operator");
 
         service.Observe([alert]);
         service.Observe([alert]);
@@ -23,7 +23,7 @@ public sealed class IncidentServiceTests
     public void IncidentCanBeAcknowledgedAndResolved()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
-        service.Observe([new(DateTimeOffset.UtcNow, "SafetyInterlock", "Пумпа", "simulation")]);
+        service.Observe([new(DateTimeOffset.UtcNow, "SafetyInterlock", "Pump", "simulation")]);
         var id = service.GetAll()[0].Id;
 
         Assert.True(service.TryUpdate(id, IncidentStatus.Acknowledged, "operator", out _));
@@ -38,7 +38,7 @@ public sealed class IncidentServiceTests
     {
         var store = new InMemoryIncidentStore();
         var first = new IncidentService(store);
-        var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Провера", "operator");
+        var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Verification", "operator");
         first.Observe([alert]);
         var id = Assert.Single(first.GetAll()).Id;
         Assert.True(first.TryUpdate(id, IncidentStatus.Resolved, "admin", out _));
@@ -54,7 +54,7 @@ public sealed class IncidentServiceTests
     public void AuditEventsDoNotCreateIncidents()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
-        service.Observe([new(DateTimeOffset.UtcNow, "Audit", "Команда", "operator")]);
+        service.Observe([new(DateTimeOffset.UtcNow, "Audit", "Command", "operator")]);
         Assert.Empty(service.GetAll());
     }
 }
