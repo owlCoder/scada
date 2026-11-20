@@ -14,7 +14,7 @@ public sealed class ModbusTcpService(ModbusFrameService frames, ILogger<ModbusTc
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var listener = new TcpListener(IPAddress.Loopback, port);
-        using var slots = new SemaphoreSlim(MaxClients);
+        var slots = new SemaphoreSlim(MaxClients);
         listener.Start();
         logger.LogInformation("Виртуелни Modbus TCP (само читање) слуша на 127.0.0.1:{Port}", port);
 
