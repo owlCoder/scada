@@ -1,0 +1,41 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'Tests/**'
+      - '*.slnx'
+      - '*.props'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scada-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore scada.slnx
+      - name: Build
+        run: dotnet build scada.slnx -c Release --no-restore
+      - name: Test
+        run: dotnet test scada.slnx -c Release --no-build
+      - name: Frontend tests
+        run: |
+          node --check src/Api/wwwroot/app.js
+          node --test Tests/FrontendTests/*.test.cjs
