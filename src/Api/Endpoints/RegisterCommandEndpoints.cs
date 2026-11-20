@@ -1,3 +1,4 @@
+using Api.Authorization;
 using Api.Contracts;
 using Protocols;
 using Security;
@@ -30,13 +31,6 @@ public static class RegisterCommandEndpoints
             {
                 return Results.Conflict(exception.Message);
             }
-        }).AddEndpointFilter(async (context, next) =>
-        {
-            var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
-            var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-            return policy.Authorize(key, AccessRole.Operator)
-                ? await next(context)
-                : Results.Unauthorized();
-        });
+        }).RequireRole(AccessRole.Operator);
     }
 }
