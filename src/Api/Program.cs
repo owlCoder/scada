@@ -9,20 +9,39 @@ builder.Services.AddSingleton<Plant>();
 builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
+builder.Services.AddSingleton<PlantSnapshotService>();
 builder.Services.AddHostedService<SimulationService>();
 
 var app = builder.Build();
 
-app.MapGet("/api/plant", (IPlantService service) => Results.Ok(service.GetState()));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
 app.MapGet("/api/events", (IEventStore store) => Results.Ok(store.GetRecent()));
-app.MapPost("/api/plant/tick", (TickRequest request, IPlantService service) =>
+
+var commands = app.MapGroup("/api/plant");
+commands.AddEndpointFilter(async (context, next) =>
 {
-    if (request.Seconds is <= 0 or > 60)
-        return Results.BadRequest("Корак мора бити између 0 и 60 секунди.");
-    service.Advance(request.Seconds);
-    return Results.Ok(service.GetState());
+    var configuredKey = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["Security:CommandApiKey"];
+    if (string.IsNullOrWhiteSpace(configuredKey))
+        return Results.Problem("Команде су онемогућене док није подешен API кључ.", statusCode: 503);
+
+    var suppliedKey = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    if (!ApiKeyValidator.Matches(configuredKey, suppliedKey))
+        return Results.Unauthorized();
+
+    return await next(context);
 });
-app.MapPost("/api/plant/pump/{id}/command", (string id, PumpCommand command, IPlantService service, CommandMonitor monitor) =>
+
+commands.MapPost("/tick", (TickRequest request, IPlantService service, PlantSnapshotService snapshots) =>
+{
+    if (!double.IsFinite(request.Seconds) || request.Seconds is <= 0 or > 60)
+        return Results.BadRequest("Корак мора бити између 0 и 60 секунди.");
+
+    service.Advance(request.Seconds);
+    return Results.Ok(snapshots.GetSnapshot());
+});
+
+commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service, PlantSnapshotService snapshots, CommandMonitor monitor) =>
 {
     if (id != "P-101")
         return Results.NotFound();
@@ -30,8 +49,9 @@ app.MapPost("/api/plant/pump/{id}/command", (string id, PumpCommand command, IPl
         return Results.BadRequest("Оператер је обавезан.");
     if (!monitor.Check(command.Actor))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
     service.SetPump(command.Running, command.Actor);
-    return Results.Ok(service.GetState());
+    return Results.Ok(snapshots.GetSnapshot());
 });
 
 app.Run();
