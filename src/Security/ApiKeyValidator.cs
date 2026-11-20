@@ -5,6 +5,9 @@ namespace Security;
 
 public static class ApiKeyValidator
 {
+    public static string Fingerprint(string key) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+
     public static bool Matches(string expected, string supplied)
     {
         if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(supplied))
