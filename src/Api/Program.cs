@@ -1,5 +1,7 @@
 using Api.Configuration;
-using Api.Endpoints;
+using Api.Endpoints.Commands;
+using Api.Endpoints.Read;
+using Api.Endpoints.System;
 using Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);

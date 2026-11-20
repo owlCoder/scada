@@ -1,11 +1,11 @@
 using Api.Authorization;
 using Security;
 
-namespace Api.Endpoints;
+namespace Api.Endpoints.Read;
 
 public static class IdentityEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         var read = app.MapGroup("/api").RequireRole(AccessRole.Viewer);
         read.MapGet("/me", (AuthorizationService authorization, HttpContext http) =>
@@ -13,5 +13,6 @@ public static class IdentityEndpoints
             var user = authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!;
             return Results.Ok(new { user.Username, role = user.Role.ToString() });
         });
+        return app;
     }
 }

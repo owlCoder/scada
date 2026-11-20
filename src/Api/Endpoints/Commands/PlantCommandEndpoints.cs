@@ -3,11 +3,11 @@ using Api.Contracts;
 using Application;
 using Security;
 
-namespace Api.Endpoints;
+namespace Api.Endpoints.Commands;
 
 public static class PlantCommandEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         var commands = app.MapGroup("/api/plant");
         commands.RequireRole(AccessRole.Operator);
@@ -53,5 +53,6 @@ public static class PlantCommandEndpoints
                 .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
             return Results.Ok(service.GetState());
         });
+        return app;
     }
 }

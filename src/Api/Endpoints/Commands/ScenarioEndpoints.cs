@@ -1,11 +1,11 @@
 using Api.Authorization;
 using Security;
 
-namespace Api.Endpoints;
+namespace Api.Endpoints.Commands;
 
 public static class ScenarioEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         app.MapPost("/api/scenarios/{id}", (string id, ScenarioService scenarios,
             AuthorizationService authorization, CommandMonitor monitor, HttpContext http) =>
@@ -21,5 +21,6 @@ public static class ScenarioEndpoints
                 ? Results.Accepted($"/api/scenarios/{id}")
                 : Results.NotFound();
         }).RequireRole(AccessRole.Administrator);
+        return app;
     }
 }

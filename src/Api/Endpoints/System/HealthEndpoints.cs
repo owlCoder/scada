@@ -1,8 +1,8 @@
-namespace Api.Endpoints;
+namespace Api.Endpoints.System;
 
 public static class HealthEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
         {
@@ -24,5 +24,6 @@ public static class HealthEndpoints
                 return Results.Json(new { status = "degraded", storage = "postgres" }, statusCode: 503);
             }
         });
+        return app;
     }
 }

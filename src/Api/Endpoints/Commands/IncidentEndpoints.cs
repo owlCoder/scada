@@ -3,11 +3,11 @@ using Api.Contracts;
 using Application;
 using Security;
 
-namespace Api.Endpoints;
+namespace Api.Endpoints.Commands;
 
 public static class IncidentEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         var incidentCommands = app.MapGroup("/api/incidents");
         incidentCommands.RequireRole(AccessRole.Administrator);
@@ -38,5 +38,6 @@ public static class IncidentEndpoints
                 return Results.Conflict(exception.Message);
             }
         });
+        return app;
     }
 }

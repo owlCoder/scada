@@ -3,11 +3,11 @@ using Api.Contracts;
 using Protocols;
 using Security;
 
-namespace Api.Endpoints;
+namespace Api.Endpoints.Commands;
 
 public static class RegisterCommandEndpoints
 {
-    public static void Map(WebApplication app)
+    public static WebApplication Map(WebApplication app)
     {
         app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
             VirtualRegisterService registers, CommandMonitor monitor, HttpContext http) =>
@@ -30,5 +30,6 @@ public static class RegisterCommandEndpoints
                 return Results.Conflict(exception.Message);
             }
         }).RequireRole(AccessRole.Operator);
+        return app;
     }
 }
