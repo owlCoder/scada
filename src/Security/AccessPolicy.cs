@@ -11,7 +11,7 @@ public sealed class AccessPolicy
     {
         var active = keys.Values.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray();
         if (active.Distinct(StringComparer.Ordinal).Count() != active.Length)
-            throw new ArgumentException("Различите улоге морају имати различите API кључеве.", nameof(keys));
+            throw new ArgumentException("Different roles must have distinct API keys.", nameof(keys));
 
         _keys = new Dictionary<AccessRole, string>(keys);
     }
