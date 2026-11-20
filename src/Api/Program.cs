@@ -111,6 +111,11 @@ read.AddEndpointFilter(async (context, next) =>
         : Results.Unauthorized();
 });
 
+read.MapGet("/me", (AuthorizationService authorization, HttpContext http) =>
+{
+    var user = authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!;
+    return Results.Ok(new { user.Username, role = user.Role.ToString() });
+});
 read.MapGet("/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
 read.MapGet("/events", (IEventStore store) => Results.Ok(store.GetRecent()));
 read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
