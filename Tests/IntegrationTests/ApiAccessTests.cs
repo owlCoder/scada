@@ -81,6 +81,16 @@ public sealed class ApiAccessTests
     }
 
     [Fact]
+    public async Task NamedUserCanReadOwnIdentity()
+    {
+        using var factory = new Factory();
+        using var client = Client(factory, "ana-integration-key");
+        var me = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/me");
+        Assert.Equal("ana", me.GetProperty("username").GetString());
+        Assert.Equal("Operator", me.GetProperty("role").GetString());
+    }
+
+    [Fact]
     public async Task NamedOperatorAuditUsesVerifiedIdentity()
     {
         using var factory = new Factory();
