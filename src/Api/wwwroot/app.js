@@ -15,7 +15,7 @@ function itemList(id, items, render) {
     const title = document.createElement('div');
     title.textContent = render(item);
     const time = document.createElement('small');
-    time.textContent = new Date(item.timestamp || item.createdAt).toLocaleString('sr-RS');
+    time.textContent = new Date(item.timestamp || item.createdAt).toLocaleString('en-US');
     li.append(title, time);
     list.append(li);
   }
@@ -34,10 +34,10 @@ function showScenarios(scenarios) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ actor: 'dashboard-admin' })
         });
-        byId('command-result').textContent = 'Сценарио је покренут.';
+        byId('command-result').textContent = 'Scenario started.';
         await refresh();
       } catch (error) {
-        byId('error').textContent = 'Сценарио није покренут (' + error.message + ')';
+        byId('error').textContent = 'Scenario could not be started (' + error.message + ')';
       }
     });
     list.append(button);
@@ -50,12 +50,12 @@ function showIncidents(incidents) {
     const li = document.createElement('li');
     const title = document.createElement('div');
     title.textContent = incident.category + ' · ' + incident.description + ' · ' +
-      ['Отворен', 'Потврђен', 'Затворен'][incident.status];
+      ['Open', 'Acknowledged', 'Resolved'][incident.status];
     li.append(title);
     if (incident.status < 2) {
       const button = document.createElement('button');
       const nextStatus = incident.status + 1;
-      button.textContent = nextStatus === 1 ? 'Потврди' : 'Затвори';
+      button.textContent = nextStatus === 1 ? 'Acknowledge' : 'Resolve';
       button.addEventListener('click', async () => {
         try {
           await request('/api/incidents/' + encodeURIComponent(incident.id) + '/status', {
@@ -65,7 +65,7 @@ function showIncidents(incidents) {
           });
           await refresh();
         } catch (error) {
-          byId('error').textContent = 'Потребан је администраторски кључ (' + error.message + ')';
+          byId('error').textContent = 'Administrator key required (' + error.message + ')';
         }
       });
       li.append(button);
@@ -100,20 +100,20 @@ async function refresh() {
     ]);
     byId('level').textContent = plant.tankLevel.toFixed(1) + ' %';
     byId('fill').style.width = plant.tankLevel + '%';
-    byId('pump').textContent = plant.pumpRunning ? 'Укључена' : 'Искључена';
-    byId('valve').textContent = plant.outletValveOpen ? 'Отворен' : 'Затворен';
+    byId('pump').textContent = plant.pumpRunning ? 'Running' : 'Stopped';
+    byId('valve').textContent = plant.outletValveOpen ? 'Open' : 'Resolved';
     byId('inflow').textContent = plant.inflowRate.toFixed(1) + ' %/s';
     byId('outflow').textContent = plant.outflowRate.toFixed(1) + ' %/s';
     byId('incident-count').textContent = incidents.filter(i => i.status !== 2).length;
-    byId('connection').textContent = 'Повезано · ' + me.username + ' (' + me.role + ')';
+    byId('connection').textContent = 'Connected · ' + me.username + ' (' + me.role + ')';
     byId('error').textContent = '';
     draw(telemetry);
     itemList('events', events.slice(0, 20), e => e.category + ' · ' + e.message);
     showIncidents(incidents);
     showScenarios(scenarios);
   } catch (error) {
-    byId('connection').textContent = 'Није повезано';
-    byId('error').textContent = 'Провери API кључ и доступност сервиса (' + error.message + ')';
+    byId('connection').textContent = 'Disconnected';
+    byId('error').textContent = 'Check your API key and server availability (' + error.message + ')';
   }
 }
 byId('connect').addEventListener('click', () => {
@@ -130,9 +130,9 @@ document.querySelectorAll('[data-command]').forEach(button => button.addEventLis
     : { open: command === 'valve-open', actor: 'dashboard' };
   try {
     await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    byId('command-result').textContent = 'Команда је извршена.';
+    byId('command-result').textContent = 'Command completed.';
     await refresh();
   } catch (error) {
-    byId('command-result').textContent = 'Команда није извршена (' + error.message + ').';
+    byId('command-result').textContent = 'Command failed (' + error.message + ').';
   }
 }));
