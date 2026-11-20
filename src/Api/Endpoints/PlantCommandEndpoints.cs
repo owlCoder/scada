@@ -1,3 +1,4 @@
+using Api.Authorization;
 using Api.Contracts;
 using Application;
 using Security;
@@ -9,14 +10,7 @@ public static class PlantCommandEndpoints
     public static void Map(WebApplication app)
     {
         var commands = app.MapGroup("/api/plant");
-        commands.AddEndpointFilter(async (context, next) =>
-        {
-            var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
-            var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-            return policy.Authorize(key, AccessRole.Operator)
-                ? await next(context)
-                : Results.Unauthorized();
-        });
+        commands.RequireRole(AccessRole.Operator);
 
         commands.MapPost("/tick", (TickRequest request, IPlantService service, CommandMonitor monitor, HttpContext http) =>
         {
