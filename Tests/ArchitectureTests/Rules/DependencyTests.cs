@@ -26,5 +26,6 @@ public sealed class DependencyTests
         Assert.DoesNotContain("Protocols", references);
         Assert.DoesNotContain("Simulation", references);
         Assert.DoesNotContain("Api", references);
+        return Task.CompletedTask;
     }
 }
