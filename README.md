@@ -21,7 +21,7 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 
 Dashboard: http://127.0.0.1:5080/
 
-**GitHub Actions CI is temporarily disabled** to conserve resources. Run `bash scripts/verify.sh` locally for restore, Release build, tests and JavaScript syntax validation. This script requires the .NET 10 SDK; it does not enable CI.
+**GitHub Actions CI is temporarily disabled** to conserve resources. Run `bash scripts/verify.sh` locally for restore, Release build, tests and JavaScript syntax validation and Node.js dashboard regression tests. This script requires the .NET 10 SDK; it does not enable CI.
 
 ## Project layout
 
@@ -55,6 +55,7 @@ Tests/
   UnitTests/
   IntegrationTests/
   ArchitectureTests/
+  FrontendTests/
 docs/
 deploy/
 ```
