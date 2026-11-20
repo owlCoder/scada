@@ -112,10 +112,13 @@ commands.AddEndpointFilter(async (context, next) =>
         : Results.Unauthorized();
 });
 
-commands.MapPost("/tick", (TickRequest request, IPlantService service, PlantSnapshotService snapshots) =>
+commands.MapPost("/tick", (TickRequest request, IPlantService service,
+    PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
 {
     if (!double.IsFinite(request.Seconds) || request.Seconds is <= 0 or > 60)
         return Results.BadRequest("Корак мора бити између 0 и 60 секунди.");
+    if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
+        return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
     service.Advance(request.Seconds);
     return Results.Ok(snapshots.GetSnapshot());
