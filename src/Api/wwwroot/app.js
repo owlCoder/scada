@@ -32,8 +32,8 @@ function showScenarios(scenarios) {
     button.addEventListener('click', async () => {
       try {
         await request('/api/scenarios/' + encodeURIComponent(scenario.id), {
-          method: 'POST',
-         });
+          method: 'POST'
+        });
         byId('command-result').textContent = 'Scenario started.';
         await refresh();
       } catch (error) {
