@@ -5,10 +5,10 @@ services:
       dockerfile: Dockerfile
     environment:
       Storage__Provider: Postgres
-      ConnectionStrings__Scada: Host=postgres;Port=5432;Database=scada;Username=scada;Password=${POSTGRES_PASSWORD:?Постави POSTGRES_PASSWORD}
-      Security__ViewerApiKey: ${SCADA_VIEWER_KEY:?Постави SCADA_VIEWER_KEY}
-      Security__OperatorApiKey: ${SCADA_OPERATOR_KEY:?Постави SCADA_OPERATOR_KEY}
-      Security__AdminApiKey: ${SCADA_ADMIN_KEY:?Постави SCADA_ADMIN_KEY}
+      ConnectionStrings__Scada: Host=postgres;Port=5432;Database=scada;Username=scada;Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      Security__ViewerApiKey: ${SCADA_VIEWER_KEY:?Set SCADA_VIEWER_KEY}
+      Security__OperatorApiKey: ${SCADA_OPERATOR_KEY:?Set SCADA_OPERATOR_KEY}
+      Security__AdminApiKey: ${SCADA_ADMIN_KEY:?Set SCADA_ADMIN_KEY}
     ports:
       - "127.0.0.1:5080:8080"
     depends_on:
@@ -21,7 +21,7 @@ services:
     environment:
       POSTGRES_DB: scada
       POSTGRES_USER: scada
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Постави POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
