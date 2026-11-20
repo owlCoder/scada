@@ -125,7 +125,7 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
     return Results.Ok(snapshots.GetSnapshot());
 });
 
-commands.MapPost("/registers/{address:ushort}", (ushort address, RegisterWrite request,
+app.MapPost("/api/registers/{address:ushort}", (ushort address, RegisterWrite request,
     VirtualRegisterService registers, CommandMonitor monitor) =>
 {
     if (string.IsNullOrWhiteSpace(request.Actor))
@@ -143,6 +143,13 @@ commands.MapPost("/registers/{address:ushort}", (ushort address, RegisterWrite r
     {
         return Results.Conflict(exception.Message);
     }
+}).AddEndpointFilter(async (context, next) =>
+{
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    return policy.Authorize(key, AccessRole.Operator)
+        ? await next(context)
+        : Results.Unauthorized();
 });
 
 var incidentCommands = app.MapGroup("/api/incidents");
