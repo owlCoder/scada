@@ -33,9 +33,7 @@ function showScenarios(scenarios) {
       try {
         await request('/api/scenarios/' + encodeURIComponent(scenario.id), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
+         });
         byId('command-result').textContent = 'Scenario started.';
         await refresh();
       } catch (error) {
