@@ -40,6 +40,7 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 | GET | `/api/telemetry?count=100` | Viewer |
 | GET | `/api/events` | Viewer |
 | GET | `/api/incidents` | Viewer |
+| GET | `/api/scenarios` | Viewer |
 | GET | `/api/registers` | Viewer |
 | GET | `/api/registers/{address}` | Viewer |
 | POST | `/api/plant/tick` | Operator |
@@ -47,6 +48,7 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 | POST | `/api/plant/valve/V-101/command` | Operator |
 | POST | `/api/registers/{address}` | Operator |
 | POST | `/api/incidents/{id}/status` | Administrator |
+| POST | `/api/scenarios/{id}` | Administrator |
 
 ## Документација
 
@@ -54,7 +56,8 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 - [PostgreSQL складиште](docs/postgresql.md)
 - [Виртуелни регистри](docs/protokoli.md)
 - [Инциденти](docs/incidenti.md)
+- [Синтетички безбедносни сценарији](docs/scenariji.md)
 
 ## Ограничења
 
-Виртуелни регистри нису мрежна имплементација Modbus TCP или OPC UA. Нема индивидуалних корисничких налога, OIDC пријаве, трајног складишта статуса инцидената ни производног система за обраду редова. PostgreSQL је опционалан; подразумевано се користи меморија. API кључеви и веб табла намењени су искључиво изолованом развојном окружењу.
+Постоји опциони Modbus TCP сервер само за читање, ограничен на 127.0.0.1. OPC UA није имплементиран. Нема индивидуалних корисничких налога, OIDC пријаве, трајног складишта статуса инцидената ни производног система за обраду редова. PostgreSQL је опционалан; подразумевано се користи меморија. API кључеви и веб табла намењени су искључиво изолованом развојном окружењу.
