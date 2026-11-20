@@ -31,7 +31,7 @@ public sealed class AuthenticatedAuditTests
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "admin-integration-key");
 
-        var response = await client.PostAsJsonAsync("/api/scenarios/sensor-spoofing", new { });
+        var response = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 }
