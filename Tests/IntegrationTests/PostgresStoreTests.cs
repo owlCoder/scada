@@ -28,7 +28,7 @@ public sealed class PostgresStoreTests
         using var source = NpgsqlDataSource.Create(connectionString);
         var first = new IncidentService(new PostgresIncidentStore(source));
         var uniqueEvent = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert",
-            $"Тест {Guid.NewGuid():N}", "integration");
+            $"Test {Guid.NewGuid():N}", "integration");
         first.Observe([uniqueEvent]);
         var incident = Assert.Single(first.GetAll().Where(x => x.Description == uniqueEvent.Message));
 
