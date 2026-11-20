@@ -27,7 +27,7 @@ public sealed class IncidentService(IIncidentStore store)
     public bool TryUpdate(Guid id, IncidentStatus status, string actor, out Incident? incident)
     {
         if (string.IsNullOrWhiteSpace(actor))
-            throw new ArgumentException("Оператер је обавезан.", nameof(actor));
+            throw new ArgumentException("Operator is required.", nameof(actor));
 
         lock (_sync)
         {
@@ -39,7 +39,7 @@ public sealed class IncidentService(IIncidentStore store)
             }
 
             if (status < existing.Status)
-                throw new InvalidOperationException("Статус инцидента не може се вратити уназад.");
+                throw new InvalidOperationException("Incident status cannot move backwards.");
 
             incident = existing with
             {
