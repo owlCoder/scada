@@ -1,6 +1,7 @@
 using Application;
 using Domain;
 using Infrastructure;
+using Protocols;
 using Security;
 using Simulation;
 
@@ -32,6 +33,7 @@ builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
 builder.Services.AddSingleton<PlantSnapshotService>();
 builder.Services.AddSingleton<IncidentService>();
+builder.Services.AddSingleton<VirtualRegisterService>();
 builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string>
 {
     [AccessRole.Viewer] = builder.Configuration["Security:ViewerApiKey"] ?? "",
@@ -65,6 +67,9 @@ read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
         ? Results.BadRequest("Број узорака мора бити између 1 и 3600.")
         : Results.Ok(store.GetRecent(count ?? 100)));
 read.MapGet("/incidents", (IncidentService service) => Results.Ok(service.GetAll()));
+read.MapGet("/registers", (VirtualRegisterService registers) => Results.Ok(registers.ReadAll()));
+read.MapGet("/registers/{address:ushort}", (ushort address, VirtualRegisterService registers) =>
+    registers.Read(address) is { } register ? Results.Ok(register) : Results.NotFound());
 
 var commands = app.MapGroup("/api/plant");
 commands.AddEndpointFilter(async (context, next) =>
@@ -120,6 +125,26 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
     return Results.Ok(snapshots.GetSnapshot());
 });
 
+commands.MapPost("/registers/{address:ushort}", (ushort address, RegisterWrite request,
+    VirtualRegisterService registers, CommandMonitor monitor) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Actor))
+        return Results.BadRequest("Оператер је обавезан.");
+    if (!monitor.Check(request.Actor))
+        return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
+    try
+    {
+        return registers.Write(address, request.Value, request.Actor)
+            ? Results.Ok(registers.Read(address))
+            : Results.BadRequest("Регистар није уписив или вредност није дозвољена.");
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(exception.Message);
+    }
+});
+
 var incidentCommands = app.MapGroup("/api/incidents");
 incidentCommands.AddEndpointFilter(async (context, next) =>
 {
@@ -158,3 +183,4 @@ public sealed record TickRequest(double Seconds);
 public sealed record PumpCommand(bool Running, string Actor);
 public sealed record ValveCommand(bool Open, string Actor);
 public sealed record IncidentStatusRequest(IncidentStatus Status, string Actor);
+public sealed record RegisterWrite(ushort Value, string Actor);
