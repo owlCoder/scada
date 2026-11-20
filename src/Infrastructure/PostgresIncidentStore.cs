@@ -1,5 +1,6 @@
 using Application;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace Infrastructure;
 
@@ -41,8 +42,8 @@ public sealed class PostgresIncidentStore(NpgsqlDataSource source) : IIncidentSt
         command.Parameters.AddWithValue("id", incident.Id);
         command.Parameters.AddWithValue("status", (int)incident.Status);
         command.Parameters.AddWithValue("expected", (int)expectedStatus);
-        command.Parameters.AddWithValue("updatedBy", (object?)incident.UpdatedBy ?? DBNull.Value);
-        command.Parameters.AddWithValue("updatedAt", (object?)incident.UpdatedAt ?? DBNull.Value);
+        command.Parameters.Add("updatedBy", NpgsqlDbType.Text).Value = (object?)incident.UpdatedBy ?? DBNull.Value;
+        command.Parameters.Add("updatedAt", NpgsqlDbType.TimestampTz).Value = (object?)incident.UpdatedAt ?? DBNull.Value;
         return command.ExecuteNonQuery() == 1;
     }
 
@@ -54,7 +55,7 @@ public sealed class PostgresIncidentStore(NpgsqlDataSource source) : IIncidentSt
         command.Parameters.AddWithValue("description", incident.Description);
         command.Parameters.AddWithValue("actor", incident.Actor);
         command.Parameters.AddWithValue("status", (int)incident.Status);
-        command.Parameters.AddWithValue("updatedBy", (object?)incident.UpdatedBy ?? DBNull.Value);
-        command.Parameters.AddWithValue("updatedAt", (object?)incident.UpdatedAt ?? DBNull.Value);
+        command.Parameters.Add("updatedBy", NpgsqlDbType.Text).Value = (object?)incident.UpdatedBy ?? DBNull.Value;
+        command.Parameters.Add("updatedAt", NpgsqlDbType.TimestampTz).Value = (object?)incident.UpdatedAt ?? DBNull.Value;
     }
 }
