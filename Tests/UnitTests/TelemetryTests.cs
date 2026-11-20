@@ -34,6 +34,24 @@ public sealed class TelemetryTests
         Assert.Equal("ProcessAlarm", events.GetRecent()[0].Category);
     }
 
+    [Fact]
+    public void RecoveryProducesOneNormalStateEvent()
+    {
+        var events = new InMemoryEventStore();
+        var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
+
+        for (var i = 0; i < 5; i++)
+            service.Advance(60);
+
+        service.SetPump(true, "operator");
+        service.Advance(60);
+        service.Advance(60);
+
+        var alarms = events.GetRecent().Where(e => e.Category == "ProcessAlarm").ToArray();
+        Assert.Equal(2, alarms.Length);
+        Assert.Contains(alarms, e => e.Message == "Ниво резервоара је нормализован");
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(3601)]
