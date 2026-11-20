@@ -94,9 +94,9 @@ function draw(samples) {
 }
 async function refresh() {
   try {
-    const [plant, telemetry, events, incidents, scenarios] = await Promise.all([
+    const [plant, telemetry, events, incidents, scenarios, me] = await Promise.all([
       request('/api/plant'), request('/api/telemetry?count=100'),
-      request('/api/events'), request('/api/incidents'), request('/api/scenarios')
+      request('/api/events'), request('/api/incidents'), request('/api/scenarios'), request('/api/me')
     ]);
     byId('level').textContent = plant.tankLevel.toFixed(1) + ' %';
     byId('fill').style.width = plant.tankLevel + '%';
@@ -105,7 +105,7 @@ async function refresh() {
     byId('inflow').textContent = plant.inflowRate.toFixed(1) + ' %/s';
     byId('outflow').textContent = plant.outflowRate.toFixed(1) + ' %/s';
     byId('incident-count').textContent = incidents.filter(i => i.status !== 2).length;
-    byId('connection').textContent = 'Повезано';
+    byId('connection').textContent = 'Повезано · ' + me.username + ' (' + me.role + ')';
     byId('error').textContent = '';
     draw(telemetry);
     itemList('events', events.slice(0, 20), e => e.category + ' · ' + e.message);
