@@ -3,10 +3,6 @@ using System.Text;
 
 namespace Security;
 
-public sealed record UserCredential(string Username, AccessRole Role, string ApiKey);
-
-public sealed record AuthenticatedUser(string Username, AccessRole Role, string CredentialId);
-
 public sealed class UserAccessPolicy
 {
     private readonly UserCredential[] _users;
