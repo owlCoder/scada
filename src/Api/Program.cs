@@ -59,7 +59,22 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
+{
+    var dataSource = services.GetService<Npgsql.NpgsqlDataSource>();
+    if (dataSource is null)
+        return Results.Ok(new { status = "healthy", storage = "memory" });
+
+    try
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        return Results.Ok(new { status = "healthy", storage = "postgres" });
+    }
+    catch (Npgsql.NpgsqlException)
+    {
+        return Results.Json(new { status = "degraded", storage = "postgres" }, statusCode: 503);
+    }
+});
 
 var read = app.MapGroup("/api");
 read.AddEndpointFilter(async (context, next) =>
