@@ -250,4 +250,4 @@ public sealed record IncidentStatusRequest(IncidentStatus Status, string Actor);
 public sealed record RegisterWrite(ushort Value, string Actor);
 public sealed record ScenarioRequest(string Actor);
 
-public partial class Program;
+public partial class Program { }
