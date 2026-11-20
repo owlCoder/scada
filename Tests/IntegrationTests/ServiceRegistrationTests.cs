@@ -43,6 +43,52 @@ public sealed class ServiceRegistrationTests
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
     }
 
+    [Fact]
+    public void NamedUserCannotReuseLegacyApiKey()
+    {
+        var builder = CreateBuilder(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "Memory",
+            ["Security:OperatorApiKey"] = "shared-secret",
+            ["Security:Users:0:Username"] = "operator",
+            ["Security:Users:0:Role"] = "Operator",
+            ["Security:Users:0:ApiKey"] = "shared-secret"
+        });
+
+        Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+    }
+
+    [Fact]
+    public void InvalidNamedUserRoleIsRejected()
+    {
+        var builder = CreateBuilder(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "Memory",
+            ["Security:Users:0:Username"] = "operator",
+            ["Security:Users:0:Role"] = "Superuser",
+            ["Security:Users:0:ApiKey"] = "secret"
+        });
+
+        Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+    }
+
+    [Fact]
+    public void DuplicateNamedUsernamesAreRejected()
+    {
+        var builder = CreateBuilder(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "Memory",
+            ["Security:Users:0:Username"] = "operator",
+            ["Security:Users:0:Role"] = "Operator",
+            ["Security:Users:0:ApiKey"] = "first-secret",
+            ["Security:Users:1:Username"] = "OPERATOR",
+            ["Security:Users:1:Role"] = "Viewer",
+            ["Security:Users:1:ApiKey"] = "second-secret"
+        });
+
+        Assert.Throws<ArgumentException>(() => builder.AddScadaServices());
+    }
+
     private static WebApplicationBuilder CreateBuilder(Dictionary<string, string?> settings)
     {
         var builder = WebApplication.CreateBuilder();
