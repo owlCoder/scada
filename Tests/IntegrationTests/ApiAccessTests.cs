@@ -19,6 +19,18 @@ public sealed class ApiAccessTests
     }
 
     [Fact]
+    public async Task ResponsesHaveSecurityHeaders()
+    {
+        using var factory = new Factory();
+        using var client = factory.CreateClient();
+        var response = await client.GetAsync("/health");
+
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
     public async Task ViewerCanReadButCannotControlPump()
     {
         using var factory = new Factory();
