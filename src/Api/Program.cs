@@ -68,8 +68,10 @@ read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
         : Results.Ok(store.GetRecent(count ?? 100)));
 read.MapGet("/incidents", (IncidentService service) => Results.Ok(service.GetAll()));
 read.MapGet("/registers", (VirtualRegisterService registers) => Results.Ok(registers.ReadAll()));
-read.MapGet("/registers/{address:ushort}", (ushort address, VirtualRegisterService registers) =>
-    registers.Read(address) is { } register ? Results.Ok(register) : Results.NotFound());
+read.MapGet("/registers/{address:int}", (int address, VirtualRegisterService registers) =>
+    address is >= 0 and <= ushort.MaxValue && registers.Read((ushort)address) is { } register
+        ? Results.Ok(register)
+        : Results.NotFound());
 
 var commands = app.MapGroup("/api/plant");
 commands.AddEndpointFilter(async (context, next) =>
@@ -125,9 +127,11 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
     return Results.Ok(snapshots.GetSnapshot());
 });
 
-app.MapPost("/api/registers/{address:ushort}", (ushort address, RegisterWrite request,
+app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
     VirtualRegisterService registers, CommandMonitor monitor) =>
 {
+    if (address is < 0 or > ushort.MaxValue)
+        return Results.NotFound();
     if (string.IsNullOrWhiteSpace(request.Actor))
         return Results.BadRequest("Оператер је обавезан.");
     if (!monitor.Check(request.Actor))
@@ -135,8 +139,8 @@ app.MapPost("/api/registers/{address:ushort}", (ushort address, RegisterWrite re
 
     try
     {
-        return registers.Write(address, request.Value, request.Actor)
-            ? Results.Ok(registers.Read(address))
+        return registers.Write((ushort)address, request.Value, request.Actor)
+            ? Results.Ok(registers.Read((ushort)address))
             : Results.BadRequest("Регистар није уписив или вредност није дозвољена.");
     }
     catch (InvalidOperationException exception)
