@@ -1,4 +1,5 @@
 using Application;
+using Infrastructure;
 using Xunit;
 
 namespace UnitTests;
@@ -8,7 +9,7 @@ public sealed class IncidentServiceTests
     [Fact]
     public void SecurityAlertCreatesOnlyOneIncident()
     {
-        var service = new IncidentService();
+        var service = new IncidentService(new InMemoryIncidentStore());
         var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Покушај", "operator");
 
         service.Observe([alert]);
@@ -21,7 +22,7 @@ public sealed class IncidentServiceTests
     [Fact]
     public void IncidentCanBeAcknowledgedAndResolved()
     {
-        var service = new IncidentService();
+        var service = new IncidentService(new InMemoryIncidentStore());
         service.Observe([new(DateTimeOffset.UtcNow, "SafetyInterlock", "Пумпа", "simulation")]);
         var id = service.GetAll()[0].Id;
 
@@ -35,7 +36,7 @@ public sealed class IncidentServiceTests
     [Fact]
     public void AuditEventsDoNotCreateIncidents()
     {
-        var service = new IncidentService();
+        var service = new IncidentService(new InMemoryIncidentStore());
         service.Observe([new(DateTimeOffset.UtcNow, "Audit", "Команда", "operator")]);
         Assert.Empty(service.GetAll());
     }
