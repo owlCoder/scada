@@ -1,0 +1,58 @@
+using System.Security.Cryptography;
+using System.Text;
+
+namespace Application;
+
+public sealed class IncidentService(IIncidentStore store)
+{
+    private readonly object _sync = new();
+
+    public IReadOnlyList<Incident> GetAll() => store.GetAll();
+
+    public void Observe(IEnumerable<SecurityEvent> events)
+    {
+        lock (_sync)
+        {
+            foreach (var item in events.Where(x => x.Category is "SecurityAlert" or "SafetyInterlock"))
+            {
+                var fingerprint = $"{item.Timestamp.UtcTicks}:{item.Category}:{item.Actor}:{item.Message}";
+                var hash = SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint));
+                var id = new Guid(hash.AsSpan(0, 16));
+                store.TryAdd(new Incident(id, item.Timestamp, item.Category,
+                    item.Message, item.Actor, IncidentStatus.Open, null, null));
+            }
+        }
+    }
+
+    public bool TryUpdate(Guid id, IncidentStatus status, string actor, out Incident? incident)
+    {
+        if (string.IsNullOrWhiteSpace(actor))
+            throw new ArgumentException("Оператер је обавезан.", nameof(actor));
+
+        lock (_sync)
+        {
+            var existing = store.GetAll().FirstOrDefault(x => x.Id == id);
+            if (existing is null)
+            {
+                incident = null;
+                return false;
+            }
+
+            if (status < existing.Status)
+                throw new InvalidOperationException("Статус инцидента не може се вратити уназад.");
+
+            incident = existing with
+            {
+                Status = status,
+                UpdatedBy = actor,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            if (store.TryUpdate(incident, existing.Status))
+                return true;
+
+            incident = null;
+            return false;
+        }
+    }
+}
