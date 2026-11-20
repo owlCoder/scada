@@ -15,7 +15,7 @@ if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
 {
     var connectionString = builder.Configuration.GetConnectionString("Scada");
     if (string.IsNullOrWhiteSpace(connectionString))
-        throw new InvalidOperationException("Недостаје ConnectionStrings:Scada.");
+        throw new InvalidOperationException("Missing ConnectionStrings:Scada.");
 
     builder.Services.AddSingleton(Npgsql.NpgsqlDataSource.Create(connectionString));
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
@@ -31,7 +31,7 @@ else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
 }
 else
 {
-    throw new InvalidOperationException("Непознат Storage:Provider.");
+    throw new InvalidOperationException("Unknown Storage:Provider.");
 }
 
 builder.Services.AddSingleton<IPlantService, PlantService>();
@@ -45,7 +45,7 @@ if (builder.Configuration.GetValue<bool>("Protocols:ModbusEnabled"))
 {
     var port = builder.Configuration.GetValue<int?>("Protocols:ModbusPort") ?? 1502;
     if (port is < 1024 or > 65535)
-        throw new InvalidOperationException("Modbus порт мора бити између 1024 и 65535.");
+        throw new InvalidOperationException("Modbus port must be between 1024 and 65535.");
     builder.Services.AddSingleton<IHostedService>(services =>
         new ModbusTcpService(services.GetRequiredService<ModbusFrameService>(),
             services.GetRequiredService<ILogger<ModbusTcpService>>(), port));
@@ -64,11 +64,11 @@ var namedUsers = builder.Configuration.GetSection("Security:Users").GetChildren(
     var key = section["ApiKey"] ?? "";
     if (!Enum.TryParse<AccessRole>(section["Role"], true, out var role) ||
         !Enum.IsDefined(role))
-        throw new InvalidOperationException($"Неисправна улога за корисника {username}.");
+        throw new InvalidOperationException($"Invalid role for user {username}.");
     return new UserCredential(username, role, key);
 }).ToArray();
 if (namedUsers.Any(user => legacyPolicy.Authenticate(user.ApiKey) is not null))
-    throw new InvalidOperationException("Именовани корисник не сме користити дељени API кључ.");
+    throw new InvalidOperationException("A named user cannot reuse a shared API key.");
 builder.Services.AddSingleton(new UserAccessPolicy(namedUsers));
 builder.Services.AddSingleton<AuthorizationService>();
 builder.Services.AddHostedService<SimulationService>();
