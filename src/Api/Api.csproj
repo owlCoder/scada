@@ -5,5 +5,6 @@
     <ProjectReference Include="../Infrastructure/Infrastructure.csproj" />
     <ProjectReference Include="../Simulation/Simulation.csproj" />
     <ProjectReference Include="../Security/Security.csproj" />
+    <ProjectReference Include="../Protocols/Protocols.csproj" />
   </ItemGroup>
 </Project>
