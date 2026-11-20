@@ -1,10 +1,6 @@
 using Api.Contracts;
-using Application;
-using Domain;
-using Infrastructure;
 using Protocols;
 using Security;
-using Simulation;
 
 namespace Api.Endpoints;
 
@@ -42,7 +38,5 @@ public static class RegisterCommandEndpoints
                 ? await next(context)
                 : Results.Unauthorized();
         });
-
-
     }
 }
