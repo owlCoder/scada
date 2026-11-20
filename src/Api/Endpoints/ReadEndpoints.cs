@@ -1,10 +1,6 @@
-using Api.Contracts;
 using Application;
-using Domain;
-using Infrastructure;
 using Protocols;
 using Security;
-using Simulation;
 
 namespace Api.Endpoints;
 
@@ -40,7 +36,5 @@ public static class ReadEndpoints
             address is >= 0 and <= ushort.MaxValue && registers.Read((ushort)address) is { } register
                 ? Results.Ok(register)
                 : Results.NotFound());
-
-
     }
 }
