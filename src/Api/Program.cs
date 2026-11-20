@@ -62,8 +62,6 @@ var app = builder.Build();
 if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
     await app.Services.GetRequiredService<PostgresSchemaService>().VerifyAsync();
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -72,6 +70,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["Cache-Control"] = "no-store";
     await next();
 });
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
 {
