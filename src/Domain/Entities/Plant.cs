@@ -8,7 +8,7 @@ public sealed class Plant
     private bool _outletValveOpen = true;
     private long _revision;
 
-    public string Name => "Постројење за воду";
+    public string Name => "Water Treatment Plant";
     public double TankCapacity => 100;
 
     public PlantState GetState()
@@ -26,7 +26,7 @@ public sealed class Plant
                 return;
 
             if (running && _tankLevel >= TankCapacity)
-                throw new InvalidOperationException("Пумпа се не може укључити када је резервоар пун.");
+                throw new InvalidOperationException("Cannot start the pump when the tank is full.");
 
             _pumpRunning = running;
             _revision++;
