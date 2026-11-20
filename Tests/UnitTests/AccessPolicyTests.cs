@@ -34,6 +34,16 @@ public sealed class AccessPolicyTests
     }
 
     [Fact]
+    public void DuplicateKeysAcrossRolesAreRejected()
+    {
+        Assert.Throws<ArgumentException>(() => new AccessPolicy(new Dictionary<AccessRole, string>
+        {
+            [AccessRole.Viewer] = "shared-secret",
+            [AccessRole.Operator] = "shared-secret"
+        }));
+    }
+
+    [Fact]
     public void UnknownKeyIsRejected()
     {
         Assert.Null(_policy.Authenticate("incorrect"));
