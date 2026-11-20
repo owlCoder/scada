@@ -13,6 +13,30 @@ public sealed class ModbusFrameTests
             new PlantService(new Plant(), new InMemoryEventStore(), new InMemoryTelemetryStore())));
 
     [Fact]
+    public void EmptyRequestReturnsIllegalDataValue()
+    {
+        Assert.Equal(new byte[] { 0x83, 0x03 }, Create().Process([]));
+    }
+
+    [Fact]
+    public void UnsupportedSingleByteFunctionReturnsIllegalFunction()
+    {
+        Assert.Equal(new byte[] { 0x86, 0x01 }, Create().Process([6]));
+    }
+
+    [Fact]
+    public void TruncatedReadRequestReturnsIllegalDataValue()
+    {
+        Assert.Equal(new byte[] { 0x83, 0x03 }, Create().Process([3]));
+    }
+
+    [Fact]
+    public void ExcessiveRegisterCountReturnsIllegalDataValue()
+    {
+        Assert.Equal(new byte[] { 0x83, 0x03 }, Create().Process([3, 0, 0, 0, 126]));
+    }
+
+    [Fact]
     public void ReadHoldingRegistersReturnsLevelAndPump()
     {
         var response = Create().Process([3, 0, 0, 0, 2]);
