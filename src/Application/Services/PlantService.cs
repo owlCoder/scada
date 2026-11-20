@@ -14,8 +14,7 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
         lock (_sync)
         {
             var previous = plant.GetState();
-            plant.Advance(seconds);
-            var state = plant.GetState();
+            var state = plant.Advance(seconds);
             if (previous.PumpRunning && !state.PumpRunning && state.TankLevel >= state.TankCapacity)
                 events.Append(new(DateTimeOffset.UtcNow, "SafetyInterlock", "Pump automatically stopped because the tank is full", "simulation"));
             telemetry.Append(new(DateTimeOffset.UtcNow, state.TankLevel, state.PumpRunning, state.Revision));

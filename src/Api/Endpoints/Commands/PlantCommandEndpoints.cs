@@ -19,8 +19,7 @@ public static class PlantCommandEndpoints
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
-            service.Advance(request.Seconds);
-            return Results.Ok(service.GetState());
+            return Results.Ok(service.Advance(request.Seconds));
         });
 
         commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service, CommandMonitor monitor, HttpContext http) =>
@@ -32,9 +31,9 @@ public static class PlantCommandEndpoints
 
             try
             {
-                service.SetPump(command.Running, http.RequestServices.GetRequiredService<AuthorizationService>()
-                    .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
-                return Results.Ok(service.GetState());
+                return Results.Ok(service.SetPump(command.Running,
+                    http.RequestServices.GetRequiredService<AuthorizationService>()
+                        .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username));
             }
             catch (InvalidOperationException exception)
             {
@@ -49,9 +48,9 @@ public static class PlantCommandEndpoints
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
-            service.SetOutletValve(command.Open, http.RequestServices.GetRequiredService<AuthorizationService>()
-                .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
-            return Results.Ok(service.GetState());
+            return Results.Ok(service.SetOutletValve(command.Open,
+                http.RequestServices.GetRequiredService<AuthorizationService>()
+                    .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username));
         });
         return app;
     }

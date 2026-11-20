@@ -26,10 +26,7 @@ public sealed class PostgresIncidentStore(NpgsqlDataSource source) : IIncidentSt
     public bool TryAdd(Incident incident)
     {
         using var connection = source.OpenConnection();
-        using var command = new NpgsqlCommand(
-            "INSERT INTO incidents (id, created_at, category, description, actor, status, updated_by, updated_at) VALUES (@id, @created, @category, @description, @actor, @status, @updatedBy, @updatedAt) ON CONFLICT (id) DO NOTHING",
-            connection);
-        Bind(command, incident);
+        using var command = CreateInsertCommand(connection, incident);
         return command.ExecuteNonQuery() == 1;
     }
 
@@ -47,8 +44,11 @@ public sealed class PostgresIncidentStore(NpgsqlDataSource source) : IIncidentSt
         return command.ExecuteNonQuery() == 1;
     }
 
-    private static void Bind(NpgsqlCommand command, Incident incident)
+    private static NpgsqlCommand CreateInsertCommand(NpgsqlConnection connection, Incident incident)
     {
+        var command = new NpgsqlCommand(
+            "INSERT INTO incidents (id, created_at, category, description, actor, status, updated_by, updated_at) VALUES (@id, @created, @category, @description, @actor, @status, @updatedBy, @updatedAt) ON CONFLICT (id) DO NOTHING",
+            connection);
         command.Parameters.AddWithValue("id", incident.Id);
         command.Parameters.AddWithValue("created", incident.CreatedAt);
         command.Parameters.AddWithValue("category", incident.Category);
@@ -57,5 +57,6 @@ public sealed class PostgresIncidentStore(NpgsqlDataSource source) : IIncidentSt
         command.Parameters.AddWithValue("status", (int)incident.Status);
         command.Parameters.Add("updatedBy", NpgsqlDbType.Text).Value = (object?)incident.UpdatedBy ?? DBNull.Value;
         command.Parameters.Add("updatedAt", NpgsqlDbType.TimestampTz).Value = (object?)incident.UpdatedAt ?? DBNull.Value;
+        return command;
     }
 }
