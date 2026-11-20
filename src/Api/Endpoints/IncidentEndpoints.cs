@@ -1,3 +1,4 @@
+using Api.Authorization;
 using Api.Contracts;
 using Application;
 using Security;
@@ -9,14 +10,7 @@ public static class IncidentEndpoints
     public static void Map(WebApplication app)
     {
         var incidentCommands = app.MapGroup("/api/incidents");
-        incidentCommands.AddEndpointFilter(async (context, next) =>
-        {
-            var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
-            var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-            return policy.Authorize(key, AccessRole.Administrator)
-                ? await next(context)
-                : Results.Unauthorized();
-        });
+        incidentCommands.RequireRole(AccessRole.Administrator);
 
         incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
             IncidentService service, IEventStore events, AuthorizationService authorization, HttpContext http) =>
