@@ -26,7 +26,7 @@ public static class IncidentAndScenarioEndpoints
             AuthorizationService authorization, HttpContext http) =>
         {
             if (string.IsNullOrWhiteSpace(request.Actor))
-                return Results.BadRequest("Оператер је обавезан.");
+                return Results.BadRequest("Operator is required.");
 
             return scenarios.Execute(id, authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
                 ? Results.Accepted($"/api/scenarios/{id}")
@@ -45,7 +45,7 @@ public static class IncidentAndScenarioEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.Actor) ||
                 !Enum.IsDefined(request.Status))
-                return Results.BadRequest("Неисправан статус или оператер.");
+                return Results.BadRequest("Invalid status or operator.");
 
             try
             {
@@ -54,7 +54,7 @@ public static class IncidentAndScenarioEndpoints
                     return Results.NotFound();
 
                 events.Append(new(DateTimeOffset.UtcNow, "Audit",
-                    $"Статус инцидента {id} промењен у {request.Status}", actor));
+                    $"Incident status {id} changed to {request.Status}", actor));
                 return Results.Ok(incident);
             }
             catch (InvalidOperationException exception)
