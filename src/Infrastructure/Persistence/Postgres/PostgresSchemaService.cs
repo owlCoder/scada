@@ -18,6 +18,6 @@ public sealed class PostgresSchemaService(NpgsqlDataSource source)
         var ready = (bool?)await command.ExecuteScalarAsync(cancellationToken);
         if (ready != true)
             throw new InvalidOperationException(
-                "PostgreSQL шема није потпуна. Примени deploy/postgres/init.sql пре покретања API-ја.");
+                "PostgreSQL schema is incomplete. Apply deploy/postgres/init.sql before starting the API.");
     }
 }
