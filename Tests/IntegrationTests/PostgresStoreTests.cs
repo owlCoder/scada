@@ -8,6 +8,30 @@ namespace IntegrationTests;
 public sealed class PostgresStoreTests
 {
     [Fact]
+    public void IncidentStatusSurvivesNewStoreInstances()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return;
+
+        using var source = NpgsqlDataSource.Create(connectionString);
+        var first = new IncidentService(new PostgresIncidentStore(source));
+        var uniqueEvent = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert",
+            $"Тест {Guid.NewGuid():N}", "integration");
+        first.Observe([uniqueEvent]);
+        var incident = Assert.Single(first.GetAll().Where(x => x.Description == uniqueEvent.Message));
+
+        Assert.True(first.TryUpdate(incident.Id, IncidentStatus.Acknowledged, "tester", out _));
+
+        var second = new IncidentService(new PostgresIncidentStore(source));
+        var restored = Assert.Single(second.GetAll().Where(x => x.Id == incident.Id));
+        Assert.Equal(IncidentStatus.Acknowledged, restored.Status);
+
+        second.Observe([uniqueEvent]);
+        Assert.Single(second.GetAll().Where(x => x.Id == incident.Id));
+    }
+
+    [Fact]
     public void TelemetryAndEventsSurviveNewStoreInstances()
     {
         var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
