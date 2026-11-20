@@ -13,14 +13,19 @@ public static class IncidentEndpoints
         incidentCommands.RequireRole(AccessRole.Administrator);
 
         incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
-            IncidentService service, IEventStore events, AuthorizationService authorization, HttpContext http) =>
+            IncidentService service, IEventStore events, AuthorizationService authorization,
+            CommandMonitor monitor, HttpContext http) =>
         {
             if (!Enum.IsDefined(request.Status))
                 return Results.BadRequest("Invalid incident status.");
 
+            var apiKey = http.Request.Headers["X-Api-Key"].ToString();
+            if (!monitor.Check(ApiKeyValidator.Fingerprint(apiKey)))
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
             try
             {
-                var actor = authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username;
+                var actor = authorization.Authenticate(apiKey)!.Username;
                 if (!service.TryUpdate(id, request.Status, actor, out var incident))
                     return Results.NotFound();
 
