@@ -1,3 +1,4 @@
+using Api.Authorization;
 using Application;
 using Protocols;
 using Security;
@@ -9,14 +10,7 @@ public static class ReadEndpoints
     public static void Map(WebApplication app)
     {
         var read = app.MapGroup("/api");
-        read.AddEndpointFilter(async (context, next) =>
-        {
-            var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
-            var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-            return policy.Authorize(key, AccessRole.Viewer)
-                ? await next(context)
-                : Results.Unauthorized();
-        });
+        read.RequireRole(AccessRole.Viewer);
 
         read.MapGet("/me", (AuthorizationService authorization, HttpContext http) =>
         {
