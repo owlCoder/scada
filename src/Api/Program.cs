@@ -88,7 +88,12 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 HealthEndpoints.Map(app);
-ReadEndpoints.Map(app);
+IdentityEndpoints.Map(app);
+PlantReadEndpoints.Map(app);
+EventReadEndpoints.Map(app);
+IncidentReadEndpoints.Map(app);
+ScenarioReadEndpoints.Map(app);
+RegisterReadEndpoints.Map(app);
 PlantCommandEndpoints.Map(app);
 RegisterCommandEndpoints.Map(app);
 IncidentEndpoints.Map(app);
