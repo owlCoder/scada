@@ -8,13 +8,14 @@ public sealed class InMemoryTelemetryStore : ITelemetryStore
     private readonly Queue<TelemetrySample> _samples = new();
     private readonly object _sync = new();
 
-    public void Append(TelemetrySample sample)
+    public bool Append(TelemetrySample sample)
     {
         lock (_sync)
         {
             _samples.Enqueue(sample);
             while (_samples.Count > Capacity)
                 _samples.Dequeue();
+            return true;
         }
     }
 

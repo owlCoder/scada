@@ -4,7 +4,7 @@ namespace Infrastructure;
 
 public sealed class PostgresSchemaService(NpgsqlDataSource source)
 {
-    public async Task VerifyAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> VerifyAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await source.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
@@ -19,5 +19,7 @@ public sealed class PostgresSchemaService(NpgsqlDataSource source)
         if (ready != true)
             throw new InvalidOperationException(
                 "PostgreSQL schema is incomplete. Apply deploy/postgres/init.sql before starting the API.");
+
+        return true;
     }
 }

@@ -9,7 +9,7 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
 
     public PlantState GetState() => plant.GetState();
 
-    public void Advance(double seconds)
+    public PlantState Advance(double seconds)
     {
         lock (_sync)
         {
@@ -25,7 +25,7 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
                 : AlarmLevel.Normal;
 
             if (alarm == _lastAlarm)
-                return;
+                return state;
 
             var message = alarm switch
             {
@@ -36,32 +36,34 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
 
             events.Append(new(DateTimeOffset.UtcNow, "ProcessAlarm", message, "simulation"));
             _lastAlarm = alarm;
+            return state;
         }
     }
 
-    public void SetPump(bool running, string actor)
+    public PlantState SetPump(bool running, string actor)
     {
         if (string.IsNullOrWhiteSpace(actor))
             throw new ArgumentException("Operator is required.", nameof(actor));
 
         lock (_sync)
         {
-            plant.SetPump(running);
+            var state = plant.SetPump(running);
             events.Append(new(DateTimeOffset.UtcNow, "Audit", running ? "Pump started" : "Pump stopped", actor));
+            return state;
         }
     }
 
-    public void SetOutletValve(bool open, string actor)
+    public PlantState SetOutletValve(bool open, string actor)
     {
         if (string.IsNullOrWhiteSpace(actor))
             throw new ArgumentException("Operator is required.", nameof(actor));
 
         lock (_sync)
         {
-            plant.SetOutletValve(open);
+            var state = plant.SetOutletValve(open);
             events.Append(new(DateTimeOffset.UtcNow, "Audit",
                 open ? "Outlet valve opened" : "Outlet valve closed", actor));
+            return state;
         }
     }
-
 }

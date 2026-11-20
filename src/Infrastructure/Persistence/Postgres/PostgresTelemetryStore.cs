@@ -5,7 +5,7 @@ namespace Infrastructure;
 
 public sealed class PostgresTelemetryStore(NpgsqlDataSource dataSource) : ITelemetryStore
 {
-    public void Append(TelemetrySample sample)
+    public bool Append(TelemetrySample sample)
     {
         using var connection = dataSource.OpenConnection();
         using var command = new NpgsqlCommand(
@@ -15,7 +15,7 @@ public sealed class PostgresTelemetryStore(NpgsqlDataSource dataSource) : ITelem
         command.Parameters.AddWithValue("level", sample.TankLevel);
         command.Parameters.AddWithValue("running", sample.PumpRunning);
         command.Parameters.AddWithValue("revision", sample.Revision);
-        command.ExecuteNonQuery();
+        return command.ExecuteNonQuery() == 1;
     }
 
     public IReadOnlyList<TelemetrySample> GetRecent(int count)

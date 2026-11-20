@@ -9,18 +9,21 @@ public sealed class IncidentService(IIncidentStore store)
 
     public IReadOnlyList<Incident> GetAll() => store.GetAll();
 
-    public void Observe(IEnumerable<SecurityEvent> events)
+    public int Observe(IEnumerable<SecurityEvent> events)
     {
         lock (_sync)
         {
+            var created = 0;
             foreach (var item in events.Where(x => x.Category is "SecurityAlert" or "SafetyInterlock"))
             {
                 var fingerprint = $"{item.Timestamp.UtcTicks}:{item.Category}:{item.Actor}:{item.Message}";
                 var hash = SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint));
                 var id = new Guid(hash.AsSpan(0, 16));
-                store.TryAdd(new Incident(id, item.Timestamp, item.Category,
-                    item.Message, item.Actor, IncidentStatus.Open, null, null));
+                if (store.TryAdd(new Incident(id, item.Timestamp, item.Category,
+                    item.Message, item.Actor, IncidentStatus.Open, null, null)))
+                    created++;
             }
+            return created;
         }
     }
 

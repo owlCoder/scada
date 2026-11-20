@@ -5,7 +5,7 @@ namespace Application;
 public interface IPlantService
 {
     PlantState GetState();
-    void Advance(double seconds);
-    void SetPump(bool running, string actor);
-    void SetOutletValve(bool open, string actor);
+    PlantState Advance(double seconds);
+    PlantState SetPump(bool running, string actor);
+    PlantState SetOutletValve(bool open, string actor);
 }

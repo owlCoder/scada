@@ -2,6 +2,6 @@ namespace Application;
 
 public interface IEventStore
 {
-    void Append(SecurityEvent securityEvent);
+    bool Append(SecurityEvent securityEvent);
     IReadOnlyList<SecurityEvent> GetRecent();
 }

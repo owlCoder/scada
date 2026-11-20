@@ -5,7 +5,7 @@ namespace Infrastructure;
 
 public sealed class PostgresEventStore(NpgsqlDataSource dataSource) : IEventStore
 {
-    public void Append(SecurityEvent securityEvent)
+    public bool Append(SecurityEvent securityEvent)
     {
         using var connection = dataSource.OpenConnection();
         using var command = new NpgsqlCommand(
@@ -15,7 +15,7 @@ public sealed class PostgresEventStore(NpgsqlDataSource dataSource) : IEventStor
         command.Parameters.AddWithValue("category", securityEvent.Category);
         command.Parameters.AddWithValue("message", securityEvent.Message);
         command.Parameters.AddWithValue("actor", securityEvent.Actor);
-        command.ExecuteNonQuery();
+        return command.ExecuteNonQuery() == 1;
     }
 
     public IReadOnlyList<SecurityEvent> GetRecent()

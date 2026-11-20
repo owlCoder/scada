@@ -18,34 +18,36 @@ public sealed class Plant
                 _outletValveOpen, _pumpRunning ? 0.7 : 0, _outletValveOpen ? 0.2 : 0);
     }
 
-    public void SetPump(bool running)
+    public PlantState SetPump(bool running)
     {
         lock (_sync)
         {
             if (_pumpRunning == running)
-                return;
+                return GetState();
 
             if (running && _tankLevel >= TankCapacity)
                 throw new InvalidOperationException("Cannot start the pump when the tank is full.");
 
             _pumpRunning = running;
             _revision++;
+            return GetState();
         }
     }
 
-    public void SetOutletValve(bool open)
+    public PlantState SetOutletValve(bool open)
     {
         lock (_sync)
         {
             if (_outletValveOpen == open)
-                return;
+                return GetState();
 
             _outletValveOpen = open;
             _revision++;
+            return GetState();
         }
     }
 
-    public void Advance(double seconds)
+    public PlantState Advance(double seconds)
     {
         if (!double.IsFinite(seconds) || seconds <= 0 || seconds > 60)
             throw new ArgumentOutOfRangeException(nameof(seconds));
@@ -60,6 +62,7 @@ public sealed class Plant
                 _pumpRunning = false;
 
             _revision++;
+            return GetState();
         }
     }
 }
