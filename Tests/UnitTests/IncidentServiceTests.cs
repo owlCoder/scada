@@ -34,6 +34,23 @@ public sealed class IncidentServiceTests
     }
 
     [Fact]
+    public void NewServiceInstanceKeepsIncidentsAndStatuses()
+    {
+        var store = new InMemoryIncidentStore();
+        var first = new IncidentService(store);
+        var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Провера", "operator");
+        first.Observe([alert]);
+        var id = Assert.Single(first.GetAll()).Id;
+        Assert.True(first.TryUpdate(id, IncidentStatus.Resolved, "admin", out _));
+
+        var second = new IncidentService(store);
+        second.Observe([alert]);
+        var incident = Assert.Single(second.GetAll());
+        Assert.Equal(id, incident.Id);
+        Assert.Equal(IncidentStatus.Resolved, incident.Status);
+    }
+
+    [Fact]
     public void AuditEventsDoNotCreateIncidents()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
