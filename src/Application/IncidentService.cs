@@ -17,6 +17,7 @@ public sealed class IncidentService
     private readonly object _sync = new();
     private readonly Dictionary<Guid, Incident> _incidents = new();
     private readonly HashSet<string> _observed = new(StringComparer.Ordinal);
+    private readonly Queue<string> _observationOrder = new();
     private const int Capacity = 1000;
 
     public IReadOnlyList<Incident> GetAll()
@@ -34,6 +35,10 @@ public sealed class IncidentService
                 var key = $"{item.Timestamp.UtcTicks}:{item.Category}:{item.Actor}:{item.Message}";
                 if (!_observed.Add(key))
                     continue;
+
+                _observationOrder.Enqueue(key);
+                while (_observationOrder.Count > 10000)
+                    _observed.Remove(_observationOrder.Dequeue());
 
                 var incident = new Incident(Guid.NewGuid(), item.Timestamp, item.Category,
                     item.Message, item.Actor, IncidentStatus.Open, null, null);
