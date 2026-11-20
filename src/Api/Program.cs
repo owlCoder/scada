@@ -159,7 +159,8 @@ commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantSe
 
     try
     {
-        service.SetPump(command.Running, command.Actor);
+        service.SetPump(command.Running, http.RequestServices.GetRequiredService<AuthorizationService>()
+            .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
         return Results.Ok(snapshots.GetSnapshot());
     }
     catch (InvalidOperationException exception)
@@ -178,7 +179,8 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
     if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
-    service.SetOutletValve(command.Open, command.Actor);
+    service.SetOutletValve(command.Open, http.RequestServices.GetRequiredService<AuthorizationService>()
+        .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
     return Results.Ok(snapshots.GetSnapshot());
 });
 
@@ -194,7 +196,9 @@ app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
 
     try
     {
-        return registers.Write((ushort)address, request.Value, request.Actor)
+        return registers.Write((ushort)address, request.Value,
+            http.RequestServices.GetRequiredService<AuthorizationService>()
+                .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
             ? Results.Ok(registers.Read((ushort)address))
             : Results.BadRequest("Регистар није уписив или вредност није дозвољена.");
     }
@@ -221,12 +225,13 @@ incidentCommands.AddEndpointFilter(async (context, next) =>
         : Results.Unauthorized();
 });
 
-app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, ScenarioService scenarios) =>
+app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, ScenarioService scenarios,
+    AuthorizationService authorization, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(request.Actor))
         return Results.BadRequest("Оператер је обавезан.");
 
-    return scenarios.Execute(id, request.Actor)
+    return scenarios.Execute(id, authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
         ? Results.Accepted($"/api/scenarios/{id}")
         : Results.NotFound();
 }).AddEndpointFilter(async (context, next) =>
@@ -239,7 +244,7 @@ app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, Scenario
 });
 
 incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
-    IncidentService service, IEventStore events) =>
+    IncidentService service, IEventStore events, AuthorizationService authorization, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(request.Actor) ||
         !Enum.IsDefined(request.Status))
@@ -247,11 +252,12 @@ incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest re
 
     try
     {
-        if (!service.TryUpdate(id, request.Status, request.Actor, out var incident))
+        var actor = authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username;
+        if (!service.TryUpdate(id, request.Status, actor, out var incident))
             return Results.NotFound();
 
         events.Append(new(DateTimeOffset.UtcNow, "Audit",
-            $"Статус инцидента {id} промењен у {request.Status}", request.Actor));
+            $"Статус инцидента {id} промењен у {request.Status}", actor));
         return Results.Ok(incident);
     }
     catch (InvalidOperationException exception)
