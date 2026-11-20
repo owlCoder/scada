@@ -36,7 +36,6 @@ else
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
 builder.Services.AddSingleton<ScenarioService>();
-builder.Services.AddSingleton<PlantSnapshotService>();
 builder.Services.AddSingleton<IncidentService>();
 builder.Services.AddSingleton<VirtualRegisterService>();
 builder.Services.AddSingleton<ModbusFrameService>();
