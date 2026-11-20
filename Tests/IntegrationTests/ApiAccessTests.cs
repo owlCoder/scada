@@ -72,6 +72,14 @@ public sealed class ApiAccessTests
     }
 
     [Fact]
+    public async Task InvalidKeyCannotReadEvents()
+    {
+        using var factory = new Factory();
+        using var client = Client(factory, "invalid-key");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/events")).StatusCode);
+    }
+
+    [Fact]
     public async Task AdministratorCanStartScenario()
     {
         using var factory = new Factory();
