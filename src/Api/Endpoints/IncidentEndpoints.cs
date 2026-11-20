@@ -15,9 +15,8 @@ public static class IncidentEndpoints
         incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
             IncidentService service, IEventStore events, AuthorizationService authorization, HttpContext http) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Actor) ||
-                !Enum.IsDefined(request.Status))
-                return Results.BadRequest("Invalid status or operator.");
+            if (!Enum.IsDefined(request.Status))
+                return Results.BadRequest("Invalid incident status.");
 
             try
             {
