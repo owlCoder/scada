@@ -31,7 +31,7 @@ public static class ReadEndpoints
         read.MapGet("/events", (IEventStore store) => Results.Ok(store.GetRecent()));
         read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
             count is < 1 or > 3600
-                ? Results.BadRequest("Број узорака мора бити између 1 и 3600.")
+                ? Results.BadRequest("Sample count must be between 1 and 3600.")
                 : Results.Ok(store.GetRecent(count ?? 100)));
         read.MapGet("/incidents", (IncidentService service) => Results.Ok(service.GetAll()));
         read.MapGet("/scenarios", (ScenarioService scenarios) => Results.Ok(scenarios.GetAvailable()));
