@@ -1,6 +1,7 @@
 const byId = id => document.getElementById(id);
 let key = '';
 let refreshTimer;
+let refreshInProgress = false;
 const headers = () => ({ 'X-Api-Key': key });
 async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
@@ -93,6 +94,8 @@ function draw(samples) {
   context.stroke();
 }
 async function refresh() {
+  if (refreshInProgress) return;
+  refreshInProgress = true;
   try {
     const [plant, telemetry, events, incidents, scenarios, me] = await Promise.all([
       request('/api/plant'), request('/api/telemetry?count=100'),
@@ -114,6 +117,8 @@ async function refresh() {
   } catch (error) {
     byId('connection').textContent = 'Disconnected';
     byId('error').textContent = 'Check your API key and server availability (' + error.message + ')';
+  } finally {
+    refreshInProgress = false;
   }
 }
 byId('connect').addEventListener('click', () => {
