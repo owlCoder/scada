@@ -20,6 +20,36 @@ function itemList(id, items, render) {
     list.append(li);
   }
 }
+function showIncidents(incidents) {
+  const list = byId('incidents');
+  list.replaceChildren();
+  for (const incident of incidents.slice(0, 20)) {
+    const li = document.createElement('li');
+    const title = document.createElement('div');
+    title.textContent = incident.category + ' · ' + incident.description + ' · ' +
+      ['Отворен', 'Потврђен', 'Затворен'][incident.status];
+    li.append(title);
+    if (incident.status < 2) {
+      const button = document.createElement('button');
+      const nextStatus = incident.status + 1;
+      button.textContent = nextStatus === 1 ? 'Потврди' : 'Затвори';
+      button.addEventListener('click', async () => {
+        try {
+          await request('/api/incidents/' + encodeURIComponent(incident.id) + '/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus, actor: 'dashboard-admin' })
+          });
+          await refresh();
+        } catch (error) {
+          byId('error').textContent = 'Потребан је администраторски кључ (' + error.message + ')';
+        }
+      });
+      li.append(button);
+    }
+    list.append(li);
+  }
+}
 function draw(samples) {
   const canvas = byId('chart'), context = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height, pad = 24;
@@ -56,7 +86,7 @@ async function refresh() {
     byId('error').textContent = '';
     draw(telemetry);
     itemList('events', events.slice(0, 20), e => e.category + ' · ' + e.message);
-    itemList('incidents', incidents.slice(0, 20), i => i.category + ' · ' + i.description + ' · ' + ['Отворен','Потврђен','Затворен'][i.status]);
+    showIncidents(incidents);
   } catch (error) {
     byId('connection').textContent = 'Није повезано';
     byId('error').textContent = 'Провери API кључ и доступност сервиса (' + error.message + ')';
