@@ -8,6 +8,17 @@ namespace IntegrationTests;
 public sealed class PostgresStoreTests
 {
     [Fact]
+    public async Task DatabaseSchemaIsReady()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return;
+
+        await using var source = NpgsqlDataSource.Create(connectionString);
+        await new PostgresSchemaService(source).VerifyAsync();
+    }
+
+    [Fact]
     public void IncidentStatusSurvivesNewStoreInstances()
     {
         var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
