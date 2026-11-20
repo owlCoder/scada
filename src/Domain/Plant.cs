@@ -5,6 +5,7 @@ public sealed class Plant
     private readonly object _sync = new();
     private double _tankLevel = 50;
     private bool _pumpRunning;
+    private bool _outletValveOpen = true;
     private long _revision;
 
     public string Name => "Постројење за воду";
@@ -13,14 +14,33 @@ public sealed class Plant
     public PlantState GetState()
     {
         lock (_sync)
-            return new PlantState(Name, _tankLevel, TankCapacity, _pumpRunning, _revision);
+            return new PlantState(Name, _tankLevel, TankCapacity, _pumpRunning, _revision,
+                _outletValveOpen, _pumpRunning ? 0.7 : 0, _outletValveOpen ? 0.2 : 0);
     }
 
     public void SetPump(bool running)
     {
         lock (_sync)
         {
+            if (_pumpRunning == running)
+                return;
+
+            if (running && _tankLevel >= TankCapacity)
+                throw new InvalidOperationException("Пумпа се не може укључити када је резервоар пун.");
+
             _pumpRunning = running;
+            _revision++;
+        }
+    }
+
+    public void SetOutletValve(bool open)
+    {
+        lock (_sync)
+        {
+            if (_outletValveOpen == open)
+                return;
+
+            _outletValveOpen = open;
             _revision++;
         }
     }
@@ -32,11 +52,24 @@ public sealed class Plant
 
         lock (_sync)
         {
-            var change = (_pumpRunning ? 0.7 : 0) - 0.2;
-            _tankLevel = Math.Clamp(_tankLevel + change * seconds, 0, TankCapacity);
+            var inflow = _pumpRunning ? 0.7 : 0;
+            var outflow = _outletValveOpen ? 0.2 : 0;
+            _tankLevel = Math.Clamp(_tankLevel + (inflow - outflow) * seconds, 0, TankCapacity);
+
+            if (_tankLevel >= TankCapacity)
+                _pumpRunning = false;
+
             _revision++;
         }
     }
 }
 
-public sealed record PlantState(string Name, double TankLevel, double TankCapacity, bool PumpRunning, long Revision);
+public sealed record PlantState(
+    string Name,
+    double TankLevel,
+    double TankCapacity,
+    bool PumpRunning,
+    long Revision,
+    bool OutletValveOpen,
+    double InflowRate,
+    double OutflowRate);
