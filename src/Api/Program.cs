@@ -59,7 +59,21 @@ commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantSe
     return Results.Ok(snapshots.GetSnapshot());
 });
 
+commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlantService service, PlantSnapshotService snapshots, CommandMonitor monitor) =>
+{
+    if (id != "V-101")
+        return Results.NotFound();
+    if (string.IsNullOrWhiteSpace(command.Actor))
+        return Results.BadRequest("Оператер је обавезан.");
+    if (!monitor.Check(command.Actor))
+        return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
+    service.SetOutletValve(command.Open, command.Actor);
+    return Results.Ok(snapshots.GetSnapshot());
+});
+
 app.Run();
 
 public sealed record TickRequest(double Seconds);
 public sealed record PumpCommand(bool Running, string Actor);
+public sealed record ValveCommand(bool Open, string Actor);
