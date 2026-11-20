@@ -33,3 +33,5 @@ jobs:
         run: dotnet test scada.slnx --configuration Release
       - name: Провери API
         run: dotnet build src/Api/Api.csproj --configuration Release --no-restore
+      - name: Провери JavaScript
+        run: node --check src/Api/wwwroot/app.js
