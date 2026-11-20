@@ -105,13 +105,13 @@ commands.MapPost("/tick", (TickRequest request, IPlantService service, PlantSnap
 });
 
 commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service,
-    PlantSnapshotService snapshots, CommandMonitor monitor) =>
+    PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
 {
     if (id != "P-101")
         return Results.NotFound();
     if (string.IsNullOrWhiteSpace(command.Actor))
         return Results.BadRequest("Оператер је обавезан.");
-    if (!monitor.Check(command.Actor))
+    if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
     try
@@ -132,7 +132,7 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
         return Results.NotFound();
     if (string.IsNullOrWhiteSpace(command.Actor))
         return Results.BadRequest("Оператер је обавезан.");
-    if (!monitor.Check(command.Actor))
+    if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
     service.SetOutletValve(command.Open, command.Actor);
@@ -140,13 +140,13 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
 });
 
 app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
-    VirtualRegisterService registers, CommandMonitor monitor) =>
+    VirtualRegisterService registers, CommandMonitor monitor, HttpContext http) =>
 {
     if (address is < 0 or > ushort.MaxValue)
         return Results.NotFound();
     if (string.IsNullOrWhiteSpace(request.Actor))
         return Results.BadRequest("Оператер је обавезан.");
-    if (!monitor.Check(request.Actor))
+    if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
     try
