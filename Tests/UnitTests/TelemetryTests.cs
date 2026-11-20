@@ -49,7 +49,7 @@ public sealed class TelemetryTests
 
         var alarms = events.GetRecent().Where(e => e.Category == "ProcessAlarm").ToArray();
         Assert.Equal(2, alarms.Length);
-        Assert.Contains(alarms, e => e.Message == "Ниво резервоара је нормализован");
+        Assert.Contains(alarms, e => e.Message == "Tank level returned to normal");
     }
 
     [Theory]
