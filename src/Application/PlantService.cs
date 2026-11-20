@@ -4,7 +4,7 @@ namespace Application;
 
 public interface IPlantService
 {
-    Plant GetState();
+    PlantState GetState();
     void Advance(double seconds);
     void SetPump(bool running, string actor);
 }
@@ -19,14 +19,15 @@ public sealed record SecurityEvent(DateTimeOffset Timestamp, string Category, st
 
 public sealed class PlantService(Plant plant, IEventStore events) : IPlantService
 {
-    public Plant GetState() => plant;
+    public PlantState GetState() => plant.GetState();
 
     public void Advance(double seconds)
     {
         plant.Advance(seconds);
-        if (plant.TankLevel >= 90)
+        var state = plant.GetState();
+        if (state.TankLevel >= 90)
             events.Append(new(DateTimeOffset.UtcNow, "ProcessAlarm", "Висок ниво резервоара", "simulation"));
-        if (plant.TankLevel <= 10)
+        if (state.TankLevel <= 10)
             events.Append(new(DateTimeOffset.UtcNow, "ProcessAlarm", "Низак ниво резервоара", "simulation"));
     }
 
