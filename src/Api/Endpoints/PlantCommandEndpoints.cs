@@ -1,10 +1,6 @@
 using Api.Contracts;
 using Application;
-using Domain;
-using Infrastructure;
-using Protocols;
 using Security;
-using Simulation;
 
 namespace Api.Endpoints;
 
@@ -67,7 +63,5 @@ public static class PlantCommandEndpoints
                 .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
             return Results.Ok(service.GetState());
         });
-
-
     }
 }
