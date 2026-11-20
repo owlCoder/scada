@@ -32,7 +32,7 @@ public sealed class CommandMonitor(IEventStore events)
 
             if (requests.Count >= Limit)
             {
-                events.Append(new(now, "SecurityAlert", "Превише команди у кратком периоду", identity));
+                events.Append(new(now, "SecurityAlert", "Too many commands in a short period", identity));
                 return false;
             }
 
