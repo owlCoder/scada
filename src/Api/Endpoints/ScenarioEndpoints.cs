@@ -11,8 +11,6 @@ public static class ScenarioEndpoints
         app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, ScenarioService scenarios,
             AuthorizationService authorization, HttpContext http) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Actor))
-                return Results.BadRequest("Operator is required.");
 
             return scenarios.Execute(id, authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
                 ? Results.Accepted($"/api/scenarios/{id}")
