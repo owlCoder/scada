@@ -27,7 +27,7 @@ public static class ReadEndpoints
             var user = authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!;
             return Results.Ok(new { user.Username, role = user.Role.ToString() });
         });
-        read.MapGet("/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
+        read.MapGet("/plant", (IPlantService plant) => Results.Ok(plant.GetState()));
         read.MapGet("/events", (IEventStore store) => Results.Ok(store.GetRecent()));
         read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
             count is < 1 or > 3600
