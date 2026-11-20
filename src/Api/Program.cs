@@ -35,6 +35,16 @@ builder.Services.AddSingleton<ScenarioService>();
 builder.Services.AddSingleton<PlantSnapshotService>();
 builder.Services.AddSingleton<IncidentService>();
 builder.Services.AddSingleton<VirtualRegisterService>();
+builder.Services.AddSingleton<ModbusFrameService>();
+if (builder.Configuration.GetValue<bool>("Protocols:ModbusEnabled"))
+{
+    var port = builder.Configuration.GetValue<int?>("Protocols:ModbusPort") ?? 1502;
+    if (port is < 1024 or > 65535)
+        throw new InvalidOperationException("Modbus порт мора бити између 1024 и 65535.");
+    builder.Services.AddSingleton<IHostedService>(services =>
+        new ModbusTcpService(services.GetRequiredService<ModbusFrameService>(),
+            services.GetRequiredService<ILogger<ModbusTcpService>>(), port));
+}
 builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string>
 {
     [AccessRole.Viewer] = builder.Configuration["Security:ViewerApiKey"] ?? "",
