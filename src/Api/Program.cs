@@ -55,6 +55,17 @@ builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string
         ?? builder.Configuration["Security:CommandApiKey"] ?? "",
     [AccessRole.Administrator] = builder.Configuration["Security:AdminApiKey"] ?? ""
 }));
+builder.Services.AddSingleton(new UserAccessPolicy(
+    builder.Configuration.GetSection("Security:Users").GetChildren().Select(section =>
+    {
+        var username = section["Username"] ?? "";
+        var key = section["ApiKey"] ?? "";
+        if (!Enum.TryParse<AccessRole>(section["Role"], true, out var role) ||
+            !Enum.IsDefined(role))
+            throw new InvalidOperationException($"Неисправна улога за корисника {username}.");
+        return new UserCredential(username, role, key);
+    })));
+builder.Services.AddSingleton<AuthorizationService>();
 builder.Services.AddHostedService<SimulationService>();
 builder.Services.AddHostedService<IncidentMonitorService>();
 
@@ -93,7 +104,7 @@ app.MapGet("/health", async (IServiceProvider services, CancellationToken cancel
 var read = app.MapGroup("/api");
 read.AddEndpointFilter(async (context, next) =>
 {
-    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
     var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
     return policy.Authorize(key, AccessRole.Viewer)
         ? await next(context)
@@ -117,7 +128,7 @@ read.MapGet("/registers/{address:int}", (int address, VirtualRegisterService reg
 var commands = app.MapGroup("/api/plant");
 commands.AddEndpointFilter(async (context, next) =>
 {
-    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
     var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
     return policy.Authorize(key, AccessRole.Operator)
         ? await next(context)
@@ -193,7 +204,7 @@ app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
     }
 }).AddEndpointFilter(async (context, next) =>
 {
-    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
     var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
     return policy.Authorize(key, AccessRole.Operator)
         ? await next(context)
@@ -203,7 +214,7 @@ app.MapPost("/api/registers/{address:int}", (int address, RegisterWrite request,
 var incidentCommands = app.MapGroup("/api/incidents");
 incidentCommands.AddEndpointFilter(async (context, next) =>
 {
-    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
     var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
     return policy.Authorize(key, AccessRole.Administrator)
         ? await next(context)
@@ -220,7 +231,7 @@ app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, Scenario
         : Results.NotFound();
 }).AddEndpointFilter(async (context, next) =>
 {
-    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
     var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
     return policy.Authorize(key, AccessRole.Administrator)
         ? await next(context)
