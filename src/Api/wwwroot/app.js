@@ -20,6 +20,29 @@ function itemList(id, items, render) {
     list.append(li);
   }
 }
+function showScenarios(scenarios) {
+  const list = byId('scenarios');
+  list.replaceChildren();
+  for (const scenario of scenarios) {
+    const button = document.createElement('button');
+    button.textContent = scenario.name;
+    button.title = scenario.description;
+    button.addEventListener('click', async () => {
+      try {
+        await request('/api/scenarios/' + encodeURIComponent(scenario.id), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: 'dashboard-admin' })
+        });
+        byId('command-result').textContent = 'Сценарио је покренут.';
+        await refresh();
+      } catch (error) {
+        byId('error').textContent = 'Сценарио није покренут (' + error.message + ')';
+      }
+    });
+    list.append(button);
+  }
+}
 function showIncidents(incidents) {
   const list = byId('incidents');
   list.replaceChildren();
@@ -71,9 +94,9 @@ function draw(samples) {
 }
 async function refresh() {
   try {
-    const [plant, telemetry, events, incidents] = await Promise.all([
+    const [plant, telemetry, events, incidents, scenarios] = await Promise.all([
       request('/api/plant'), request('/api/telemetry?count=100'),
-      request('/api/events'), request('/api/incidents')
+      request('/api/events'), request('/api/incidents'), request('/api/scenarios')
     ]);
     byId('level').textContent = plant.tankLevel.toFixed(1) + ' %';
     byId('fill').style.width = plant.tankLevel + '%';
@@ -87,6 +110,7 @@ async function refresh() {
     draw(telemetry);
     itemList('events', events.slice(0, 20), e => e.category + ' · ' + e.message);
     showIncidents(incidents);
+    showScenarios(scenarios);
   } catch (error) {
     byId('connection').textContent = 'Није повезано';
     byId('error').textContent = 'Провери API кључ и доступност сервиса (' + error.message + ')';
