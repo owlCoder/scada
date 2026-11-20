@@ -40,7 +40,7 @@ public sealed class PlantTests
     public void CommandIsRecorded()
     {
         var store = new InMemoryEventStore();
-        var service = new PlantService(new Plant(), store);
+        var service = new PlantService(new Plant(), store, new InMemoryTelemetryStore());
         service.SetPump(true, "operator");
         Assert.Single(store.GetRecent());
     }
