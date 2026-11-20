@@ -4,6 +4,8 @@
 
 ## Покретање
 
+За покретање API-ја и PostgreSQL базе у Docker-у види [упутство за Docker Compose](docs/postgresql.md).
+
 Потребан је .NET 10 SDK.
 
 ```bash
@@ -30,6 +32,7 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 | `src/Api` | HTTP API и контролна табла |
 | `Tests/UnitTests` | Јединични тестови |
 | `Tests/IntegrationTests` | Интеграциони тестови |
+| `Tests/ArchitectureTests` | Провере зависности између модула |
 
 ## API
 
@@ -52,6 +55,7 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 
 ## Документација
 
+- [Архитектура](docs/arhitektura.md)
 - [Безбедност и улоге](docs/bezbednost.md)
 - [PostgreSQL складиште](docs/postgresql.md)
 - [Виртуелни регистри](docs/protokoli.md)
