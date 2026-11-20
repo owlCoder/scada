@@ -45,6 +45,22 @@ public sealed class ApiAccessTests : IClassFixture<ApiAccessTests.Factory>
     }
 
     [Fact]
+    public async Task RateLimitCannotBeBypassedByChangingActor()
+    {
+        using var client = Client("operator-integration-key");
+        for (var i = 0; i < 10; i++)
+        {
+            var response = await client.PostAsJsonAsync("/api/plant/tick",
+                new { seconds = 1 });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        var blocked = await client.PostAsJsonAsync("/api/plant/pump/P-101/command",
+            new { running = true, actor = "different-actor" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
+    }
+
+    [Fact]
     public async Task AdministratorCanStartScenario()
     {
         using var client = Client("admin-integration-key");
