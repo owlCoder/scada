@@ -17,7 +17,7 @@ public sealed class SimulationService(IPlantService plant, ILogger<SimulationSer
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Грешка током симулације");
+                logger.LogError(exception, "Simulation error");
             }
         }
     }
