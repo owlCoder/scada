@@ -27,8 +27,6 @@ public static class PlantCommandEndpoints
         {
             if (id != "P-101")
                 return Results.NotFound();
-            if (string.IsNullOrWhiteSpace(command.Actor))
-                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
@@ -48,8 +46,6 @@ public static class PlantCommandEndpoints
         {
             if (id != "V-101")
                 return Results.NotFound();
-            if (string.IsNullOrWhiteSpace(command.Actor))
-                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
