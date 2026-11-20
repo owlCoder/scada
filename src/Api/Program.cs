@@ -19,6 +19,7 @@ if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSingleton<ITelemetryStore, PostgresTelemetryStore>();
     builder.Services.AddSingleton<IIncidentStore, PostgresIncidentStore>();
+    builder.Services.AddSingleton<PostgresSchemaService>();
 }
 else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
 {
@@ -58,6 +59,9 @@ builder.Services.AddHostedService<SimulationService>();
 builder.Services.AddHostedService<IncidentMonitorService>();
 
 var app = builder.Build();
+if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
+    await app.Services.GetRequiredService<PostgresSchemaService>().VerifyAsync();
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
