@@ -64,6 +64,14 @@ if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Cache-Control"] = "no-store";
+    await next();
+});
 
 app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
 {
