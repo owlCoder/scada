@@ -141,7 +141,7 @@ commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantSe
 });
 
 commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlantService service,
-    PlantSnapshotService snapshots, CommandMonitor monitor) =>
+    PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
 {
     if (id != "V-101")
         return Results.NotFound();
