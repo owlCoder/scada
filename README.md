@@ -1,44 +1,71 @@
-# SCADA — симулатор индустријског система
+# SCADA — Industrial Control Simulation
 
-Модуларна .NET 10 апликација за локалну симулацију постројења за воду, телеметрију, безбедносне догађаје и управљање инцидентима. Нема повезивања са стварним PLC уређајима.
+A modular .NET 10 educational simulator for a water treatment plant, telemetry, process alarms, security events, incidents and local read-only Modbus TCP.
 
-## Покретање
+**Simulation only. Do not connect to physical industrial equipment.**
 
-За покретање API-ја и PostgreSQL базе у Docker-у види [упутство за Docker Compose](docs/postgresql.md).
+## Quick start
 
-Потребан је .NET 10 SDK.
+Install the .NET 10 SDK. Configure unique credentials:
 
 ```bash
+export Security__ViewerApiKey="replace-with-random-viewer-key"
+export Security__OperatorApiKey="replace-with-random-operator-key"
+export Security__AdminApiKey="replace-with-random-admin-key"
+
 dotnet restore scada.slnx
-dotnet test scada.slnx
-export Security__ViewerApiKey="замени-дугачким-случајним-кључем"
-export Security__OperatorApiKey="замени-другим-случајним-кључем"
-export Security__AdminApiKey="замени-трећим-случајним-кључем"
+dotnet build scada.slnx --configuration Release
+dotnet test scada.slnx --configuration Release
 dotnet run --project src/Api --urls http://127.0.0.1:5080
 ```
 
-Контролна табла: `http://127.0.0.1:5080/`. Унеси један од конфигурисаних API кључева у поље за повезивање. Сваки API захтев, осим провере здравља, захтева `X-Api-Key`.
+Dashboard: http://127.0.0.1:5080/
 
-## Модули
+**GitHub Actions CI is temporarily disabled** to conserve resources. Build and test locally until it is explicitly re-enabled.
 
-| Путања | Намена |
-| --- | --- |
-| `src/Domain` | Резервоар, пумпа, вентил и процесна правила |
-| `src/Application` | Сервиси, телеметрија и инциденти |
-| `src/Infrastructure` | Меморијско и PostgreSQL складиште |
-| `src/Simulation` | Позадинска симулација и надзор догађаја |
-| `src/Security` | Улоге, API кључеви и надзор команди |
-| `src/Protocols` | Виртуелна регистарска мапа |
-| `src/Api` | HTTP API и контролна табла |
-| `Tests/UnitTests` | Јединични тестови |
-| `Tests/IntegrationTests` | Интеграциони тестови |
-| `Tests/ArchitectureTests` | Провере зависности између модула |
+## Project layout
+
+```text
+src/
+  Domain/
+    Entities/
+    Models/
+  Application/
+    Abstractions/
+    Models/
+    Services/
+  Infrastructure/
+    Persistence/
+      InMemory/
+      Postgres/
+  Security/
+    Models/
+    Services/
+  Protocols/
+    Models/
+    Services/
+    Modbus/
+  Simulation/
+    HostedServices/
+  Api/
+    Contracts/
+    Endpoints/
+    wwwroot/
+Tests/
+  UnitTests/
+  IntegrationTests/
+  ArchitectureTests/
+docs/
+deploy/
+```
+
+One public class, interface, record or enum per source file. The existing short project names and top-level namespaces are retained; no `ScadaSecurity` prefix is used.
 
 ## API
 
-| Метода | Путања | Минимална улога |
+| Method | Endpoint | Role |
 | --- | --- | --- |
-| GET | `/health` | Без кључа |
+| GET | `/health` | Public |
 | GET | `/api/me` | Viewer |
 | GET | `/api/plant` | Viewer |
 | GET | `/api/telemetry?count=100` | Viewer |
@@ -54,15 +81,17 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 | POST | `/api/incidents/{id}/status` | Administrator |
 | POST | `/api/scenarios/{id}` | Administrator |
 
-## Документација
+All protected endpoints require `X-Api-Key`. Named user credentials are supported; see [Security](docs/security.md).
 
-- [Архитектура](docs/arhitektura.md)
-- [Безбедност и улоге](docs/bezbednost.md)
-- [PostgreSQL складиште](docs/postgresql.md)
-- [Виртуелни регистри](docs/protokoli.md)
-- [Инциденти](docs/incidenti.md)
-- [Синтетички безбедносни сценарији](docs/scenariji.md)
+## Documentation
 
-## Ограничења
+- [Architecture](docs/architecture.md)
+- [Security](docs/security.md)
+- [PostgreSQL and Docker](docs/postgresql.md)
+- [Incidents](docs/incidents.md)
+- [Protocols](docs/protocols.md)
+- [Security scenarios](docs/scenarios.md)
 
-Постоји опциони Modbus TCP сервер само за читање, ограничен на 127.0.0.1. OPC UA није имплементиран. Постоје именовани кориснички API кључеви, али нема интерактивне пријаве лозинком, OIDC пријаве, посебне историје промене статуса инцидената ни производног система за обраду редова. PostgreSQL је опционалан и чува телеметрију, догађаје и статусе инцидената; подразумевано се користи меморија. API кључеви и веб табла намењени су искључиво изолованом развојном окружењу.
+## Limitations
+
+The simulator is not production SCADA software. There is no OPC UA implementation, OIDC authentication, TLS termination or production-ready telemetry queue. PostgreSQL persistence is optional; plant state remains in memory.
