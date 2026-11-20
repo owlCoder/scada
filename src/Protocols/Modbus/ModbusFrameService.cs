@@ -4,7 +4,7 @@ public sealed class ModbusFrameService(VirtualRegisterService registers)
 {
     public byte[] Process(ReadOnlySpan<byte> request)
     {
-        if (request.Length < 2)
+        if (request.Length < 1)
             return [0x83, 0x03];
 
         var function = request[0];
