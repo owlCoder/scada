@@ -7,6 +7,7 @@ using Simulation;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Plant>();
 builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
+builder.Services.AddSingleton<ITelemetryStore, InMemoryTelemetryStore>();
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
 builder.Services.AddSingleton<PlantSnapshotService>();
@@ -17,6 +18,10 @@ var app = builder.Build();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapGet("/api/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
 app.MapGet("/api/events", (IEventStore store) => Results.Ok(store.GetRecent()));
+app.MapGet("/api/telemetry", (int? count, ITelemetryStore store) =>
+    count is < 1 or > 3600
+        ? Results.BadRequest("Број узорака мора бити између 1 и 3600.")
+        : Results.Ok(store.GetRecent(count ?? 100)));
 
 var commands = app.MapGroup("/api/plant");
 commands.AddEndpointFilter(async (context, next) =>
