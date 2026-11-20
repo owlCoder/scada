@@ -23,7 +23,7 @@ public static class PlantCommandEndpoints
         });
 
         commands.MapPost("/tick", (TickRequest request, IPlantService service,
-            PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
+            IPlantService plant, CommandMonitor monitor, HttpContext http) =>
         {
             if (!double.IsFinite(request.Seconds) || request.Seconds is <= 0 or > 60)
                 return Results.BadRequest("Step must be between 0 and 60 seconds.");
@@ -31,11 +31,11 @@ public static class PlantCommandEndpoints
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
             service.Advance(request.Seconds);
-            return Results.Ok(snapshots.GetSnapshot());
+            return Results.Ok(plant.GetState());
         });
 
         commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service,
-            PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
+            IPlantService plant, CommandMonitor monitor, HttpContext http) =>
         {
             if (id != "P-101")
                 return Results.NotFound();
@@ -48,7 +48,7 @@ public static class PlantCommandEndpoints
             {
                 service.SetPump(command.Running, http.RequestServices.GetRequiredService<AuthorizationService>()
                     .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
-                return Results.Ok(snapshots.GetSnapshot());
+                return Results.Ok(plant.GetState());
             }
             catch (InvalidOperationException exception)
             {
@@ -57,7 +57,7 @@ public static class PlantCommandEndpoints
         });
 
         commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlantService service,
-            PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
+            IPlantService plant, CommandMonitor monitor, HttpContext http) =>
         {
             if (id != "V-101")
                 return Results.NotFound();
@@ -68,7 +68,7 @@ public static class PlantCommandEndpoints
 
             service.SetOutletValve(command.Open, http.RequestServices.GetRequiredService<AuthorizationService>()
                 .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username);
-            return Results.Ok(snapshots.GetSnapshot());
+            return Results.Ok(plant.GetState());
         });
 
 
