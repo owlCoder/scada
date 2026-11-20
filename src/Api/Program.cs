@@ -109,7 +109,8 @@ app.MapGet("/health", async (IServiceProvider services, CancellationToken cancel
 ReadEndpoints.Map(app);
 PlantCommandEndpoints.Map(app);
 RegisterCommandEndpoints.Map(app);
-IncidentAndScenarioEndpoints.Map(app);
+IncidentEndpoints.Map(app);
+ScenarioEndpoints.Map(app);
 
 app.Run();
 
