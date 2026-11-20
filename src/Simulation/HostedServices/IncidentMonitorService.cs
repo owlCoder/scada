@@ -20,7 +20,7 @@ public sealed class IncidentMonitorService(
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Грешка приликом обраде безбедносних догађаја");
+                logger.LogError(exception, "Security event processing error");
             }
         }
     }
