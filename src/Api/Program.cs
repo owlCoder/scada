@@ -6,8 +6,26 @@ using Simulation;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Plant>();
-builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
-builder.Services.AddSingleton<ITelemetryStore, InMemoryTelemetryStore>();
+var provider = builder.Configuration["Storage:Provider"] ?? "Memory";
+if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
+{
+    var connectionString = builder.Configuration.GetConnectionString("Scada");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException("Недостаје ConnectionStrings:Scada.");
+
+    builder.Services.AddSingleton(Npgsql.NpgsqlDataSource.Create(connectionString));
+    builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
+    builder.Services.AddSingleton<ITelemetryStore, PostgresTelemetryStore>();
+}
+else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
+    builder.Services.AddSingleton<ITelemetryStore, InMemoryTelemetryStore>();
+}
+else
+{
+    throw new InvalidOperationException("Непознат Storage:Provider.");
+}
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
 builder.Services.AddSingleton<PlantSnapshotService>();
