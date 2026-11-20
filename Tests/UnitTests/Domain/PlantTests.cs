@@ -69,7 +69,7 @@ public sealed class PlantTests
 
         Assert.False(monitor.Check("key-fingerprint"));
         Assert.False(monitor.Check("key-fingerprint"));
-        Assert.Equal(2, events.GetRecent().Count);
+        Assert.Single(events.GetRecent(), item => item.Category == "SecurityAlert");
         return Task.CompletedTask;
     }
 
