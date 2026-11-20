@@ -64,5 +64,4 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
         }
     }
 
-    private enum AlarmLevel { Normal, Low, High }
 }
