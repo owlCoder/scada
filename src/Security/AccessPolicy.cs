@@ -3,8 +3,6 @@ using System.Text;
 
 namespace Security;
 
-public enum AccessRole { Viewer, Operator, Administrator }
-
 public sealed class AccessPolicy
 {
     private readonly IReadOnlyDictionary<AccessRole, string> _keys;
