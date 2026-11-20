@@ -55,16 +55,20 @@ builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string
         ?? builder.Configuration["Security:CommandApiKey"] ?? "",
     [AccessRole.Administrator] = builder.Configuration["Security:AdminApiKey"] ?? ""
 }));
-builder.Services.AddSingleton(new UserAccessPolicy(
-    builder.Configuration.GetSection("Security:Users").GetChildren().Select(section =>
-    {
-        var username = section["Username"] ?? "";
-        var key = section["ApiKey"] ?? "";
-        if (!Enum.TryParse<AccessRole>(section["Role"], true, out var role) ||
-            !Enum.IsDefined(role))
-            throw new InvalidOperationException($"Неисправна улога за корисника {username}.");
-        return new UserCredential(username, role, key);
-    })));
+var namedUsers = builder.Configuration.GetSection("Security:Users").GetChildren().Select(section =>
+{
+    var username = section["Username"] ?? "";
+    var key = section["ApiKey"] ?? "";
+    if (!Enum.TryParse<AccessRole>(section["Role"], true, out var role) ||
+        !Enum.IsDefined(role))
+        throw new InvalidOperationException($"Неисправна улога за корисника {username}.");
+    return new UserCredential(username, role, key);
+}).ToArray();
+var legacyPolicy = builder.Services.Single(descriptor => descriptor.ServiceType == typeof(AccessPolicy))
+    .ImplementationInstance as AccessPolicy ?? throw new InvalidOperationException("Недостаје AccessPolicy.");
+if (namedUsers.Any(user => legacyPolicy.Authenticate(user.ApiKey) is not null))
+    throw new InvalidOperationException("Именовани корисник не сме користити дељени API кључ.");
+builder.Services.AddSingleton(new UserAccessPolicy(namedUsers));
 builder.Services.AddSingleton<AuthorizationService>();
 builder.Services.AddHostedService<SimulationService>();
 builder.Services.AddHostedService<IncidentMonitorService>();
