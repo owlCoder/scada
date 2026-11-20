@@ -1,5 +1,4 @@
 using Api.Contracts;
-using Application;
 using Security;
 
 namespace Api.Endpoints;
