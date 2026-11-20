@@ -1,3 +1,4 @@
+using Api.Authorization;
 using Api.Contracts;
 using Security;
 
@@ -16,13 +17,6 @@ public static class ScenarioEndpoints
             return scenarios.Execute(id, authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
                 ? Results.Accepted($"/api/scenarios/{id}")
                 : Results.NotFound();
-        }).AddEndpointFilter(async (context, next) =>
-        {
-            var policy = context.HttpContext.RequestServices.GetRequiredService<AuthorizationService>();
-            var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-            return policy.Authorize(key, AccessRole.Administrator)
-                ? await next(context)
-                : Results.Unauthorized();
-        });
+        }).RequireRole(AccessRole.Administrator);
     }
 }
