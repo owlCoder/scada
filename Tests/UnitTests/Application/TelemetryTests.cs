@@ -3,12 +3,12 @@ using Domain;
 using Infrastructure;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Application;
 
 public sealed class TelemetryTests
 {
     [Fact]
-    public void SimulationRecordsTelemetry()
+    public Task SimulationRecordsTelemetry()
     {
         var telemetry = new InMemoryTelemetryStore();
         var service = new PlantService(new Plant(), new InMemoryEventStore(), telemetry);
@@ -19,10 +19,11 @@ public sealed class TelemetryTests
         var samples = telemetry.GetRecent(10);
         Assert.Equal(2, samples.Count);
         Assert.Equal(2, samples[1].Revision);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void AlarmIsRaisedOnlyWhenThresholdIsCrossed()
+    public Task AlarmIsRaisedOnlyWhenThresholdIsCrossed()
     {
         var events = new InMemoryEventStore();
         var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
@@ -32,10 +33,11 @@ public sealed class TelemetryTests
 
         Assert.Single(events.GetRecent());
         Assert.Equal("ProcessAlarm", events.GetRecent()[0].Category);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void RecoveryProducesOneNormalStateEvent()
+    public Task RecoveryProducesOneNormalStateEvent()
     {
         var events = new InMemoryEventStore();
         var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
@@ -50,13 +52,15 @@ public sealed class TelemetryTests
         var alarms = events.GetRecent().Where(e => e.Category == "ProcessAlarm").ToArray();
         Assert.Equal(2, alarms.Length);
         Assert.Contains(alarms, e => e.Message == "Tank level returned to normal");
+        return Task.CompletedTask;
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(3601)]
-    public void InvalidSampleCountIsRejected(int count)
+    public Task InvalidSampleCountIsRejected(int count)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new InMemoryTelemetryStore().GetRecent(count));
+        return Task.CompletedTask;
     }
 }

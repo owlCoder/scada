@@ -2,12 +2,12 @@ using Infrastructure;
 using Security;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Security;
 
 public sealed class CommandMonitorTests
 {
     [Fact]
-    public void AllowsTenCommandsAndRejectsTheEleventh()
+    public Task AllowsTenCommandsAndRejectsTheEleventh()
     {
         var store = new InMemoryEventStore();
         var monitor = new CommandMonitor(store);
@@ -17,10 +17,11 @@ public sealed class CommandMonitorTests
 
         Assert.False(monitor.Check("credential-a"));
         Assert.Single(store.GetRecent(), item => item.Category == "SecurityAlert");
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void RepeatedRejectionsProduceOnlyOneAlertPerWindow()
+    public Task RepeatedRejectionsProduceOnlyOneAlertPerWindow()
     {
         var store = new InMemoryEventStore();
         var monitor = new CommandMonitor(store);
@@ -32,10 +33,11 @@ public sealed class CommandMonitorTests
             Assert.False(monitor.Check("credential-a"));
 
         Assert.Single(store.GetRecent(), item => item.Category == "SecurityAlert");
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void CredentialsHaveIndependentLimits()
+    public Task CredentialsHaveIndependentLimits()
     {
         var store = new InMemoryEventStore();
         var monitor = new CommandMonitor(store);
@@ -45,15 +47,17 @@ public sealed class CommandMonitorTests
 
         Assert.False(monitor.Check("credential-a"));
         Assert.True(monitor.Check("credential-b"));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void EmptyIdentityIsRejectedWithoutAnEvent()
+    public Task EmptyIdentityIsRejectedWithoutAnEvent()
     {
         var store = new InMemoryEventStore();
         var monitor = new CommandMonitor(store);
 
         Assert.False(monitor.Check(""));
         Assert.Empty(store.GetRecent());
+        return Task.CompletedTask;
     }
 }

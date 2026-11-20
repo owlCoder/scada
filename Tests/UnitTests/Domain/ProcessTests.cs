@@ -3,12 +3,12 @@ using Domain;
 using Infrastructure;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Domain;
 
 public sealed class ProcessTests
 {
     [Fact]
-    public void ClosedValveStopsOutflow()
+    public Task ClosedValveStopsOutflow()
     {
         var plant = new Plant();
         plant.SetOutletValve(false);
@@ -18,10 +18,11 @@ public sealed class ProcessTests
         Assert.Equal(50, state.TankLevel);
         Assert.Equal(0, state.OutflowRate);
         Assert.False(state.OutletValveOpen);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void FullTankStopsPumpAutomatically()
+    public Task FullTankStopsPumpAutomatically()
     {
         var plant = new Plant();
         plant.SetOutletValve(false);
@@ -32,10 +33,11 @@ public sealed class ProcessTests
         var state = plant.GetState();
         Assert.Equal(100, state.TankLevel);
         Assert.False(state.PumpRunning);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void FullTankRejectsPumpStart()
+    public Task FullTankRejectsPumpStart()
     {
         var plant = new Plant();
         plant.SetOutletValve(false);
@@ -44,10 +46,11 @@ public sealed class ProcessTests
         plant.Advance(60);
 
         Assert.Throws<InvalidOperationException>(() => plant.SetPump(true));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void SafetyInterlockIsRecorded()
+    public Task SafetyInterlockIsRecorded()
     {
         var events = new InMemoryEventStore();
         var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
@@ -57,15 +60,17 @@ public sealed class ProcessTests
         service.Advance(60);
 
         Assert.Contains(events.GetRecent(), e => e.Category == "SafetyInterlock");
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void ValveCommandIsAudited()
+    public Task ValveCommandIsAudited()
     {
         var events = new InMemoryEventStore();
         var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
         service.SetOutletValve(false, "operator");
 
         Assert.Contains(events.GetRecent(), e => e.Message == "Излазни вентил затворен");
+        return Task.CompletedTask;
     }
 }

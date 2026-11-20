@@ -1,7 +1,7 @@
 using Security;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Security;
 
 public sealed class AccessPolicyTests
 {
@@ -13,55 +13,62 @@ public sealed class AccessPolicyTests
     });
 
     [Fact]
-    public void ViewerCannotIssueCommands()
+    public Task ViewerCannotIssueCommands()
     {
         Assert.True(_policy.Authorize("viewer-secret", AccessRole.Viewer));
         Assert.False(_policy.Authorize("viewer-secret", AccessRole.Operator));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void OperatorCannotManageIncidents()
+    public Task OperatorCannotManageIncidents()
     {
         Assert.True(_policy.Authorize("operator-secret", AccessRole.Operator));
         Assert.False(_policy.Authorize("operator-secret", AccessRole.Administrator));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void AdministratorHasAllPermissions()
+    public Task AdministratorHasAllPermissions()
     {
         Assert.True(_policy.Authorize("admin-secret", AccessRole.Administrator));
         Assert.True(_policy.Authorize("admin-secret", AccessRole.Viewer));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void DuplicateKeysAcrossRolesAreRejected()
+    public Task DuplicateKeysAcrossRolesAreRejected()
     {
         Assert.Throws<ArgumentException>(() => new AccessPolicy(new Dictionary<AccessRole, string>
         {
             [AccessRole.Viewer] = "shared-secret",
             [AccessRole.Operator] = "shared-secret"
         }));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void InvalidConfiguredRoleIsRejected()
+    public Task InvalidConfiguredRoleIsRejected()
     {
         Assert.Throws<ArgumentException>(() => new AccessPolicy(new Dictionary<AccessRole, string>
         {
             [(AccessRole)99] = "invalid-role-secret"
         }));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void InvalidRequiredRoleIsRejected()
+    public Task InvalidRequiredRoleIsRejected()
     {
         Assert.False(_policy.Authorize("admin-secret", (AccessRole)(-1)));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void UnknownKeyIsRejected()
+    public Task UnknownKeyIsRejected()
     {
         Assert.Null(_policy.Authenticate("incorrect"));
         Assert.Null(_policy.Authenticate(null));
+        return Task.CompletedTask;
     }
 }

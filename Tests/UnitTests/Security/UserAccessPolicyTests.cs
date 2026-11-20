@@ -1,12 +1,12 @@
 using Security;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Security;
 
 public sealed class UserAccessPolicyTests
 {
     [Fact]
-    public void NamedUserIsAuthenticatedWithAssignedRole()
+    public Task NamedUserIsAuthenticatedWithAssignedRole()
     {
         var policy = new UserAccessPolicy([
             new UserCredential("ana", AccessRole.Operator, "ana-secret"),
@@ -18,10 +18,11 @@ public sealed class UserAccessPolicyTests
         Assert.Equal("ana", user.Username);
         Assert.Equal(AccessRole.Operator, user.Role);
         Assert.Null(policy.Authenticate("wrong"));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void DuplicateUsernamesAndKeysAreRejected()
+    public Task DuplicateUsernamesAndKeysAreRejected()
     {
         Assert.Throws<ArgumentException>(() => new UserAccessPolicy([
             new UserCredential("ana", AccessRole.Viewer, "key-one"),
@@ -31,10 +32,11 @@ public sealed class UserAccessPolicyTests
             new UserCredential("ana", AccessRole.Viewer, "shared"),
             new UserCredential("marko", AccessRole.Operator, "shared")
         ]));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void LegacyAndNamedCredentialsAuthorizeByRole()
+    public Task LegacyAndNamedCredentialsAuthorizeByRole()
     {
         var legacy = new AccessPolicy(new Dictionary<AccessRole, string>
         {
@@ -49,5 +51,6 @@ public sealed class UserAccessPolicyTests
         Assert.False(service.Authorize("legacy-viewer", AccessRole.Operator));
         Assert.True(service.Authorize("legacy-viewer", AccessRole.Viewer));
         Assert.Equal("operator", service.Authenticate("named-operator")!.Username);
+        return Task.CompletedTask;
     }
 }

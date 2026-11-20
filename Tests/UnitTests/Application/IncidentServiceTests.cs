@@ -2,12 +2,12 @@ using Application;
 using Infrastructure;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Application;
 
 public sealed class IncidentServiceTests
 {
     [Fact]
-    public void SecurityAlertCreatesOnlyOneIncident()
+    public Task SecurityAlertCreatesOnlyOneIncident()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
         var alert = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert", "Attempt", "operator");
@@ -17,10 +17,11 @@ public sealed class IncidentServiceTests
 
         Assert.Single(service.GetAll());
         Assert.Equal(IncidentStatus.Open, service.GetAll()[0].Status);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void IncidentCanBeAcknowledgedAndResolved()
+    public Task IncidentCanBeAcknowledgedAndResolved()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
         service.Observe([new(DateTimeOffset.UtcNow, "SafetyInterlock", "Pump", "simulation")]);
@@ -31,10 +32,11 @@ public sealed class IncidentServiceTests
         Assert.Equal(IncidentStatus.Resolved, incident!.Status);
         Assert.Throws<InvalidOperationException>(() =>
             service.TryUpdate(id, IncidentStatus.Open, "operator", out _));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void NewServiceInstanceKeepsIncidentsAndStatuses()
+    public Task NewServiceInstanceKeepsIncidentsAndStatuses()
     {
         var store = new InMemoryIncidentStore();
         var first = new IncidentService(store);
@@ -48,13 +50,15 @@ public sealed class IncidentServiceTests
         var incident = Assert.Single(second.GetAll());
         Assert.Equal(id, incident.Id);
         Assert.Equal(IncidentStatus.Resolved, incident.Status);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void AuditEventsDoNotCreateIncidents()
+    public Task AuditEventsDoNotCreateIncidents()
     {
         var service = new IncidentService(new InMemoryIncidentStore());
         service.Observe([new(DateTimeOffset.UtcNow, "Audit", "Command", "operator")]);
         Assert.Empty(service.GetAll());
+        return Task.CompletedTask;
     }
 }

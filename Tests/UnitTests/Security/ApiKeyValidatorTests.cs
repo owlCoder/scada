@@ -1,7 +1,7 @@
 using Security;
 using Xunit;
 
-namespace UnitTests;
+namespace UnitTests.Security;
 
 public sealed class ApiKeyValidatorTests
 {
@@ -9,14 +9,16 @@ public sealed class ApiKeyValidatorTests
     [InlineData("", "value")]
     [InlineData("value", "")]
     [InlineData("value", "other")]
-    public void RejectsInvalidCredentials(string expected, string supplied)
+    public Task RejectsInvalidCredentials(string expected, string supplied)
     {
         Assert.False(ApiKeyValidator.Matches(expected, supplied));
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void AcceptsMatchingCredentials()
+    public Task AcceptsMatchingCredentials()
     {
         Assert.True(ApiKeyValidator.Matches("strong-local-key", "strong-local-key"));
+        return Task.CompletedTask;
     }
 }
