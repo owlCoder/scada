@@ -26,7 +26,7 @@ public static class PlantCommandEndpoints
             PlantSnapshotService snapshots, CommandMonitor monitor, HttpContext http) =>
         {
             if (!double.IsFinite(request.Seconds) || request.Seconds is <= 0 or > 60)
-                return Results.BadRequest("Корак мора бити између 0 и 60 секунди.");
+                return Results.BadRequest("Step must be between 0 and 60 seconds.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
@@ -40,7 +40,7 @@ public static class PlantCommandEndpoints
             if (id != "P-101")
                 return Results.NotFound();
             if (string.IsNullOrWhiteSpace(command.Actor))
-                return Results.BadRequest("Оператер је обавезан.");
+                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
@@ -62,7 +62,7 @@ public static class PlantCommandEndpoints
             if (id != "V-101")
                 return Results.NotFound();
             if (string.IsNullOrWhiteSpace(command.Actor))
-                return Results.BadRequest("Оператер је обавезан.");
+                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
