@@ -19,3 +19,17 @@ CREATE TABLE IF NOT EXISTS security_events (
 
 CREATE INDEX IF NOT EXISTS ix_security_events_occurred_at
     ON security_events (occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS incidents (
+    id UUID PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    status INTEGER NOT NULL CHECK (status BETWEEN 0 AND 2),
+    updated_by TEXT,
+    updated_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS ix_incidents_created_at
+    ON incidents (created_at DESC);
