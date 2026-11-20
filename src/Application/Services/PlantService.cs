@@ -17,7 +17,7 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
             plant.Advance(seconds);
             var state = plant.GetState();
             if (previous.PumpRunning && !state.PumpRunning && state.TankLevel >= state.TankCapacity)
-                events.Append(new(DateTimeOffset.UtcNow, "SafetyInterlock", "Пумпа аутоматски искључена због пуног резервоара", "simulation"));
+                events.Append(new(DateTimeOffset.UtcNow, "SafetyInterlock", "Pump automatically stopped because the tank is full", "simulation"));
             telemetry.Append(new(DateTimeOffset.UtcNow, state.TankLevel, state.PumpRunning, state.Revision));
 
             var alarm = state.TankLevel >= 90 ? AlarmLevel.High
@@ -29,9 +29,9 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
 
             var message = alarm switch
             {
-                AlarmLevel.High => "Висок ниво резервоара",
-                AlarmLevel.Low => "Низак ниво резервоара",
-                _ => "Ниво резервоара је нормализован"
+                AlarmLevel.High => "High tank level",
+                AlarmLevel.Low => "Low tank level",
+                _ => "Tank level returned to normal"
             };
 
             events.Append(new(DateTimeOffset.UtcNow, "ProcessAlarm", message, "simulation"));
@@ -42,25 +42,25 @@ public sealed class PlantService(Plant plant, IEventStore events, ITelemetryStor
     public void SetPump(bool running, string actor)
     {
         if (string.IsNullOrWhiteSpace(actor))
-            throw new ArgumentException("Оператер је обавезан.", nameof(actor));
+            throw new ArgumentException("Operator is required.", nameof(actor));
 
         lock (_sync)
         {
             plant.SetPump(running);
-            events.Append(new(DateTimeOffset.UtcNow, "Audit", running ? "Пумпа укључена" : "Пумпа искључена", actor));
+            events.Append(new(DateTimeOffset.UtcNow, "Audit", running ? "Pump started" : "Pump stopped", actor));
         }
     }
 
     public void SetOutletValve(bool open, string actor)
     {
         if (string.IsNullOrWhiteSpace(actor))
-            throw new ArgumentException("Оператер је обавезан.", nameof(actor));
+            throw new ArgumentException("Operator is required.", nameof(actor));
 
         lock (_sync)
         {
             plant.SetOutletValve(open);
             events.Append(new(DateTimeOffset.UtcNow, "Audit",
-                open ? "Излазни вентил отворен" : "Излазни вентил затворен", actor));
+                open ? "Outlet valve opened" : "Outlet valve closed", actor));
         }
     }
 
