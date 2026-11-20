@@ -5,7 +5,9 @@ const headers = () => ({ 'X-Api-Key': key });
 async function request(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
   if (!response.ok) throw new Error('HTTP ' + response.status);
-  return response.json();
+  if (response.status === 204 || response.headers.get('content-length') === '0') return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
 }
 function itemList(id, items, render) {
   const list = byId(id);
@@ -101,7 +103,7 @@ async function refresh() {
     byId('level').textContent = plant.tankLevel.toFixed(1) + ' %';
     byId('fill').style.width = plant.tankLevel + '%';
     byId('pump').textContent = plant.pumpRunning ? 'Running' : 'Stopped';
-    byId('valve').textContent = plant.outletValveOpen ? 'Open' : 'Resolved';
+    byId('valve').textContent = plant.outletValveOpen ? 'Open' : 'Closed';
     byId('inflow').textContent = plant.inflowRate.toFixed(1) + ' %/s';
     byId('outflow').textContent = plant.outflowRate.toFixed(1) + ' %/s';
     byId('incident-count').textContent = incidents.filter(i => i.status !== 2).length;
