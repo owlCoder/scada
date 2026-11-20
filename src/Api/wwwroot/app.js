@@ -34,7 +34,7 @@ function showScenarios(scenarios) {
         await request('/api/scenarios/' + encodeURIComponent(scenario.id), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor: 'dashboard-admin' })
+          body: JSON.stringify({})
         });
         byId('command-result').textContent = 'Scenario started.';
         await refresh();
@@ -63,7 +63,7 @@ function showIncidents(incidents) {
           await request('/api/incidents/' + encodeURIComponent(incident.id) + '/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus, actor: 'dashboard-admin' })
+            body: JSON.stringify({ status: nextStatus })
           });
           await refresh();
         } catch (error) {
@@ -128,8 +128,8 @@ document.querySelectorAll('[data-command]').forEach(button => button.addEventLis
   const command = button.dataset.command;
   const isPump = command.startsWith('pump');
   const path = isPump ? '/api/plant/pump/P-101/command' : '/api/plant/valve/V-101/command';
-  const payload = isPump ? { running: command === 'pump-on', actor: 'dashboard' }
-    : { open: command === 'valve-open', actor: 'dashboard' };
+  const payload = isPump ? { running: command === 'pump-on' }
+    : { open: command === 'valve-open' };
   try {
     await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     byId('command-result').textContent = 'Command completed.';
