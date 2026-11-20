@@ -81,6 +81,21 @@ public sealed class ApiAccessTests
     }
 
     [Fact]
+    public async Task NamedOperatorAuditUsesVerifiedIdentity()
+    {
+        using var factory = new Factory();
+        using var client = Client(factory, "ana-integration-key");
+        var command = await client.PostAsJsonAsync("/api/plant/valve/V-101/command",
+            new { open = false, actor = "forged-actor" });
+        Assert.Equal(HttpStatusCode.OK, command.StatusCode);
+
+        var events = await client.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/events");
+        Assert.Contains(events.EnumerateArray(), item =>
+            item.GetProperty("category").GetString() == "Audit" &&
+            item.GetProperty("actor").GetString() == "ana");
+    }
+
+    [Fact]
     public async Task AdministratorCanStartScenario()
     {
         using var factory = new Factory();
@@ -110,7 +125,10 @@ public sealed class ApiAccessTests
                     ["Security:ViewerApiKey"] = "viewer-integration-key",
                     ["Security:OperatorApiKey"] = "operator-integration-key",
                     ["Security:AdminApiKey"] = "admin-integration-key",
-                    ["Security:CommandApiKey"] = ""
+                    ["Security:CommandApiKey"] = "",
+                    ["Security:Users:0:Username"] = "ana",
+                    ["Security:Users:0:Role"] = "Operator",
+                    ["Security:Users:0:ApiKey"] = "ana-integration-key"
                 });
             });
         }
