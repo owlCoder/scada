@@ -18,11 +18,13 @@ if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton(Npgsql.NpgsqlDataSource.Create(connectionString));
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSingleton<ITelemetryStore, PostgresTelemetryStore>();
+    builder.Services.AddSingleton<IIncidentStore, PostgresIncidentStore>();
 }
 else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IEventStore, InMemoryEventStore>();
     builder.Services.AddSingleton<ITelemetryStore, InMemoryTelemetryStore>();
+    builder.Services.AddSingleton<IIncidentStore, InMemoryIncidentStore>();
 }
 else
 {
