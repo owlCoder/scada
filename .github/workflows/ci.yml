@@ -5,10 +5,31 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: scada
+          POSTGRES_USER: scada
+          POSTGRES_PASSWORD: integration-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U scada -d scada"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SCADA_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=scada;Username=scada;Password=integration-test-only
+      PGPASSWORD: integration-test-only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test Tests/UnitTests/UnitTests.csproj
-      - run: dotnet build src/Api/Api.csproj --configuration Release
+      - name: Припреми шему базе
+        run: psql -h 127.0.0.1 -U scada -d scada -f deploy/postgres/init.sql
+      - name: Тестирај решење
+        run: dotnet test scada.slnx --configuration Release
+      - name: Провери API
+        run: dotnet build src/Api/Api.csproj --configuration Release --no-restore
