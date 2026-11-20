@@ -6,11 +6,11 @@ public sealed class VirtualRegisterService(IPlantService plant)
 {
     private static readonly RegisterDefinition[] Definitions =
     [
-        new(0, "Ниво резервоара", false, 10),
-        new(1, "Стање пумпе", true, 1),
-        new(2, "Стање вентила", true, 1),
-        new(3, "Улазни проток", false, 100),
-        new(4, "Излазни проток", false, 100)
+        new(0, "Tank level", false, 10),
+        new(1, "Pump state", true, 1),
+        new(2, "Valve state", true, 1),
+        new(3, "Inflow rate", false, 100),
+        new(4, "Outflow rate", false, 100)
     ];
 
     public IReadOnlyList<RegisterValue> ReadAll()
