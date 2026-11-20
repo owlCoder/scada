@@ -7,16 +7,13 @@ using Xunit;
 
 namespace IntegrationTests;
 
-public sealed class ApiAccessTests : IClassFixture<ApiAccessTests.Factory>
+public sealed class ApiAccessTests
 {
-    private readonly Factory _factory;
-
-    public ApiAccessTests(Factory factory) => _factory = factory;
-
     [Fact]
     public async Task HealthIsPublicButPlantRequiresKey()
     {
-        using var client = _factory.CreateClient();
+        using var factory = new Factory();
+        using var client = factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/plant")).StatusCode);
     }
@@ -24,7 +21,8 @@ public sealed class ApiAccessTests : IClassFixture<ApiAccessTests.Factory>
     [Fact]
     public async Task ViewerCanReadButCannotControlPump()
     {
-        using var client = Client("viewer-integration-key");
+        using var factory = new Factory();
+        using var client = Client(factory, "viewer-integration-key");
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/plant")).StatusCode);
         var response = await client.PostAsJsonAsync("/api/plant/pump/P-101/command",
             new { running = true, actor = "test" });
@@ -34,7 +32,8 @@ public sealed class ApiAccessTests : IClassFixture<ApiAccessTests.Factory>
     [Fact]
     public async Task OperatorCanControlValveButCannotStartScenario()
     {
-        using var client = Client("operator-integration-key");
+        using var factory = new Factory();
+        using var client = Client(factory, "operator-integration-key");
         var command = await client.PostAsJsonAsync("/api/plant/valve/V-101/command",
             new { open = false, actor = "test" });
         Assert.Equal(HttpStatusCode.OK, command.StatusCode);
@@ -63,15 +62,16 @@ public sealed class ApiAccessTests : IClassFixture<ApiAccessTests.Factory>
     [Fact]
     public async Task AdministratorCanStartScenario()
     {
-        using var client = Client("admin-integration-key");
+        using var factory = new Factory();
+        using var client = Client(factory, "admin-integration-key");
         var response = await client.PostAsJsonAsync("/api/scenarios/sensor-spoofing",
             new { actor = "test" });
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 
-    private HttpClient Client(string key)
+    private static HttpClient Client(Factory factory, string key)
     {
-        var client = _factory.CreateClient();
+        var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", key);
         return client;
     }
