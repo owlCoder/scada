@@ -14,8 +14,6 @@ public static class RegisterCommandEndpoints
         {
             if (address is < 0 or > ushort.MaxValue)
                 return Results.NotFound();
-            if (string.IsNullOrWhiteSpace(request.Actor))
-                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
