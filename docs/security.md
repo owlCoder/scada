@@ -18,7 +18,7 @@ export Security__Users__0__Role="Operator"
 export Security__Users__0__ApiKey="replace-with-unique-random-user-key"
 ```
 
-Names and keys must be unique. Named keys cannot duplicate shared role keys. The server derives audit identity from the authenticated credential, never from the client-supplied `actor` field. `GET /api/me` returns the authenticated username and role.
+Names and keys must be unique. Named keys cannot duplicate shared role keys. The server derives audit identity from the authenticated credential, never from the client-supplied `actor` field. The `actor` request field is optional for backwards compatibility; clients should omit it. `GET /api/me` returns the authenticated username and role.
 
 Command rate limits are tracked per credential fingerprint. The dashboard holds the key only in page memory. Security response headers include `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control`.
 
