@@ -9,13 +9,17 @@ public static class HealthEndpoints
             var dataSource = services.GetService<Npgsql.NpgsqlDataSource>();
             if (dataSource is null)
                 return Results.Ok(new { status = "healthy", storage = "memory" });
-        
+
             try
             {
                 await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
                 return Results.Ok(new { status = "healthy", storage = "postgres" });
             }
-            catch (Npgsql.NpgsqlException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or OperationCanceledException)
             {
                 return Results.Json(new { status = "degraded", storage = "postgres" }, statusCode: 503);
             }
