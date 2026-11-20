@@ -70,7 +70,7 @@ public sealed class ProcessTests
         var service = new PlantService(new Plant(), events, new InMemoryTelemetryStore());
         service.SetOutletValve(false, "operator");
 
-        Assert.Contains(events.GetRecent(), e => e.Message == "Излазни вентил затворен");
+        Assert.Contains(events.GetRecent(), e => e.Message == "Outlet valve closed");
         return Task.CompletedTask;
     }
 }
