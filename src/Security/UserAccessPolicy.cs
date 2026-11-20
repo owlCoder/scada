@@ -12,11 +12,11 @@ public sealed class UserAccessPolicy
         _users = users.ToArray();
         if (_users.Any(user => string.IsNullOrWhiteSpace(user.Username) ||
             string.IsNullOrWhiteSpace(user.ApiKey) || !Enum.IsDefined(user.Role)))
-            throw new ArgumentException("Сваки корисник мора имати име, кључ и важећу улогу.", nameof(users));
+            throw new ArgumentException("Each user must have a name, key and valid role.", nameof(users));
 
         if (_users.Select(user => user.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count() != _users.Length ||
             _users.Select(user => user.ApiKey).Distinct(StringComparer.Ordinal).Count() != _users.Length)
-            throw new ArgumentException("Имена корисника и API кључеви морају бити јединствени.", nameof(users));
+            throw new ArgumentException("Usernames and API keys must be unique.", nameof(users));
     }
 
     public AuthenticatedUser? Authenticate(string? supplied)
