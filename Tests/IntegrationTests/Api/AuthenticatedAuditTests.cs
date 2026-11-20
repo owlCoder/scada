@@ -1,16 +1,17 @@
+using IntegrationTests.Support;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Api;
 
 public sealed class AuthenticatedAuditTests
 {
     [Fact]
     public async Task NamedUserCanSendCommandsWithoutClientActor()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "ana-integration-key");
 
@@ -27,7 +28,7 @@ public sealed class AuthenticatedAuditTests
     [Fact]
     public async Task AdministratorCanStartScenarioWithoutClientActor()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "admin-integration-key");
 

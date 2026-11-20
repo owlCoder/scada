@@ -3,7 +3,7 @@ using Infrastructure;
 using Npgsql;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Persistence;
 
 public sealed class PostgresStoreTests
 {
@@ -19,11 +19,11 @@ public sealed class PostgresStoreTests
     }
 
     [Fact]
-    public void IncidentStatusSurvivesNewStoreInstances()
+    public Task IncidentStatusSurvivesNewStoreInstances()
     {
         var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString))
-            return;
+            return Task.CompletedTask;
 
         using var source = NpgsqlDataSource.Create(connectionString);
         var first = new IncidentService(new PostgresIncidentStore(source));
@@ -40,14 +40,15 @@ public sealed class PostgresStoreTests
 
         second.Observe([uniqueEvent]);
         Assert.Single(second.GetAll(), x => x.Id == incident.Id);
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void TelemetryAndEventsSurviveNewStoreInstances()
+    public Task TelemetryAndEventsSurviveNewStoreInstances()
     {
         var connectionString = Environment.GetEnvironmentVariable("SCADA_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString))
-            return;
+            return Task.CompletedTask;
 
         using var source = NpgsqlDataSource.Create(connectionString);
         var telemetry = new PostgresTelemetryStore(source);
@@ -63,5 +64,6 @@ public sealed class PostgresStoreTests
 
         Assert.Contains(otherTelemetry.GetRecent(3600), item => item.Revision == -1);
         Assert.Contains(otherEvents.GetRecent(), item => item.Message == marker);
+        return Task.CompletedTask;
     }
 }

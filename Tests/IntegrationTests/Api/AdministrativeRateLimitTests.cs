@@ -1,41 +1,42 @@
+using IntegrationTests.Support;
 using System.Net;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Api;
 
-public sealed class AdministratorRateLimitTests
+public sealed class AdministrativeRateLimitTests
 {
     [Fact]
-    public async Task ScenarioCommandsShareTheCredentialRateLimit()
+    public async Task AdministratorScenarioRequestsAreLimitedPerCredential()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "admin-integration-key");
 
         for (var i = 0; i < 10; i++)
         {
-            using var response = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
+            var response = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         }
 
-        using var blocked = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
+        var blocked = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
         Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
     }
 
     [Fact]
     public async Task UnknownScenarioDoesNotConsumeRateLimit()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "admin-integration-key");
 
-        for (var i = 0; i < 15; i++)
+        for (var i = 0; i < 12; i++)
         {
-            using var response = await client.PostAsync("/api/scenarios/not-found", null);
+            var response = await client.PostAsync("/api/scenarios/unknown", null);
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
 
-        using var valid = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
+        var valid = await client.PostAsync("/api/scenarios/sensor-spoofing", null);
         Assert.Equal(HttpStatusCode.Accepted, valid.StatusCode);
     }
 }

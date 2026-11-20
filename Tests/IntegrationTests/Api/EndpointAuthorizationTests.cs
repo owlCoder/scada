@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Mvc.Testing;
+using IntegrationTests.Support;
 using System.Net;
 using System.Net.Http.Json;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Api;
 
 public sealed class EndpointAuthorizationTests
 {
@@ -16,7 +18,7 @@ public sealed class EndpointAuthorizationTests
     [InlineData("/api/me")]
     public async Task ReadEndpointsRequireViewerOrHigher(string path)
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var anonymous = factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
 
@@ -31,7 +33,7 @@ public sealed class EndpointAuthorizationTests
     [InlineData("/api/registers/2", "{\"value\":0,\"actor\":\"test\"}")]
     public async Task CommandsRejectViewer(string path, string payload)
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var viewer = CreateClient(factory, "viewer-integration-key");
         using var body = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
         Assert.Equal(HttpStatusCode.Unauthorized, (await viewer.PostAsync(path, body)).StatusCode);
@@ -40,7 +42,7 @@ public sealed class EndpointAuthorizationTests
     [Fact]
     public async Task AdministratorCanExecuteScenarioAndOperatorCannot()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var operatorClient = CreateClient(factory, "operator-integration-key");
         using var administrator = CreateClient(factory, "admin-integration-key");
         const string path = "/api/scenarios/sensor-spoofing";
@@ -50,7 +52,7 @@ public sealed class EndpointAuthorizationTests
             (await administrator.PostAsJsonAsync(path, new { actor = "admin" })).StatusCode);
     }
 
-    private static HttpClient CreateClient(ApiTestFactory factory, string key)
+    private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string key)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", key);

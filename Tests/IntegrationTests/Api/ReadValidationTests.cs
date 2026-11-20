@@ -1,7 +1,8 @@
+using IntegrationTests.Support;
 using System.Net;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Api;
 
 public sealed class ReadValidationTests
 {
@@ -11,7 +12,7 @@ public sealed class ReadValidationTests
     [InlineData("/api/telemetry?count=3601")]
     public async Task InvalidTelemetrySampleCountIsRejected(string path)
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "viewer-integration-key");
 
@@ -25,7 +26,7 @@ public sealed class ReadValidationTests
     [InlineData("/api/registers/99")]
     public async Task UnknownRegisterAddressesReturnNotFound(string path)
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "viewer-integration-key");
 
@@ -36,7 +37,7 @@ public sealed class ReadValidationTests
     [Fact]
     public async Task ViewerCanReadDefaultTelemetryWindow()
     {
-        using var factory = new ApiTestFactory();
+        using var factory = ApiTestFactory.Create();
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", "viewer-integration-key");
 

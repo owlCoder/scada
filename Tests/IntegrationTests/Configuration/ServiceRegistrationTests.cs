@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace IntegrationTests;
+namespace IntegrationTests.Configuration;
 
 public sealed class ServiceRegistrationTests
 {
     [Fact]
-    public void UnknownStorageProviderIsRejected()
+    public Task UnknownStorageProviderIsRejected()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -16,10 +16,11 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void PostgresRequiresConnectionString()
+    public Task PostgresRequiresConnectionString()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -28,10 +29,11 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void InvalidModbusPortIsRejected()
+    public Task InvalidModbusPortIsRejected()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -41,10 +43,11 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void NamedUserCannotReuseLegacyApiKey()
+    public Task NamedUserCannotReuseLegacyApiKey()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -56,10 +59,11 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void InvalidNamedUserRoleIsRejected()
+    public Task InvalidNamedUserRoleIsRejected()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -70,10 +74,11 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     [Fact]
-    public void DuplicateNamedUsernamesAreRejected()
+    public Task DuplicateNamedUsernamesAreRejected()
     {
         var builder = CreateBuilder(new Dictionary<string, string?>
         {
@@ -87,6 +92,7 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<ArgumentException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
     }
 
     private static WebApplicationBuilder CreateBuilder(Dictionary<string, string?> settings)
