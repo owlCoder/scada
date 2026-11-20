@@ -16,7 +16,7 @@ public sealed class CommandMonitorTests
             Assert.True(monitor.Check("credential-a"));
 
         Assert.False(monitor.Check("credential-a"));
-        Assert.Single(store.GetRecent().Where(item => item.Category == "SecurityAlert"));
+        Assert.Single(store.GetRecent(), item => item.Category == "SecurityAlert");
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class CommandMonitorTests
         for (var i = 0; i < 50; i++)
             Assert.False(monitor.Check("credential-a"));
 
-        Assert.Single(store.GetRecent().Where(item => item.Category == "SecurityAlert"));
+        Assert.Single(store.GetRecent(), item => item.Category == "SecurityAlert");
     }
 
     [Fact]
