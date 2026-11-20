@@ -16,7 +16,7 @@ public sealed class ModbusTcpService(ModbusFrameService frames, ILogger<ModbusTc
         var listener = new TcpListener(IPAddress.Loopback, port);
         var slots = new SemaphoreSlim(MaxClients);
         listener.Start();
-        logger.LogInformation("Виртуелни Modbus TCP (само читање) слуша на 127.0.0.1:{Port}", port);
+        logger.LogInformation("Read-only virtual Modbus TCP listening on 127.0.0.1:{Port}", port);
 
         try
         {
@@ -88,11 +88,11 @@ public sealed class ModbusTcpService(ModbusFrameService frames, ILogger<ModbusTc
             }
             catch (Exception exception) when (exception is IOException or SocketException or OperationCanceledException)
             {
-                logger.LogDebug("Modbus клијент је прекинуо везу: {Message}", exception.Message);
+                logger.LogDebug("Modbus client disconnected: {Message}", exception.Message);
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Неочекивана грешка Modbus клијента");
+                logger.LogError(exception, "Unexpected Modbus client error");
             }
         }
     }
