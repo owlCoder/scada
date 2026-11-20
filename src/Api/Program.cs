@@ -48,13 +48,14 @@ if (builder.Configuration.GetValue<bool>("Protocols:ModbusEnabled"))
         new ModbusTcpService(services.GetRequiredService<ModbusFrameService>(),
             services.GetRequiredService<ILogger<ModbusTcpService>>(), port));
 }
-builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string>
+var legacyPolicy = new AccessPolicy(new Dictionary<AccessRole, string>
 {
     [AccessRole.Viewer] = builder.Configuration["Security:ViewerApiKey"] ?? "",
     [AccessRole.Operator] = builder.Configuration["Security:OperatorApiKey"]
         ?? builder.Configuration["Security:CommandApiKey"] ?? "",
     [AccessRole.Administrator] = builder.Configuration["Security:AdminApiKey"] ?? ""
-}));
+});
+builder.Services.AddSingleton(legacyPolicy);
 var namedUsers = builder.Configuration.GetSection("Security:Users").GetChildren().Select(section =>
 {
     var username = section["Username"] ?? "";
@@ -64,8 +65,6 @@ var namedUsers = builder.Configuration.GetSection("Security:Users").GetChildren(
         throw new InvalidOperationException($"Неисправна улога за корисника {username}.");
     return new UserCredential(username, role, key);
 }).ToArray();
-var legacyPolicy = builder.Services.Single(descriptor => descriptor.ServiceType == typeof(AccessPolicy))
-    .ImplementationInstance as AccessPolicy ?? throw new InvalidOperationException("Недостаје AccessPolicy.");
 if (namedUsers.Any(user => legacyPolicy.Authenticate(user.ApiKey) is not null))
     throw new InvalidOperationException("Именовани корисник не сме користити дељени API кључ.");
 builder.Services.AddSingleton(new UserAccessPolicy(namedUsers));
