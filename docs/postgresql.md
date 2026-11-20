@@ -1,39 +1,19 @@
-# PostgreSQL и локални Docker Compose
+# PostgreSQL and Docker
 
-Подразумевано се користи меморијско складиште. PostgreSQL је опционалан.
+Memory persistence is the default. To enable PostgreSQL, configure `Storage__Provider=Postgres` and `ConnectionStrings__Scada`.
 
-## Цео систем у Docker-у
-
-Из корена репозиторијума:
+For a local Docker environment:
 
 ```bash
-export POSTGRES_PASSWORD="замени-јаком-лозинком"
-export SCADA_VIEWER_KEY="замени-дугачким-случајним-кључем"
-export SCADA_OPERATOR_KEY="замени-другим-случајним-кључем"
-export SCADA_ADMIN_KEY="замени-трећим-случајним-кључем"
+export POSTGRES_PASSWORD="replace-with-strong-password"
+export SCADA_VIEWER_KEY="replace-with-viewer-key"
+export SCADA_OPERATOR_KEY="replace-with-operator-key"
+export SCADA_ADMIN_KEY="replace-with-admin-key"
 docker compose -f deploy/compose.yaml up --build -d
 ```
 
-Контролна табла: `http://127.0.0.1:5080/`.
+The dashboard is available at `http://127.0.0.1:5080/`. Host ports are bound to loopback.
 
-Сервиси су везани за loopback интерфејс домаћина. Не излагати портове јавној мрежи.
+The schema lives in `deploy/postgres/init.sql`. Docker runs it only when creating a fresh database volume. For existing databases, apply the SQL manually before starting the API. Startup verifies the `telemetry_samples`, `security_events` and `incidents` tables.
 
-## Локални .NET процес уз PostgreSQL
-
-Могуће је покренути само базу:
-
-```bash
-docker compose -f deploy/compose.yaml up -d postgres
-export Storage__Provider=Postgres
-export ConnectionStrings__Scada="Host=127.0.0.1;Port=5432;Database=scada;Username=scada;Password=$POSTGRES_PASSWORD"
-export Security__ViewerApiKey="замени-дугачким-случајним-кључем"
-export Security__OperatorApiKey="замени-другим-случајним-кључем"
-export Security__AdminApiKey="замени-трећим-случајним-кључем"
-dotnet run --project src/Api --urls http://127.0.0.1:5080
-```
-
-## Шема и ограничења
-
-SQL шема је у `deploy/postgres/init.sql`. Docker је примењује само приликом првог стварања празног volume-а. За постојећу базу шему треба применити ручно. Апликација не прави миграције. При покретању проверава постојање табела `telemetry_samples`, `security_events` и `incidents` и прекида покретање са јасном поруком ако нека недостаје. За постојећи volume допуну шеме примени ручно: `psql -h 127.0.0.1 -U scada -d scada -f deploy/postgres/init.sql` (уз одговарајућу лозинку).
-
-Мерења, догађаји и инциденти са тренутним статусом су трајни, али тренутно стање постројења остаје у меморији. Упис у базу је синхрон и може да успори симулацију ако база није доступна. За производно окружење неопходни су миграције, ретенција, retry механизам и поуздана редна обрада.
+Telemetry, events and current incident status persist in PostgreSQL. The live plant state is still in memory. Database writes are synchronous; production use requires asynchronous buffering, migrations, retention and retry policies.
