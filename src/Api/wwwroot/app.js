@@ -1,0 +1,84 @@
+const byId = id => document.getElementById(id);
+let key = '';
+let refreshTimer;
+const headers = () => ({ 'X-Api-Key': key });
+async function request(path, options = {}) {
+  const response = await fetch(path, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  return response.json();
+}
+function itemList(id, items, render) {
+  const list = byId(id);
+  list.replaceChildren();
+  for (const item of items) {
+    const li = document.createElement('li');
+    const title = document.createElement('div');
+    title.textContent = render(item);
+    const time = document.createElement('small');
+    time.textContent = new Date(item.timestamp || item.createdAt).toLocaleString('sr-RS');
+    li.append(title, time);
+    list.append(li);
+  }
+}
+function draw(samples) {
+  const canvas = byId('chart'), context = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height, pad = 24;
+  context.clearRect(0, 0, w, h);
+  context.strokeStyle = '#33465e';
+  context.lineWidth = 1;
+  for (const level of [0, 25, 50, 75, 100]) {
+    const y = h - pad - (h - 2 * pad) * level / 100;
+    context.beginPath(); context.moveTo(pad, y); context.lineTo(w - pad, y); context.stroke();
+  }
+  if (!samples.length) return;
+  context.strokeStyle = '#54c9a5'; context.lineWidth = 3; context.beginPath();
+  samples.forEach((sample, i) => {
+    const x = pad + (w - 2 * pad) * i / Math.max(1, samples.length - 1);
+    const y = h - pad - (h - 2 * pad) * sample.tankLevel / 100;
+    if (i === 0) context.moveTo(x, y); else context.lineTo(x, y);
+  });
+  context.stroke();
+}
+async function refresh() {
+  try {
+    const [plant, telemetry, events, incidents] = await Promise.all([
+      request('/api/plant'), request('/api/telemetry?count=100'),
+      request('/api/events'), request('/api/incidents')
+    ]);
+    byId('level').textContent = plant.tankLevel.toFixed(1) + ' %';
+    byId('fill').style.width = plant.tankLevel + '%';
+    byId('pump').textContent = plant.pumpRunning ? 'Укључена' : 'Искључена';
+    byId('valve').textContent = plant.outletValveOpen ? 'Отворен' : 'Затворен';
+    byId('inflow').textContent = plant.inflowRate.toFixed(1) + ' %/s';
+    byId('outflow').textContent = plant.outflowRate.toFixed(1) + ' %/s';
+    byId('incident-count').textContent = incidents.filter(i => i.status !== 2).length;
+    byId('connection').textContent = 'Повезано';
+    byId('error').textContent = '';
+    draw(telemetry);
+    itemList('events', events.slice(0, 20), e => e.category + ' · ' + e.message);
+    itemList('incidents', incidents.slice(0, 20), i => i.category + ' · ' + i.description + ' · ' + ['Отворен','Потврђен','Затворен'][i.status]);
+  } catch (error) {
+    byId('connection').textContent = 'Није повезано';
+    byId('error').textContent = 'Провери API кључ и доступност сервиса (' + error.message + ')';
+  }
+}
+byId('connect').addEventListener('click', () => {
+  key = byId('key').value;
+  clearInterval(refreshTimer);
+  refresh();
+  refreshTimer = setInterval(refresh, 3000);
+});
+document.querySelectorAll('[data-command]').forEach(button => button.addEventListener('click', async () => {
+  const command = button.dataset.command;
+  const isPump = command.startsWith('pump');
+  const path = isPump ? '/api/plant/pump/P-101/command' : '/api/plant/valve/V-101/command';
+  const payload = isPump ? { running: command === 'pump-on', actor: 'dashboard' }
+    : { open: command === 'valve-open', actor: 'dashboard' };
+  try {
+    await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    byId('command-result').textContent = 'Команда је извршена.';
+    await refresh();
+  } catch (error) {
+    byId('command-result').textContent = 'Команда није извршена (' + error.message + ').';
+  }
+}));
