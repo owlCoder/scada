@@ -18,7 +18,7 @@ public static class RegisterCommandEndpoints
             if (address is < 0 or > ushort.MaxValue)
                 return Results.NotFound();
             if (string.IsNullOrWhiteSpace(request.Actor))
-                return Results.BadRequest("Оператер је обавезан.");
+                return Results.BadRequest("Operator is required.");
             if (!monitor.Check(ApiKeyValidator.Fingerprint(http.Request.Headers["X-Api-Key"].ToString())))
                 return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
@@ -28,7 +28,7 @@ public static class RegisterCommandEndpoints
                     http.RequestServices.GetRequiredService<AuthorizationService>()
                         .Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
                     ? Results.Ok(registers.Read((ushort)address))
-                    : Results.BadRequest("Регистар није уписив или вредност није дозвољена.");
+                    : Results.BadRequest("Register is read-only or value is invalid.");
             }
             catch (InvalidOperationException exception)
             {
