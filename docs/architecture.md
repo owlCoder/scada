@@ -13,10 +13,12 @@ The solution is a modular .NET 10 monolith. Each class, interface, record and en
 | Api | Composition root, endpoint groups, request contracts and static dashboard |
 | Tests | Unit, integration and architecture tests |
 
-The application uses the existing top-level namespaces to preserve compatibility. Folder names express architectural boundaries. The API composition root stays in `Program.cs`; HTTP routes are grouped in `Api/Endpoints`.
+The application retains existing top-level namespaces for the domain libraries. API endpoint namespaces follow their folders: `Api/Endpoints/Read`, `Api/Endpoints/Commands`, and `Api/Endpoints/System`. Dependency registration is split into `Api/Configuration/Registration` by responsibility, and the API composition root stays in `Program.cs`. Tests are grouped under `Tests/UnitTests` and `Tests/IntegrationTests` by functional area. Operations return meaningful results instead of explicit `void` methods; framework background operations continue to use `Task`.
+
+`Tests/ArchitectureTests/Rules/SourceStructureTests.cs` enforces exactly one named type per C# file, type/file naming agreement, and no explicit `void` methods. All tests must pass in CI.
 
 ## Known limitations
 
 Synchronous PostgreSQL writes may delay simulation. Plant state is not persisted. Static API keys are not a replacement for OIDC or TLS. OPC UA is not implemented. The optional Modbus TCP listener is loopback-only and read-only.
 
-CI is intentionally disabled. Run `dotnet restore scada.slnx`, `dotnet build scada.slnx -c Release`, and `dotnet test scada.slnx -c Release` locally.
+GitHub Actions CI runs restore, Release build, unit/integration/architecture tests, and Node.js frontend tests on relevant changes. The workflow cancels superseded runs and has a 15-minute job timeout. Run `bash scripts/verify.sh` locally for equivalent checks.
