@@ -6,6 +6,7 @@ using Simulation;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Plant>();
+
 var provider = builder.Configuration["Storage:Provider"] ?? "Memory";
 if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
 {
@@ -26,33 +27,53 @@ else
 {
     throw new InvalidOperationException("Непознат Storage:Provider.");
 }
+
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
 builder.Services.AddSingleton<PlantSnapshotService>();
+builder.Services.AddSingleton<IncidentService>();
+builder.Services.AddSingleton(new AccessPolicy(new Dictionary<AccessRole, string>
+{
+    [AccessRole.Viewer] = builder.Configuration["Security:ViewerApiKey"] ?? "",
+    [AccessRole.Operator] = builder.Configuration["Security:OperatorApiKey"]
+        ?? builder.Configuration["Security:CommandApiKey"] ?? "",
+    [AccessRole.Administrator] = builder.Configuration["Security:AdminApiKey"] ?? ""
+}));
 builder.Services.AddHostedService<SimulationService>();
+builder.Services.AddHostedService<IncidentMonitorService>();
 
 var app = builder.Build();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
-app.MapGet("/api/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
-app.MapGet("/api/events", (IEventStore store) => Results.Ok(store.GetRecent()));
-app.MapGet("/api/telemetry", (int? count, ITelemetryStore store) =>
+
+var read = app.MapGroup("/api");
+read.AddEndpointFilter(async (context, next) =>
+{
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    return policy.Authorize(key, AccessRole.Viewer)
+        ? await next(context)
+        : Results.Unauthorized();
+});
+
+read.MapGet("/plant", (PlantSnapshotService snapshots) => Results.Ok(snapshots.GetSnapshot()));
+read.MapGet("/events", (IEventStore store) => Results.Ok(store.GetRecent()));
+read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
     count is < 1 or > 3600
         ? Results.BadRequest("Број узорака мора бити између 1 и 3600.")
         : Results.Ok(store.GetRecent(count ?? 100)));
+read.MapGet("/incidents", (IncidentService service) => Results.Ok(service.GetAll()));
 
 var commands = app.MapGroup("/api/plant");
 commands.AddEndpointFilter(async (context, next) =>
 {
-    var configuredKey = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["Security:CommandApiKey"];
-    if (string.IsNullOrWhiteSpace(configuredKey))
-        return Results.Problem("Команде су онемогућене док није подешен API кључ.", statusCode: 503);
-
-    var suppliedKey = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
-    if (!ApiKeyValidator.Matches(configuredKey, suppliedKey))
-        return Results.Unauthorized();
-
-    return await next(context);
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    return policy.Authorize(key, AccessRole.Operator)
+        ? await next(context)
+        : Results.Unauthorized();
 });
 
 commands.MapPost("/tick", (TickRequest request, IPlantService service, PlantSnapshotService snapshots) =>
@@ -64,7 +85,8 @@ commands.MapPost("/tick", (TickRequest request, IPlantService service, PlantSnap
     return Results.Ok(snapshots.GetSnapshot());
 });
 
-commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service, PlantSnapshotService snapshots, CommandMonitor monitor) =>
+commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantService service,
+    PlantSnapshotService snapshots, CommandMonitor monitor) =>
 {
     if (id != "P-101")
         return Results.NotFound();
@@ -73,11 +95,19 @@ commands.MapPost("/pump/{id}/command", (string id, PumpCommand command, IPlantSe
     if (!monitor.Check(command.Actor))
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
-    service.SetPump(command.Running, command.Actor);
-    return Results.Ok(snapshots.GetSnapshot());
+    try
+    {
+        service.SetPump(command.Running, command.Actor);
+        return Results.Ok(snapshots.GetSnapshot());
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(exception.Message);
+    }
 });
 
-commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlantService service, PlantSnapshotService snapshots, CommandMonitor monitor) =>
+commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlantService service,
+    PlantSnapshotService snapshots, CommandMonitor monitor) =>
 {
     if (id != "V-101")
         return Results.NotFound();
@@ -90,8 +120,41 @@ commands.MapPost("/valve/{id}/command", (string id, ValveCommand command, IPlant
     return Results.Ok(snapshots.GetSnapshot());
 });
 
+var incidentCommands = app.MapGroup("/api/incidents");
+incidentCommands.AddEndpointFilter(async (context, next) =>
+{
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    return policy.Authorize(key, AccessRole.Administrator)
+        ? await next(context)
+        : Results.Unauthorized();
+});
+
+incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
+    IncidentService service, IEventStore events) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Actor) ||
+        !Enum.IsDefined(request.Status))
+        return Results.BadRequest("Неисправан статус или оператер.");
+
+    try
+    {
+        if (!service.TryUpdate(id, request.Status, request.Actor, out var incident))
+            return Results.NotFound();
+
+        events.Append(new(DateTimeOffset.UtcNow, "Audit",
+            $"Статус инцидента {id} промењен у {request.Status}", request.Actor));
+        return Results.Ok(incident);
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(exception.Message);
+    }
+});
+
 app.Run();
 
 public sealed record TickRequest(double Seconds);
 public sealed record PumpCommand(bool Running, string Actor);
 public sealed record ValveCommand(bool Open, string Actor);
+public sealed record IncidentStatusRequest(IncidentStatus Status, string Actor);
