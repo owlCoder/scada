@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace Security;
 
 public sealed class AccessPolicy
@@ -9,6 +6,11 @@ public sealed class AccessPolicy
 
     public AccessPolicy(IReadOnlyDictionary<AccessRole, string> keys)
     {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        if (keys.Keys.Any(role => !Enum.IsDefined(role)))
+            throw new ArgumentException("API key roles must be valid.", nameof(keys));
+
         var active = keys.Values.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray();
         if (active.Distinct(StringComparer.Ordinal).Count() != active.Length)
             throw new ArgumentException("Different roles must have distinct API keys.", nameof(keys));
@@ -23,8 +25,8 @@ public sealed class AccessPolicy
 
         foreach (var role in new[] { AccessRole.Administrator, AccessRole.Operator, AccessRole.Viewer })
         {
-            if (_keys.TryGetValue(role, out var expected) && !string.IsNullOrWhiteSpace(expected)
-                && Matches(expected, supplied))
+            if (_keys.TryGetValue(role, out var expected) &&
+                ApiKeyValidator.Matches(expected, supplied))
                 return role;
         }
 
@@ -33,14 +35,10 @@ public sealed class AccessPolicy
 
     public bool Authorize(string? supplied, AccessRole required)
     {
+        if (!Enum.IsDefined(required))
+            return false;
+
         var role = Authenticate(supplied);
         return role is not null && role.Value >= required;
-    }
-
-    private static bool Matches(string expected, string supplied)
-    {
-        var a = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
-        var b = SHA256.HashData(Encoding.UTF8.GetBytes(supplied));
-        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }
