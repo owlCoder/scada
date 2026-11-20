@@ -1,3 +1,4 @@
+using Api.Contracts;
 using Application;
 using Domain;
 using Infrastructure;
