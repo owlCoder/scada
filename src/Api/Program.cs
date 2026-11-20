@@ -1,4 +1,3 @@
-using Api.Contracts;
 using Api.Endpoints;
 using Application;
 using Domain;
@@ -89,23 +88,7 @@ app.Use(async (context, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
-{
-    var dataSource = services.GetService<Npgsql.NpgsqlDataSource>();
-    if (dataSource is null)
-        return Results.Ok(new { status = "healthy", storage = "memory" });
-
-    try
-    {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        return Results.Ok(new { status = "healthy", storage = "postgres" });
-    }
-    catch (Npgsql.NpgsqlException)
-    {
-        return Results.Json(new { status = "degraded", storage = "postgres" }, statusCode: 503);
-    }
-});
-
+HealthEndpoints.Map(app);
 ReadEndpoints.Map(app);
 PlantCommandEndpoints.Map(app);
 RegisterCommandEndpoints.Map(app);
@@ -113,12 +96,5 @@ IncidentEndpoints.Map(app);
 ScenarioEndpoints.Map(app);
 
 app.Run();
-
-
-
-
-
-
-
 
 public partial class Program { }
