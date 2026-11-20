@@ -5,6 +5,7 @@ namespace Security;
 public sealed class CommandMonitor(IEventStore events)
 {
     private readonly Dictionary<string, Queue<DateTimeOffset>> _history = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _lastAlert = new(StringComparer.Ordinal);
     private readonly object _sync = new();
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
     private const int Limit = 10;
@@ -24,7 +25,10 @@ public sealed class CommandMonitor(IEventStore events)
                     history.Dequeue();
 
                 if (history.Count == 0)
+                {
                     _history.Remove(key);
+                    _lastAlert.Remove(key);
+                }
             }
 
             if (!_history.TryGetValue(identity, out var requests))
@@ -32,7 +36,12 @@ public sealed class CommandMonitor(IEventStore events)
 
             if (requests.Count >= Limit)
             {
-                events.Append(new(now, "SecurityAlert", "Too many commands in a short period", identity));
+                if (!_lastAlert.TryGetValue(identity, out var lastAlert) || now - lastAlert >= Window)
+                {
+                    _lastAlert[identity] = now;
+                    events.Append(new(now, "SecurityAlert", "Too many commands in a short period", identity));
+                }
+
                 return false;
             }
 
