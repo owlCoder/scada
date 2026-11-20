@@ -6,24 +6,38 @@ public sealed class CommandMonitor(IEventStore events)
 {
     private readonly Dictionary<string, Queue<DateTimeOffset>> _history = new(StringComparer.Ordinal);
     private readonly object _sync = new();
+    private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
+    private const int Limit = 10;
 
-    public bool Check(string actor)
+    public bool Check(string identity)
     {
+        if (string.IsNullOrWhiteSpace(identity))
+            return false;
+
         lock (_sync)
         {
-            if (!_history.TryGetValue(actor, out var requests))
-                _history[actor] = requests = new Queue<DateTimeOffset>();
-
             var now = DateTimeOffset.UtcNow;
-            while (requests.Count > 0 && now - requests.Peek() > TimeSpan.FromMinutes(1))
-                requests.Dequeue();
+            foreach (var key in _history.Keys.ToArray())
+            {
+                var history = _history[key];
+                while (history.Count > 0 && now - history.Peek() >= Window)
+                    history.Dequeue();
+
+                if (history.Count == 0)
+                    _history.Remove(key);
+            }
+
+            if (!_history.TryGetValue(identity, out var requests))
+                _history[identity] = requests = new Queue<DateTimeOffset>();
+
+            if (requests.Count >= Limit)
+            {
+                events.Append(new(now, "SecurityAlert", "Превише команди у кратком периоду", identity));
+                return false;
+            }
 
             requests.Enqueue(now);
-            if (requests.Count <= 10)
-                return true;
-
-            events.Append(new(now, "SecurityAlert", "Превише команди у кратком периоду", actor));
-            return false;
+            return true;
         }
     }
 }
