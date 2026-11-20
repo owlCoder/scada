@@ -1,3 +1,4 @@
+using Api.Contracts;
 using Api.Endpoints;
 using Application;
 using Domain;
@@ -112,11 +113,11 @@ IncidentAndScenarioEndpoints.Map(app);
 
 app.Run();
 
-public sealed record TickRequest(double Seconds);
-public sealed record PumpCommand(bool Running, string Actor);
-public sealed record ValveCommand(bool Open, string Actor);
-public sealed record IncidentStatusRequest(IncidentStatus Status, string Actor);
-public sealed record RegisterWrite(ushort Value, string Actor);
-public sealed record ScenarioRequest(string Actor);
+
+
+
+
+
+
 
 public partial class Program { }
