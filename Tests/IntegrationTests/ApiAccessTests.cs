@@ -58,7 +58,8 @@ public sealed class ApiAccessTests
     [Fact]
     public async Task RateLimitCannotBeBypassedByChangingActor()
     {
-        using var client = Client("operator-integration-key");
+        using var factory = new Factory();
+        using var client = Client(factory, "operator-integration-key");
         for (var i = 0; i < 10; i++)
         {
             var response = await client.PostAsJsonAsync("/api/plant/tick",
