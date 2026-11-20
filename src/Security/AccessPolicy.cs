@@ -9,7 +9,14 @@ public sealed class AccessPolicy
 {
     private readonly IReadOnlyDictionary<AccessRole, string> _keys;
 
-    public AccessPolicy(IReadOnlyDictionary<AccessRole, string> keys) => _keys = keys;
+    public AccessPolicy(IReadOnlyDictionary<AccessRole, string> keys)
+    {
+        var active = keys.Values.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray();
+        if (active.Distinct(StringComparer.Ordinal).Count() != active.Length)
+            throw new ArgumentException("Различите улоге морају имати различите API кључеве.", nameof(keys));
+
+        _keys = new Dictionary<AccessRole, string>(keys);
+    }
 
     public AccessRole? Authenticate(string? supplied)
     {
