@@ -8,9 +8,16 @@ public static class ScenarioEndpoints
     public static void Map(WebApplication app)
     {
         app.MapPost("/api/scenarios/{id}", (string id, ScenarioService scenarios,
-            AuthorizationService authorization, HttpContext http) =>
+            AuthorizationService authorization, CommandMonitor monitor, HttpContext http) =>
         {
-            return scenarios.Execute(id, authorization.Authenticate(http.Request.Headers["X-Api-Key"].ToString())!.Username)
+            var apiKey = http.Request.Headers["X-Api-Key"].ToString();
+            if (!scenarios.GetAvailable().Any(scenario => scenario.Id == id))
+                return Results.NotFound();
+
+            if (!monitor.Check(ApiKeyValidator.Fingerprint(apiKey)))
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+
+            return scenarios.Execute(id, authorization.Authenticate(apiKey)!.Username)
                 ? Results.Accepted($"/api/scenarios/{id}")
                 : Results.NotFound();
         }).RequireRole(AccessRole.Administrator);
