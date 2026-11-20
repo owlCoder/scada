@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCADA | Контролна табла</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main>
+<header><div><p class="eyebrow">ВИРТУЕЛНО ПОСТРОЈЕЊЕ</p><h1>SCADA контролна табла</h1><p>Симулација прераде воде · Локално окружење</p></div><span id="connection" class="status">Није повезано</span></header>
+<section class="credentials"><label>API кључ <input id="key" type="password" autocomplete="off" placeholder="Унеси кључ за преглед"></label><button id="connect">Повежи се</button><span id="error" role="status"></span></section>
+<section class="metrics"><article><h2>Ниво резервоара</h2><strong id="level">—</strong><div class="track"><div id="fill"></div></div></article><article><h2>Пумпа P-101</h2><strong id="pump">—</strong><p>Улазни проток: <span id="inflow">—</span></p></article><article><h2>Вентил V-101</h2><strong id="valve">—</strong><p>Излазни проток: <span id="outflow">—</span></p></article><article><h2>Отворени инциденти</h2><strong id="incident-count">—</strong><p>Заштитни и безбедносни догађаји</p></article></section>
+<section class="columns"><article><h2>Историја нивоа воде</h2><canvas id="chart" width="700" height="240" aria-label="График нивоа резервоара" role="img"></canvas></article><article><h2>Управљање</h2><p>Команде захтевају кључ оператера.</p><div class="actions"><button data-command="pump-on">Укључи пумпу</button><button data-command="pump-off">Искључи пумпу</button><button data-command="valve-open">Отвори вентил</button><button data-command="valve-close">Затвори вентил</button></div><p id="command-result" role="status"></p></article></section>
+<section class="columns"><article><h2>Догађаји</h2><ul id="events"></ul></article><article><h2>Инциденти</h2><ul id="incidents"></ul></article></section>
+<footer>Само за симулацију. Не повезивати са стварним индустријским уређајима.</footer>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
