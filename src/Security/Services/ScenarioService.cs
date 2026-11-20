@@ -6,9 +6,9 @@ public sealed class ScenarioService(IEventStore events)
 {
     private static readonly ScenarioDefinition[] Available =
     [
-        new("unauthorized-command", "Неовлашћена команда", "Симулиран покушај неовлашћеног управљања"),
-        new("sensor-spoofing", "Лажно мерење", "Симулиран несклад између сензора и стања процеса"),
-        new("register-tampering", "Измена регистра", "Симулиран покушај измене заштићеног регистра")
+        new("unauthorized-command", "Unauthorized command", "Simulated unauthorized control attempt"),
+        new("sensor-spoofing", "Sensor spoofing", "Simulated mismatch between sensor and process state"),
+        new("register-tampering", "Register tampering", "Simulated attempt to modify a protected register")
     ];
 
     public IReadOnlyList<ScenarioDefinition> GetAvailable() => Available;
@@ -16,14 +16,14 @@ public sealed class ScenarioService(IEventStore events)
     public bool Execute(string id, string actor)
     {
         if (string.IsNullOrWhiteSpace(actor))
-            throw new ArgumentException("Оператер је обавезан.", nameof(actor));
+            throw new ArgumentException("Operator is required.", nameof(actor));
 
         var scenario = Available.FirstOrDefault(item => item.Id == id);
         if (scenario is null)
             return false;
 
         events.Append(new(DateTimeOffset.UtcNow, "SecurityAlert",
-            $"Сценарио: {scenario.Name}. {scenario.Description}", actor));
+            $"Scenario: {scenario.Name}. {scenario.Description}", actor));
         return true;
     }
 }
