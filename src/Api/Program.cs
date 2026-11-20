@@ -31,6 +31,7 @@ else
 
 builder.Services.AddSingleton<IPlantService, PlantService>();
 builder.Services.AddSingleton<CommandMonitor>();
+builder.Services.AddSingleton<ScenarioService>();
 builder.Services.AddSingleton<PlantSnapshotService>();
 builder.Services.AddSingleton<IncidentService>();
 builder.Services.AddSingleton<VirtualRegisterService>();
@@ -67,6 +68,7 @@ read.MapGet("/telemetry", (int? count, ITelemetryStore store) =>
         ? Results.BadRequest("Број узорака мора бити између 1 и 3600.")
         : Results.Ok(store.GetRecent(count ?? 100)));
 read.MapGet("/incidents", (IncidentService service) => Results.Ok(service.GetAll()));
+read.MapGet("/scenarios", (ScenarioService scenarios) => Results.Ok(scenarios.GetAvailable()));
 read.MapGet("/registers", (VirtualRegisterService registers) => Results.Ok(registers.ReadAll()));
 read.MapGet("/registers/{address:int}", (int address, VirtualRegisterService registers) =>
     address is >= 0 and <= ushort.MaxValue && registers.Read((ushort)address) is { } register
@@ -166,6 +168,23 @@ incidentCommands.AddEndpointFilter(async (context, next) =>
         : Results.Unauthorized();
 });
 
+app.MapPost("/api/scenarios/{id}", (string id, ScenarioRequest request, ScenarioService scenarios) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Actor))
+        return Results.BadRequest("Оператер је обавезан.");
+
+    return scenarios.Execute(id, request.Actor)
+        ? Results.Accepted($"/api/scenarios/{id}")
+        : Results.NotFound();
+}).AddEndpointFilter(async (context, next) =>
+{
+    var policy = context.HttpContext.RequestServices.GetRequiredService<AccessPolicy>();
+    var key = context.HttpContext.Request.Headers["X-Api-Key"].ToString();
+    return policy.Authorize(key, AccessRole.Administrator)
+        ? await next(context)
+        : Results.Unauthorized();
+});
+
 incidentCommands.MapPost("/{id:guid}/status", (Guid id, IncidentStatusRequest request,
     IncidentService service, IEventStore events) =>
 {
@@ -195,3 +214,4 @@ public sealed record PumpCommand(bool Running, string Actor);
 public sealed record ValveCommand(bool Open, string Actor);
 public sealed record IncidentStatusRequest(IncidentStatus Status, string Actor);
 public sealed record RegisterWrite(ushort Value, string Actor);
+public sealed record ScenarioRequest(string Actor);
