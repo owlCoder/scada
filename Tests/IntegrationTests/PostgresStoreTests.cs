@@ -30,16 +30,16 @@ public sealed class PostgresStoreTests
         var uniqueEvent = new SecurityEvent(DateTimeOffset.UtcNow, "SecurityAlert",
             $"Test {Guid.NewGuid():N}", "integration");
         first.Observe([uniqueEvent]);
-        var incident = Assert.Single(first.GetAll().Where(x => x.Description == uniqueEvent.Message));
+        var incident = Assert.Single(first.GetAll(), x => x.Description == uniqueEvent.Message);
 
         Assert.True(first.TryUpdate(incident.Id, IncidentStatus.Acknowledged, "tester", out _));
 
         var second = new IncidentService(new PostgresIncidentStore(source));
-        var restored = Assert.Single(second.GetAll().Where(x => x.Id == incident.Id));
+        var restored = Assert.Single(second.GetAll(), x => x.Id == incident.Id);
         Assert.Equal(IncidentStatus.Acknowledged, restored.Status);
 
         second.Observe([uniqueEvent]);
-        Assert.Single(second.GetAll().Where(x => x.Id == incident.Id));
+        Assert.Single(second.GetAll(), x => x.Id == incident.Id);
     }
 
     [Fact]
