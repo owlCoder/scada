@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Application;
 
 public enum IncidentStatus { Open, Acknowledged, Resolved }
@@ -12,19 +15,11 @@ public sealed record Incident(
     string? UpdatedBy,
     DateTimeOffset? UpdatedAt);
 
-public sealed class IncidentService
+public sealed class IncidentService(IIncidentStore store)
 {
     private readonly object _sync = new();
-    private readonly Dictionary<Guid, Incident> _incidents = new();
-    private readonly HashSet<string> _observed = new(StringComparer.Ordinal);
-    private readonly Queue<string> _observationOrder = new();
-    private const int Capacity = 1000;
 
-    public IReadOnlyList<Incident> GetAll()
-    {
-        lock (_sync)
-            return _incidents.Values.OrderByDescending(x => x.CreatedAt).ToArray();
-    }
+    public IReadOnlyList<Incident> GetAll() => store.GetAll();
 
     public void Observe(IEnumerable<SecurityEvent> events)
     {
@@ -32,25 +27,12 @@ public sealed class IncidentService
         {
             foreach (var item in events.Where(x => x.Category is "SecurityAlert" or "SafetyInterlock"))
             {
-                var key = $"{item.Timestamp.UtcTicks}:{item.Category}:{item.Actor}:{item.Message}";
-                if (!_observed.Add(key))
-                    continue;
-
-                _observationOrder.Enqueue(key);
-                while (_observationOrder.Count > 10000)
-                    _observed.Remove(_observationOrder.Dequeue());
-
-                var incident = new Incident(Guid.NewGuid(), item.Timestamp, item.Category,
-                    item.Message, item.Actor, IncidentStatus.Open, null, null);
-                _incidents.Add(incident.Id, incident);
+                var fingerprint = $"{item.Timestamp.UtcTicks}:{item.Category}:{item.Actor}:{item.Message}";
+                var hash = SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint));
+                var id = new Guid(hash.AsSpan(0, 16));
+                store.TryAdd(new Incident(id, item.Timestamp, item.Category,
+                    item.Message, item.Actor, IncidentStatus.Open, null, null));
             }
-
-            if (_incidents.Count <= Capacity)
-                return;
-
-            foreach (var incident in _incidents.Values.OrderBy(x => x.CreatedAt)
-                .Take(_incidents.Count - Capacity).ToArray())
-                _incidents.Remove(incident.Id);
         }
     }
 
@@ -61,7 +43,8 @@ public sealed class IncidentService
 
         lock (_sync)
         {
-            if (!_incidents.TryGetValue(id, out var existing))
+            var existing = store.GetAll().FirstOrDefault(x => x.Id == id);
+            if (existing is null)
             {
                 incident = null;
                 return false;
@@ -76,8 +59,12 @@ public sealed class IncidentService
                 UpdatedBy = actor,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
-            _incidents[id] = incident;
-            return true;
+
+            if (store.TryUpdate(incident, existing.Status))
+                return true;
+
+            incident = null;
+            return false;
         }
     }
 }
