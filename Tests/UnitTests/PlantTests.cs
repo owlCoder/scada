@@ -55,6 +55,26 @@ public sealed class PlantTests
     }
 
     [Fact]
+    public void RejectedCommandsDoNotExtendRateLimitWindow()
+    {
+        var events = new InMemoryEventStore();
+        var monitor = new CommandMonitor(events);
+        for (var i = 0; i < 10; i++)
+            Assert.True(monitor.Check("key-fingerprint"));
+
+        Assert.False(monitor.Check("key-fingerprint"));
+        Assert.False(monitor.Check("key-fingerprint"));
+        Assert.Equal(2, events.GetRecent().Count);
+    }
+
+    [Fact]
+    public void BlankIdentityIsRejected()
+    {
+        var monitor = new CommandMonitor(new InMemoryEventStore());
+        Assert.False(monitor.Check(""));
+    }
+
+    [Fact]
     public void WrongApiKeyIsRejected()
     {
         Assert.False(ApiKeyValidator.Matches("secret-key", "wrong-key"));
