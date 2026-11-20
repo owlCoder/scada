@@ -44,6 +44,21 @@ public sealed class AccessPolicyTests
     }
 
     [Fact]
+    public void InvalidConfiguredRoleIsRejected()
+    {
+        Assert.Throws<ArgumentException>(() => new AccessPolicy(new Dictionary<AccessRole, string>
+        {
+            [(AccessRole)99] = "invalid-role-secret"
+        }));
+    }
+
+    [Fact]
+    public void InvalidRequiredRoleIsRejected()
+    {
+        Assert.False(_policy.Authorize("admin-secret", (AccessRole)(-1)));
+    }
+
+    [Fact]
     public void UnknownKeyIsRejected()
     {
         Assert.Null(_policy.Authenticate("incorrect"));
