@@ -17,7 +17,7 @@ public static class GridRegistrationExtensions
         services.AddSingleton(options);
         services.AddSingleton<GridEngine>();
         services.AddSingleton<IGridView>(sp => sp.GetRequiredService<GridEngine>());
-        services.AddSingleton<GridCoordinator>();
+        services.AddSingleton(sp => ActivatorUtilities.CreateInstance<GridCoordinator>(sp, new DeferredServices<IGridObserver>(sp)));
         services.AddSingleton<IGridRuntime>(sp => sp.GetRequiredService<GridCoordinator>());
         services.AddSingleton<IGridDefinitionAdministration>(sp => sp.GetRequiredService<GridCoordinator>());
         services.AddSingleton<IGridControl, GridControlService>();

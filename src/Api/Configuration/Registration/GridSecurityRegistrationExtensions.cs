@@ -1,7 +1,5 @@
-using Api.Hosting;
 using Application.Grid;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Security.Grid.Detection;
 using Security.Grid.Detection.Rules;
 using Security.Grid.Scenarios;
@@ -23,9 +21,6 @@ public static class GridSecurityRegistrationExtensions
 
         // Fallbacks so the service graph validates in hosts where the grid simulation (Agent A) is not wired up yet.
         // A real IGridView/IGridTraining/IGridControl registered anywhere in the chain overrides these (last wins).
-        services.TryAddSingleton<IGridView, UnavailableGridView>();
-        services.TryAddSingleton<IGridTraining, UnavailableGridTraining>();
-        services.TryAddSingleton<IGridControl, UnavailableGridControl>();
 
         services.AddSingleton<IEnumerable<IGridDetectionRule>>(sp =>
             DefaultGridDetectionRules.Create(sp.GetRequiredService<IGridView>()));

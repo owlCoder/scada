@@ -34,6 +34,8 @@ public sealed class Iec104TestHost : IAsyncDisposable
         var port = FreePort();
         var factory = ApiTestFactory.Create([
             ("Simulation:Host:RunLoop", "false"),
+            // The fake view drives the monitor; the real grid loop would publish its own steps.
+            ("Grid:Enabled", "false"),
             ("Protocols:Iec104:Enabled", "true"),
             ("Protocols:Iec104:Port", port.ToString()),
             ("Serilog:MinimumLevel:Default", "Error"),

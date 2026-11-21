@@ -79,7 +79,8 @@ public sealed class GridPagesTests
     [Fact]
     public async Task PagesRefreshOnGridTopicsAndReleaseSubscriptions()
     {
-        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
+        // Instructor view: operators see totals recomputed from reported measurements by GridViewRedactor.
+        await using var host = HmiTestHost.Create(AccessRole.Administrator, mode: SimulationMode.Grid);
         var page = host.Context.Render<GridOverview>();
         host.Grid.State = host.Grid.State with { Totals = host.Grid.State.Totals with { LoadMw = 9.75 } };
         host.Broadcaster.Publish(RealtimeTopics.Grid, 2);

@@ -14,7 +14,9 @@ public sealed class GridCoordinator(GridEngine engine, IGridDefinitionStore stor
     IRealtimePublisher realtime, IEnumerable<IGridObserver> observers, TimeProvider time,
     ILogger<GridCoordinator> logger) : IGridRuntime, IGridDefinitionAdministration
 {
-    private readonly IGridObserver[] _observers = observers.ToArray();
+    // Observers (scenarios, detection, IEC 104) depend on IGridTraining/IGridControl, which depend on this coordinator,
+    // so the host passes a deferred sequence that is materialised on the first step instead of at construction.
+    private IGridObserver[]? _observers;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public async Task<GridStepReport?> StepAsync(bool force, CancellationToken cancellationToken)
@@ -137,7 +139,7 @@ public sealed class GridCoordinator(GridEngine engine, IGridDefinitionStore stor
         realtime.Publish(RealtimeTopics.GridAlarms, visible.Alarms);
         realtime.Publish(RealtimeTopics.GridStatus, engine.Status);
         var count = 0;
-        foreach (var observer in _observers)
+        foreach (var observer in _observers ??= observers.ToArray())
         {
             try { count += await observer.OnGridStepAsync(report, cancellationToken); }
             catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

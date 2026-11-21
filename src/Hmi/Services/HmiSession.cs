@@ -14,17 +14,9 @@ namespace Hmi.Services;
 /// The signed-in user of one HMI circuit. Instructors (Administrators) see ground truth; everyone else sees only what the
 /// field instruments report, exactly as the REST API does.
 /// </summary>
-public sealed class HmiSession(AuthenticationStateProvider authentication, IPlantView plant, IGridView? grid = null,
-    Func<GridSnapshot, GridSnapshot>? gridRedactor = null)
+public sealed class HmiSession(AuthenticationStateProvider authentication, IPlantView plant, IGridView? grid = null)
 {
     private bool _initialized;
-    // Late-bound only while the HMI branch builds against contracts without Agent A's redactor.
-    // After merge this invokes Application.Grid.GridViewRedactor.ForOperators without changing any page.
-    private static readonly Func<GridSnapshot, GridSnapshot>? RedactGrid =
-        typeof(IGridView).Assembly.GetType("Application.Grid.GridViewRedactor")?
-            .GetMethod("ForOperators", [typeof(GridSnapshot)])?
-            .CreateDelegate<Func<GridSnapshot, GridSnapshot>>();
-
     public SimulationMode Mode { get; private set; } = SimulationMode.Water;
     public IGridView? GridView => grid;
 
@@ -46,9 +38,8 @@ public sealed class HmiSession(AuthenticationStateProvider authentication, IPlan
 
     public GridSnapshot GridSnapshot()
     {
-        var snapshot = (grid ?? throw new InvalidOperationException("Grid services are not available yet.")).Snapshot();
-        return IsInstructor ? snapshot : (RedactGrid ?? gridRedactor
-            ?? throw new InvalidOperationException("The shared grid redactor has not been registered in this build."))(snapshot);
+        var snapshot = (grid ?? throw new InvalidOperationException("Grid services are not available.")).Snapshot();
+        return IsInstructor ? snapshot : GridViewRedactor.ForOperators(snapshot);
     }
 
     private async Task<bool> UpdateAsync(Task<AuthenticationState> state)
