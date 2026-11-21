@@ -13,6 +13,8 @@ public abstract class DetectionRuleBase : IDetectionRule
 
     public abstract IReadOnlyList<DetectionFinding> Evaluate(DetectionContext context, DetectionRuleSettings settings);
 
+    public virtual int ResetState() => 0;
+
     protected DetectionRuleSettings Settings(DetectionSeverity severity, double threshold, int windowSeconds, int cooldownSeconds) =>
         new(Id, true, severity, threshold, windowSeconds, cooldownSeconds);
 

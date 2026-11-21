@@ -12,4 +12,7 @@ public interface IDetectionRule
     DetectionRuleSettings DefaultSettings { get; }
 
     IReadOnlyList<DetectionFinding> Evaluate(DetectionContext context, DetectionRuleSettings settings);
+
+    /// <summary>Clears accumulated evaluation state when a new detection scope (scenario run) starts.</summary>
+    int ResetState();
 }

@@ -92,6 +92,20 @@ public sealed class ControlCommandServiceTests
     }
 
     [Fact]
+    public Task ReplayGuardForgetsTheLeastRecentlyActiveActorFirst()
+    {
+        var guard = new CommandReplayGuard(maxTrackedActors: 2);
+        Assert.True(guard.TryAccept("a", 5));
+        Assert.True(guard.TryAccept("b", 5));
+        Assert.True(guard.TryAccept("a", 6));
+        Assert.True(guard.TryAccept("c", 1));
+
+        Assert.False(guard.TryAccept("a", 6));
+        Assert.Equal(0, guard.LastSequence("b"));
+        return Task.CompletedTask;
+    }
+
+    [Fact]
     public Task UnknownDeviceAndInvalidValuesAreRejected()
     {
         var rig = new TestRig();

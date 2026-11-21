@@ -12,8 +12,10 @@ public static class ControllerEndpoints
         app.MapGet("/api/controllers", (SimulationEngine engine) =>
             Results.Ok(engine.Read(world => world.Controllers.Select(c => c.Snapshot()).ToArray()))).RequireRole(AccessRole.Viewer);
 
-        app.MapPost("/api/controllers/{id}/{operation}", (string id, string operation, ITrainingEnvironment training) =>
+        app.MapPost("/api/controllers/{id}/{operation}", (string id, string operation, ITrainingEnvironment training, SimulationEngine engine) =>
         {
+            if (!engine.Read(world => world.FindController(id) is not null))
+                return Results.NotFound();
             bool? done = operation.ToLowerInvariant() switch
             {
                 "start" => training.SetControllerRunning(id, true),

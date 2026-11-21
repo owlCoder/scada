@@ -64,12 +64,17 @@ public sealed class RegisterAccessService(
             return Fail(RegisterOperationStatus.IllegalValue, $"Value {value} exceeds the setpoint limit {options.MaxSetpointValue}.",
                 source, actorName, controllerId, EventCategories.Protocol);
 
-        var previous = engine.Mutate(world =>
+        // Resolve and write under one lock: a concurrent reset may replace the controllers between checks.
+        var (found, previous) = engine.Mutate(world =>
         {
-            var controller = world.FindController(controllerId)!;
+            if (unitId < 1 || unitId > world.Controllers.Count || world.Controllers[unitId - 1].Id != controllerId)
+                return (false, (ushort?)null);
+            var controller = world.Controllers[unitId - 1];
             var old = controller.Registers.Read(RegisterArea.Holding, address);
-            return controller.WriteSetpoint(address, value) ? (ushort?)old : null;
+            return (true, controller.WriteSetpoint(address, value) ? old : (ushort?)null);
         });
+        if (!found)
+            return Fail(RegisterOperationStatus.UnknownUnit, $"Unit {unitId} is no longer available.", source, actorName, null, EventCategories.Protocol);
         if (previous is null)
             return Fail(RegisterOperationStatus.IllegalAddress, "Setpoint write failed.", source, actorName, controllerId, EventCategories.Protocol);
 

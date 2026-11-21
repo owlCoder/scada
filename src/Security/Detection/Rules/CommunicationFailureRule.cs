@@ -14,6 +14,13 @@ public sealed class CommunicationFailureRule : DetectionRuleBase
 {
     private readonly Dictionary<string, Queue<(long Sent, long Delivered)>> _history = new(StringComparer.Ordinal);
 
+    public override int ResetState()
+    {
+        var cleared = _history.Count;
+        _history.Clear();
+        return cleared;
+    }
+
     public override string Id => "communication-failure";
     public override string Name => "Communication failure";
     public override string Description => "Controller communication loss, link outage or excessive packet loss.";

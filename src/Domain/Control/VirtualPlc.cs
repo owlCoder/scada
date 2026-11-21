@@ -16,6 +16,7 @@ public sealed class VirtualPlc(ControllerDefinition definition) : VirtualControl
                 commands.Add(command);
         }
 
+        commands.AddRange(HoldAutomaticPositions(inputs, commands));
         return commands;
     }
 

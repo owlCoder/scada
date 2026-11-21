@@ -14,6 +14,13 @@ public sealed class ControllerStateMismatchRule(IReadOnlyList<ControllerDefiniti
 {
     private readonly Dictionary<string, int> _mismatchSteps = new(StringComparer.Ordinal);
 
+    public override int ResetState()
+    {
+        var cleared = _mismatchSteps.Count;
+        _mismatchSteps.Clear();
+        return cleared;
+    }
+
     public override string Id => "controller-state-mismatch";
     public override string Name => "Suspicious controller or device state";
     public override string Description => "Controller outputs disagreeing with actuators, active forces, safe state or faults.";

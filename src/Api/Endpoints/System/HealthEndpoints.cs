@@ -15,11 +15,12 @@ public static class HealthEndpoints
         {
             var persistence = queue.Status;
             var saturated = persistence.Pending >= persistence.Capacity * SaturationThreshold;
+            // Anonymous endpoint: expose counters only, never error text.
             var body = new
             {
                 status = saturated ? "degraded" : "ready",
-                persistence,
-                simulation = engine.Status
+                persistence = new { persistence.Pending, persistence.Capacity, persistence.Dropped, persistence.Failed },
+                simulation = new { engine.Status.IsPaused, engine.Status.StepCount }
             };
             return saturated ? Results.Json(body, statusCode: StatusCodes.Status503ServiceUnavailable) : Results.Ok(body);
         });

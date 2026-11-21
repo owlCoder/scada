@@ -13,7 +13,8 @@ public sealed class ModbusRequestProcessorTests
     private static (ModbusRequestProcessor Processor, TestRig Rig) Create(bool writes = false)
     {
         var rig = new TestRig(new RegisterWriteOptions { WritesEnabled = writes });
-        return (new ModbusRequestProcessor(rig.Registers, rig.RegisterOptions, new ModbusOptions(), rig.Events, rig.Time), rig);
+        return (new ModbusRequestProcessor(rig.Registers, rig.RegisterOptions, new ModbusOptions { AllowWrites = writes }, rig.Monitor,
+            rig.Events, rig.Time), rig);
     }
 
     private static byte[] Adu(byte unit, params byte[] pdu)
@@ -104,6 +105,28 @@ public sealed class ModbusRequestProcessorTests
         Assert.Equal(new byte[] { 0x06, 0, 100, 0x01, 0xF4 }, response);
         Assert.Equal((ushort)500, rig.Registers.Read(1, global::Domain.Control.RegisterArea.Holding, 100, 1, "test").Values[0]);
         Assert.Contains(rig.Buffer.GetRecent(), e => e.Actor == "modbus-local" && e.Category == EventCategories.Audit);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task WritesNeedTheModbusOptInEvenWhenRegisterWritesAreEnabled()
+    {
+        var rig = new TestRig(new RegisterWriteOptions { WritesEnabled = true });
+        var processor = new ModbusRequestProcessor(rig.Registers, rig.RegisterOptions, new ModbusOptions(), rig.Monitor, rig.Events, rig.Time);
+
+        Assert.Equal(new byte[] { 0x86, 0x01 }, Pdu(processor.Process(Adu(1, 0x06, 0, 100, 0x01, 0xF4), Source)!));
+        Assert.Equal((ushort)400, rig.Registers.Read(1, global::Domain.Control.RegisterArea.Holding, 100, 1, "test").Values[0]);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task ModbusWritesAreRateLimitedPerClientHost()
+    {
+        var (processor, _) = Create(writes: true);
+        for (var i = 0; i < 10; i++)
+            Assert.Equal(0x06, Pdu(processor.Process(Adu(1, 0x06, 0, 100, 0x01, (byte)i), $"modbus:127.0.0.1:{50000 + i}")!)[0]);
+
+        Assert.Equal(new byte[] { 0x86, 0x04 }, Pdu(processor.Process(Adu(1, 0x06, 0, 100, 0x01, 0xF4), "modbus:127.0.0.1:59999")!));
         return Task.CompletedTask;
     }
 

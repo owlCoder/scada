@@ -17,7 +17,9 @@ public static class ApplicationRegistrationExtensions
         services.AddSingleton<RegisterAccessService>();
         services.AddSingleton<AlarmService>();
         services.AddSingleton<IncidentService>();
-        services.AddSingleton<ITrainingEnvironment, TrainingEnvironment>();
+        services.AddSingleton<TrainingEnvironment>();
+        services.AddSingleton<ITrainingEnvironment>(sp => sp.GetRequiredService<TrainingEnvironment>());
+        services.AddSingleton<IPlantView>(sp => sp.GetRequiredService<TrainingEnvironment>());
         return builder;
     }
 }

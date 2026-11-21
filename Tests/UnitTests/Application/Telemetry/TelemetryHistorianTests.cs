@@ -37,6 +37,21 @@ public sealed class TelemetryHistorianTests
     }
 
     [Fact]
+    public async Task EachAlteredSampleIsDetectedOnlyOnce()
+    {
+        var rig = new TestRig();
+        await rig.RunForAsync(10);
+        rig.Training.TamperHistorian("LT-103", 1);
+        rig.Training.TamperHistorian("FT-301", 1);
+
+        await rig.RunForAsync(30);
+
+        var detections = await rig.DetectionStore.QueryAsync(new global::Application.Detection.DetectionQuery("historian-integrity"), CancellationToken.None);
+        Assert.Equal(2, detections.Count);
+        Assert.Equal(2, rig.Historian.FindViolations().Count);
+    }
+
+    [Fact]
     public Task CapacityMustBePositive()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TelemetryHistorian(0));

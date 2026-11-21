@@ -13,6 +13,12 @@ public sealed class ModbusOptions
     /// </summary>
     public string WriteActor { get; set; } = "modbus-local";
 
+    /// <summary>
+    /// Modbus writes need this explicit opt-in in addition to <c>Registers:WritesEnabled</c>, because the protocol cannot
+    /// authenticate the client: anything able to reach the (loopback-only) port could otherwise change setpoints.
+    /// </summary>
+    public bool AllowWrites { get; set; }
+
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();

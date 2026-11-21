@@ -2,7 +2,9 @@ using Api.Authorization;
 using Api.Contracts;
 using Application.Commands;
 using Application.Identity;
+using Application.Simulation;
 using Application.Training;
+using Domain.Process.Snapshots;
 
 namespace Api.Endpoints.Plant;
 
@@ -11,10 +13,10 @@ public static class PlantEndpoints
     public static WebApplication Map(WebApplication app)
     {
         var read = app.MapGroup("/api/plant").RequireRole(AccessRole.Viewer);
-        read.MapGet("", (ITrainingEnvironment plant) => Results.Ok(plant.Snapshot()));
-        read.MapGet("/devices/{id}", (string id, ITrainingEnvironment plant) =>
+        read.MapGet("", (IPlantView plant, HttpContext http) => Results.Ok(View(plant, http)));
+        read.MapGet("/devices/{id}", (string id, IPlantView plant, HttpContext http) =>
         {
-            var snapshot = plant.Snapshot();
+            var snapshot = View(plant, http);
             object? device = (object?)snapshot.Tank(id) ?? (object?)snapshot.Pump(id) ?? (object?)snapshot.Valve(id) ?? snapshot.Sensor(id);
             return device is null ? Results.NotFound() : Results.Ok(device);
         });
@@ -46,4 +48,8 @@ public static class PlantEndpoints
             });
         return app;
     }
+
+    /// <summary>Instructors (Administrators) see ground truth; everyone else sees only what the instruments report.</summary>
+    private static PlantSnapshot View(IPlantView plant, HttpContext http) =>
+        http.Actor().HasRole(AccessRole.Administrator) ? plant.Snapshot() : PlantViewRedactor.ForOperators(plant.Snapshot());
 }

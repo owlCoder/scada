@@ -85,6 +85,9 @@ public sealed class TrainingEnvironment(
             restored += controller.RestoreDefaults();
             if (controller.State == ControllerState.Stopped)
                 restored += controller.Start() ? 1 : 0;
+            // A training reset also clears safe states latched by the exercise (normally an operator reset).
+            else if (controller.State is ControllerState.SafeState or ControllerState.Faulted)
+                restored += controller.Reset() ? 1 : 0;
         }
 
         return restored;

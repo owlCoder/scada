@@ -1,3 +1,4 @@
+using Application.Commands;
 using Application.Events;
 using Application.Identity;
 using Application.Registers;
@@ -13,6 +14,7 @@ public sealed class ModbusRequestProcessor(
     RegisterAccessService registers,
     RegisterWriteOptions writeOptions,
     ModbusOptions options,
+    ICommandRateLimiter rateLimiter,
     IEventPublisher events,
     TimeProvider time)
 {
@@ -56,8 +58,12 @@ public sealed class ModbusRequestProcessor(
         {
             ModbusFunctionCode.ReadHoldingRegisters => Read(unitId, RegisterArea.Holding, pdu, source),
             ModbusFunctionCode.ReadInputRegisters => Read(unitId, RegisterArea.Input, pdu, source),
-            ModbusFunctionCode.WriteSingleRegister when writeOptions.WritesEnabled => WriteSingle(unitId, pdu, source),
-            ModbusFunctionCode.WriteMultipleRegisters when writeOptions.WritesEnabled => WriteMultiple(unitId, pdu, source),
+            ModbusFunctionCode.WriteSingleRegister or ModbusFunctionCode.WriteMultipleRegisters when !WritesAllowed =>
+                IllegalFunction(unitId, function, source),
+            ModbusFunctionCode.WriteSingleRegister or ModbusFunctionCode.WriteMultipleRegisters when !rateLimiter.TryAcquire(Client(source)) =>
+                Exception(function, ModbusExceptionCode.ServerDeviceFailure),
+            ModbusFunctionCode.WriteSingleRegister => WriteSingle(unitId, pdu, source),
+            ModbusFunctionCode.WriteMultipleRegisters => WriteMultiple(unitId, pdu, source),
             _ => IllegalFunction(unitId, function, source)
         };
     }
@@ -144,6 +150,12 @@ public sealed class ModbusRequestProcessor(
     }
 
     private Actor WriteActor => new(options.WriteActor, AccessRole.Operator);
+
+    private bool WritesAllowed => writeOptions.WritesEnabled && options.AllowWrites;
+
+    /// <summary>Rate-limit key per client host (the source is "modbus:host:port").</summary>
+    private static string Client(string source) =>
+        source.LastIndexOf(':') is var colon and > 7 ? source[..colon] : source;
 
     private static ModbusExceptionCode Map(RegisterOperationStatus status) => status switch
     {

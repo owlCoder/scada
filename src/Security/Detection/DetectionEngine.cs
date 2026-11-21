@@ -30,6 +30,8 @@ public sealed class DetectionEngine : ISimulationObserver
     private readonly ILogger<DetectionEngine> _logger;
     private readonly Lock _sync = new();
     private PlantSnapshot? _previous;
+    private Guid? _scope;
+    private DateTimeOffset _scopeStart = DateTimeOffset.MinValue;
 
     public DetectionEngine(
         IEnumerable<IDetectionRule> rules,
@@ -112,8 +114,20 @@ public sealed class DetectionEngine : ISimulationObserver
         var pending = new List<(IDetectionRule Rule, DetectionFinding Finding, DetectionRuleSettings Settings)>();
         lock (_sync)
         {
+            // Event windows never reach back past the start of the current scope (a scenario run, or live operation
+            // after a run), so events from one run cannot be re-detected and attributed to the next.
+            var scope = _scenarios.ActiveRunId;
+            if (scope != _scope)
+            {
+                _scope = scope;
+                _scopeStart = report.Timestamp;
+                foreach (var rule in _rules)
+                    rule.ResetState();
+            }
+
             var maxWindow = _settings.Values.Max(s => s.WindowSeconds);
-            var recent = _events.Since(report.Timestamp.AddSeconds(-maxWindow));
+            var windowStart = report.Timestamp.AddSeconds(-maxWindow);
+            var recent = _events.Since(windowStart > _scopeStart ? windowStart : _scopeStart);
             var context = new DetectionContext(report, _previous, recent, report.Timestamp, _engine.Options.StepSeconds);
             foreach (var rule in _rules)
             {
@@ -138,7 +152,8 @@ public sealed class DetectionEngine : ISimulationObserver
                 metrics.TotalMilliseconds += watch.Elapsed.TotalMilliseconds;
                 foreach (var finding in findings)
                 {
-                    var fingerprint = $"{rule.Id}:{finding.Key}";
+                    // Scoped to the active scenario run so a new run re-detects conditions an earlier run already reported.
+                    var fingerprint = $"{rule.Id}:{finding.Key}:{scope?.ToString("N") ?? "live"}";
                     if (!_deduplicator.ShouldEmit(fingerprint, report.Timestamp, TimeSpan.FromSeconds(settings.CooldownSeconds)))
                     {
                         metrics.Suppressed++;

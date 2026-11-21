@@ -57,6 +57,41 @@ public sealed class ControllerTests
     }
 
     [Fact]
+    public async Task LooplessOutputsReturnToTheirAutomaticPositionAfterFailSafe()
+    {
+        var rig = new TestRig();
+        rig.Training.SetLinkConnected("L-PLC1-IO", false);
+        await rig.RunForAsync(15);
+        Assert.Equal(0, rig.Training.Snapshot().Valve("V-102")!.Setpoint);
+
+        rig.Training.SetLinkConnected("L-PLC1-IO", true);
+        rig.Training.ResetController("PLC-1");
+        await rig.RunForAsync(10);
+
+        Assert.Equal(100, rig.Training.Snapshot().Valve("V-102")!.Position);
+        Assert.Equal(100, rig.Training.Snapshot().Valve("V-103")!.Position);
+    }
+
+    [Fact]
+    public async Task OutletReturnsToItsAutomaticPositionWhenTheOperatorHandsBack()
+    {
+        var rig = new TestRig();
+        var ana = new global::Application.Identity.Actor("ana", global::Application.Identity.AccessRole.Operator);
+        rig.Commands.Execute(new global::Application.Commands.OperatorCommand("V-301", global::Application.Commands.OperatorCommandType.SetManual,
+            null, global::Application.Commands.CommandSource.Hmi), ana);
+        rig.Commands.Execute(new global::Application.Commands.OperatorCommand("V-301", global::Application.Commands.OperatorCommandType.SetValvePosition,
+            20, global::Application.Commands.CommandSource.Hmi), ana);
+        await rig.RunForAsync(10);
+        Assert.Equal(20, rig.Training.Snapshot().Valve("V-301")!.Position);
+
+        rig.Commands.Execute(new global::Application.Commands.OperatorCommand("V-301", global::Application.Commands.OperatorCommandType.SetAutomatic,
+            null, global::Application.Commands.CommandSource.Hmi), ana);
+        await rig.RunForAsync(10);
+
+        Assert.Equal(70, rig.Training.Snapshot().Valve("V-301")!.Setpoint);
+    }
+
+    [Fact]
     public async Task StatusRegistersPublishControllerState()
     {
         var rig = new TestRig();

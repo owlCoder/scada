@@ -75,6 +75,25 @@ public sealed class TelemetryHistorian(int capacity = 20000)
         }
     }
 
+    /// <summary>Lists every sample in the newest <paramref name="window"/> samples that fails hash verification.</summary>
+    public IReadOnlyList<IntegrityViolation> FindViolations(int window = 2000)
+    {
+        lock (_sync)
+        {
+            var samples = _samples.TakeLast(Math.Clamp(window, 2, Capacity)).ToArray();
+            var violations = new List<IntegrityViolation>();
+            for (var i = 1; i < samples.Length; i++)
+            {
+                var expected = ComputeHash(samples[i - 1].Hash, samples[i].Sequence, samples[i].TagId,
+                    samples[i].Value, samples[i].Quality);
+                if (!string.Equals(expected, samples[i].Hash, StringComparison.Ordinal))
+                    violations.Add(new IntegrityViolation(samples[i].Sequence, samples[i].TagId, samples[i].Timestamp));
+            }
+
+            return violations;
+        }
+    }
+
     /// <summary>Training hook: silently rewrites a recent historian value without updating its hash.</summary>
     public bool Tamper(string tagId, double newValue)
     {

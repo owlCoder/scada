@@ -2,6 +2,9 @@ namespace Application.Simulation;
 
 public sealed class SimulationOptions
 {
+    /// <summary>Lower bound for the real-time loop period so a configuration cannot turn it into a busy loop.</summary>
+    public const double MinimumWallPeriodSeconds = 0.005;
+
     /// <summary>Simulated seconds advanced per step.</summary>
     public double StepSeconds { get; set; } = 0.5;
 
@@ -29,6 +32,8 @@ public sealed class SimulationOptions
             errors.Add("Simulation:StepSeconds must be between 0 and 10.");
         if (!double.IsFinite(TimeScale) || TimeScale is < 0.1 or > 100)
             errors.Add("Simulation:TimeScale must be between 0.1 and 100.");
+        if (double.IsFinite(StepSeconds) && double.IsFinite(TimeScale) && TimeScale > 0 && StepSeconds / TimeScale < MinimumWallPeriodSeconds)
+            errors.Add($"Simulation:StepSeconds / TimeScale must be at least {MinimumWallPeriodSeconds} s of wall-clock time per step.");
         if (TelemetryIntervalSteps < 1 || StatePersistenceIntervalSteps < 1 || SupervisoryTimeoutPolls < 1)
             errors.Add("Simulation intervals must be positive.");
         return errors;

@@ -1,42 +1,41 @@
 using Application.Identity;
 using Security.Authentication;
+using UnitTests.Support;
 using Xunit;
 
 namespace UnitTests.Security.Authentication;
 
 public sealed class AccessPolicyTests
 {
-    private readonly AccessPolicy _policy = new(new Dictionary<AccessRole, string>
+    private static readonly Dictionary<AccessRole, string> Keys = new()
     {
         [AccessRole.Viewer] = "viewer-secret",
         [AccessRole.Operator] = "operator-secret",
         [AccessRole.Administrator] = "admin-secret"
-    });
-
-    private ApiKeyAuthenticator Authenticator => new(_policy, new UserAccessPolicy([]));
+    };
 
     [Fact]
-    public Task ViewerCannotIssueCommands()
+    public async Task ViewerCannotIssueCommands()
     {
-        Assert.True(Authenticator.Authorize("viewer-secret", AccessRole.Viewer));
-        Assert.False(Authenticator.Authorize("viewer-secret", AccessRole.Operator));
-        return Task.CompletedTask;
+        var harness = await AuthenticationHarness.CreateAsync(Keys);
+        Assert.True(await harness.AuthorizeAsync("viewer-secret", AccessRole.Viewer));
+        Assert.False(await harness.AuthorizeAsync("viewer-secret", AccessRole.Operator));
     }
 
     [Fact]
-    public Task OperatorCannotPerformAdministration()
+    public async Task OperatorCannotPerformAdministration()
     {
-        Assert.True(Authenticator.Authorize("operator-secret", AccessRole.Operator));
-        Assert.False(Authenticator.Authorize("operator-secret", AccessRole.Administrator));
-        return Task.CompletedTask;
+        var harness = await AuthenticationHarness.CreateAsync(Keys);
+        Assert.True(await harness.AuthorizeAsync("operator-secret", AccessRole.Operator));
+        Assert.False(await harness.AuthorizeAsync("operator-secret", AccessRole.Administrator));
     }
 
     [Fact]
-    public Task AdministratorHasAllPermissions()
+    public async Task AdministratorHasAllPermissions()
     {
-        Assert.True(Authenticator.Authorize("admin-secret", AccessRole.Administrator));
-        Assert.True(Authenticator.Authorize("admin-secret", AccessRole.Viewer));
-        return Task.CompletedTask;
+        var harness = await AuthenticationHarness.CreateAsync(Keys);
+        Assert.True(await harness.AuthorizeAsync("admin-secret", AccessRole.Administrator));
+        Assert.True(await harness.AuthorizeAsync("admin-secret", AccessRole.Viewer));
     }
 
     [Fact]
@@ -61,21 +60,22 @@ public sealed class AccessPolicyTests
     }
 
     [Fact]
-    public Task UnknownKeyIsRejected()
+    public async Task UnknownOrMissingKeyIsRejected()
     {
-        Assert.Null(_policy.Authenticate("incorrect"));
-        Assert.Null(_policy.Authenticate(null));
-        Assert.Null(Authenticator.Authenticate(""));
-        return Task.CompletedTask;
+        var harness = await AuthenticationHarness.CreateAsync(Keys);
+        Assert.Null(new AccessPolicy(Keys).Authenticate("incorrect"));
+        Assert.Null(new AccessPolicy(Keys).Authenticate(null));
+        Assert.Equal(AuthenticationStatus.Missing, (await harness.Authenticator.AuthenticateAsync("", "ip:x", CancellationToken.None)).Status);
+        Assert.Equal(AuthenticationStatus.Invalid, (await harness.Authenticator.AuthenticateAsync("nope", "ip:x", CancellationToken.None)).Status);
     }
 
     [Fact]
-    public Task LegacyKeysGetAStableFingerprintedIdentity()
+    public async Task LegacyKeysGetAStableFingerprintedIdentity()
     {
-        var user = Authenticator.Authenticate("operator-secret")!;
+        var harness = await AuthenticationHarness.CreateAsync(Keys);
+        var user = (await harness.AuthenticateAsync("operator-secret"))!;
         Assert.Equal("legacy-Operator", user.Username);
         Assert.Equal(ApiKeyValidator.Fingerprint("operator-secret"), user.CredentialId);
         Assert.DoesNotContain("operator-secret", user.CredentialId);
-        return Task.CompletedTask;
     }
 }

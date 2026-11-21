@@ -16,6 +16,8 @@ public static class DefaultScenarios
 
     private static readonly Actor GuestViewer = new("guest-viewer", AccessRole.Viewer);
     private static readonly Actor OperatorAna = new("operator-ana", AccessRole.Operator);
+    private static readonly Actor OperatorEva = new("operator-eva", AccessRole.Operator);
+    private static readonly Actor OperatorFran = new("operator-fran", AccessRole.Operator);
     private static readonly Actor OperatorBob = new("operator-bob", AccessRole.Operator);
     private static readonly Actor OperatorCarl = new("operator-carl", AccessRole.Operator);
     private static readonly Actor FloodClient = new("flood-client", AccessRole.Operator);
@@ -73,11 +75,11 @@ public static class DefaultScenarios
         "A captured, sequence-numbered start command for P-101 is replayed four times.",
         30, ["command-replay"],
         [
-            At(2, new OperatorCommandAction(OperatorAna, OperatorCommandType.SetManual, "P-101", sequenced: true)),
-            At(4, new OperatorCommandAction(OperatorAna, OperatorCommandType.StartPump, "P-101", captureAs: "start")),
-            At(8, new OperatorCommandAction(OperatorAna, OperatorCommandType.StopPump, "P-101", sequenced: true)),
-            At(12, new ReplayCommandAction(OperatorAna, OperatorCommandType.StartPump, "P-101", "start", 4)),
-            At(20, new OperatorCommandAction(OperatorAna, OperatorCommandType.SetAutomatic, "P-101", sequenced: true))
+            At(2, new OperatorCommandAction(OperatorEva, OperatorCommandType.SetManual, "P-101", sequenced: true)),
+            At(4, new OperatorCommandAction(OperatorEva, OperatorCommandType.StartPump, "P-101", captureAs: "start")),
+            At(8, new OperatorCommandAction(OperatorEva, OperatorCommandType.StopPump, "P-101", sequenced: true)),
+            At(12, new ReplayCommandAction(OperatorEva, OperatorCommandType.StartPump, "P-101", "start", 4)),
+            At(20, new OperatorCommandAction(OperatorEva, OperatorCommandType.SetAutomatic, "P-101", sequenced: true))
         ],
         [RestoreAutomatic("P-101")]);
 
@@ -126,12 +128,15 @@ public static class DefaultScenarios
 
     private static ScenarioDefinition FalseMeasurementInjection() => new(
         "false-measurement-injection", "False measurement injection", nameof(IncidentCategory.Cybersecurity),
-        "Inlet flow FT-101 reports zero although V-101 is open, and PT-101 jumps to 8 bar.",
+        "An operator opens inlet V-101 fully; FT-101 then reports zero although water is flowing, and PT-101 jumps to 8 bar.",
         90, ["impossible-measurement-change", "mass-balance-inconsistency"],
         [
+            At(0, new OperatorCommandAction(OperatorFran, OperatorCommandType.SetManual, "V-101")),
+            At(0.5, new OperatorCommandAction(OperatorFran, OperatorCommandType.SetValvePosition, "V-101", 100)),
             At(2, new SpoofSensorAction("FT-101", 0)),
             At(4, new SpoofSensorAction("PT-101", 8))
-        ]);
+        ],
+        [RestoreAutomatic("V-101")]);
 
     private static ScenarioDefinition ControllerStateMismatch() => new(
         "controller-state-mismatch", "Controller output mismatch", nameof(IncidentCategory.Cybersecurity),
@@ -154,13 +159,15 @@ public static class DefaultScenarios
 
     private static ScenarioDefinition ProcessSafetyViolation() => new(
         "process-safety-violation", "Process safety violation", nameof(IncidentCategory.ProcessSafety),
-        "With T-102 near high-high and interlocks bypassed, the PLC-1 fill setpoints are forced to 95-100 % and the transfer pumps are forced on.",
-        90, ["process-safety-violation", "abnormal-tank-level"],
+        "With T-102 near high-high and interlocks bypassed, the PLC-1 fill setpoints are forced to 95-100 %, PLC-2 is forced to stop draining T-102 and the transfer pumps are forced on.",
+        90, ["process-safety-violation", "abnormal-tank-level", "unexpected-pump-activity"],
         [
             At(2, new SetTankLevelAction("T-102", 88)),
             At(4, new InterlockBypassAction(true, "unattributed")),
             At(6, new ForceRegisterAction("PLC-1", RegisterArea.Holding, ControllerRegisterMap.SetpointBase, 950)),
             At(6, new ForceRegisterAction("PLC-1", RegisterArea.Holding, ControllerRegisterMap.SetpointBase + 1, 1000)),
+            At(6, new ForceRegisterAction("PLC-2", RegisterArea.Holding, ControllerRegisterMap.SetpointBase, 0)),
+            At(6, new ForceRegisterAction("PLC-2", RegisterArea.Holding, ControllerRegisterMap.SetpointBase + 1, 10)),
             At(8, new ForceActuatorAction("P-101", 1)),
             At(8, new ForceActuatorAction("P-103", 1))
         ]);

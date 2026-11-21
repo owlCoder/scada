@@ -41,6 +41,13 @@ public sealed class MassBalanceRule : DetectionRuleBase
         _balances = balances;
     }
 
+    public override int ResetState()
+    {
+        var cleared = _windows.Count;
+        _windows.Clear();
+        return cleared;
+    }
+
     public override string Id => "mass-balance-inconsistency";
     public override string Name => "Sensor and process inconsistency";
     public override string Description => "Tank level changes that do not match measured inflows and outflows.";

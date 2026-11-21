@@ -9,9 +9,8 @@ namespace Application.Training;
 /// Instructor and scenario hooks that manipulate the simulated environment directly. These model attacks and
 /// failures; they never touch real equipment or networks.
 /// </summary>
-public interface ITrainingEnvironment
+public interface ITrainingEnvironment : IPlantView
 {
-    PlantSnapshot Snapshot();
     CommandResult SpoofSensor(string sensorId, double? value);
     CommandResult InjectFault(FaultInjection fault);
     CommandResult ClearFault(string deviceId);

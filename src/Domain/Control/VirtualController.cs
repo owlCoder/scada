@@ -1,3 +1,4 @@
+using Domain.Process.Devices;
 using Domain.Network;
 
 namespace Domain.Control;
@@ -79,6 +80,19 @@ public abstract class VirtualController
         UpdateStatusRegisters();
         return new(Id, true, commands, delivered, false, restored, false, []);
     }
+
+    /// <summary>
+    /// Commands loop-less outputs back to their configured automatic position when they have drifted (for example after a
+    /// fail-safe or when an operator returns the device to automatic). Outputs already commanded this scan are skipped.
+    /// </summary>
+    protected IReadOnlyList<ActuatorCommand> HoldAutomaticPositions(FieldReadResult inputs, IReadOnlyCollection<ActuatorCommand> commanded) =>
+        Definition.Outputs
+            .Where(o => o.AutomaticPosition is not null && commanded.All(c => c.DeviceId != o.DeviceId))
+            .Select(o => (Output: o, Feedback: inputs.Actuators.GetValueOrDefault(o.DeviceId)))
+            .Where(x => x.Feedback is { Mode: ControlMode.Automatic, IsAvailable: true }
+                && Math.Abs(x.Feedback.Value - x.Output.AutomaticPosition!.Value) > 0.01)
+            .Select(x => new ActuatorCommand(x.Output.DeviceId, x.Output.AutomaticPosition!.Value))
+            .ToArray();
 
     public bool Start()
     {

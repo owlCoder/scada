@@ -38,6 +38,8 @@ public static class SecurityRegistrationExtensions
         services.AddSingleton(legacyPolicy);
         services.AddSingleton(new UserAccessPolicy(namedUsers));
         services.AddSingleton<IReadOnlyList<UserCredential>>(namedUsers);
+        services.AddSingleton<AccountSeeder>();
+        services.AddSingleton(sp => new AuthenticationThrottle(sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ApiKeyAuthenticator>();
 
         services.AddSingleton(configuration.Bind<CommandRateOptions>(ConfigurationSections.CommandRate));

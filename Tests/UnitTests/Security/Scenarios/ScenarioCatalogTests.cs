@@ -8,6 +8,13 @@ namespace UnitTests.Security.Scenarios;
 
 public sealed class ScenarioCatalogTests
 {
+    private static readonly string[] WindowedRules =
+    [
+        "repeated-rejected-commands", "unauthorized-access", "command-replay", "excessive-control-requests",
+        "invalid-register-operations", "network-segmentation-violation", "conflicting-operator-commands", "operator-misuse",
+        "mass-balance-inconsistency", "communication-failure", "historian-integrity"
+    ];
+
     public static TheoryData<string> ScenarioIds => [.. DefaultScenarios.Create().Select(s => s.Id)];
 
     [Theory]
@@ -27,6 +34,35 @@ public sealed class ScenarioCatalogTests
         Assert.Equal(ScenarioOutcome.Detected, run.Outcome);
         var stored = await rig.RunStore.GetAsync(run.RunId, CancellationToken.None);
         Assert.Equal(ScenarioOutcome.Detected, stored!.Outcome);
+    }
+
+    [Fact]
+    public async Task ScenariosRunBackToBackInOneProcessAreEachDetected()
+    {
+        var rig = new TestRig();
+        await rig.RunForAsync(300);
+        var results = new List<string>();
+        string[] previousExpected = [];
+
+        foreach (var scenario in DefaultScenarios.Create())
+        {
+            var run = await rig.RunScenarioAsync(scenario.Id);
+            if (run.Outcome != ScenarioOutcome.Detected)
+                results.Add($"{scenario.Id}: {run.Outcome}, missing {string.Join(", ", run.ExpectedDetections.Except(run.ObservedDetections))}");
+            // Event- and window-based rules the previous scenario triggered must not leak into this run. Condition rules
+            // (for example a tank that is genuinely still overfull) may legitimately continue.
+            var carriedOver = previousExpected.Except(scenario.ExpectedDetections).Intersect(run.ObservedDetections)
+                .Intersect(WindowedRules).ToArray();
+            if (carriedOver.Length > 0)
+                results.Add($"{scenario.Id}: detections carried over from the previous run: {string.Join(", ", carriedOver)}");
+            previousExpected = [.. scenario.ExpectedDetections];
+            Assert.All(run.Actions, a => Assert.True(a.Succeeded && !a.Detail.Contains("CommunicationUnavailable"),
+                $"{scenario.Id}: {a.Action}: {a.Detail}"));
+            // Let genuine after-effects (for example an overfull tank draining) settle, as an instructor would.
+            await rig.RunForAsync(120);
+        }
+
+        Assert.True(results.Count == 0, string.Join(Environment.NewLine, results));
     }
 
     [Fact]

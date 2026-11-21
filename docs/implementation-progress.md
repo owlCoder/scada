@@ -52,3 +52,5 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
 - 2026-11-21, first commit (Phase B-D): `dotnet build scada.slnx -c Release` with 0 warnings; 246 .NET tests (12 architecture,
   155 unit, 79 integration) and 3 Node frontend tests pass. All 14 scenarios end as Detected, and 600 simulated seconds of
   normal operation produce no detections.
+- 2026-11-21, second commit (review and live-run fixes): 263 .NET tests (12 architecture, 166 unit, 85 integration) and 3 frontend tests
+  pass. Live API: 14/14 scenarios Detected back to back over HTTP, Modbus TCP read verified, dashboard verified in a browser.

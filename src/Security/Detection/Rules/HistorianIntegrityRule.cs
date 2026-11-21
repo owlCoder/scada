@@ -4,9 +4,15 @@ using Domain.Incidents;
 
 namespace Security.Detection.Rules;
 
-/// <summary>Verifies the historian hash chain every <c>Threshold</c> steps.</summary>
+/// <summary>
+/// Verifies the historian hash chain every <c>Threshold</c> steps. Each altered sample is reported exactly once, so a
+/// historian that stays corrupted does not keep raising detections in later scenario runs.
+/// </summary>
 public sealed class HistorianIntegrityRule(TelemetryHistorian historian) : DetectionRuleBase
 {
+    private const int MaxRemembered = 10_000;
+    private readonly HashSet<long> _reported = [];
+    private readonly Queue<long> _reportedOrder = new();
     private long _evaluations;
 
     public override string Id => "historian-integrity";
@@ -20,11 +26,17 @@ public sealed class HistorianIntegrityRule(TelemetryHistorian historian) : Detec
         if (_evaluations++ % Math.Max(1, (long)settings.Threshold) != 0)
             return [];
 
-        var report = historian.Verify();
-        return report.IsValid
-            ? []
-            : [new DetectionFinding($"sequence:{report.FirstInvalidSequence}", $"Historian record for {report.TagId} was altered",
-                $"Sample {report.FirstInvalidSequence} ({report.TagId}) fails hash-chain verification among {report.SamplesChecked} samples.",
-                report.TagId, [Evidence("historian", $"{report.FirstInvalidSequence}", $"Tag {report.TagId}")])];
+        var findings = new List<DetectionFinding>();
+        foreach (var violation in historian.FindViolations().Where(v => _reported.Add(v.Sequence)))
+        {
+            _reportedOrder.Enqueue(violation.Sequence);
+            if (_reportedOrder.Count > MaxRemembered)
+                _reported.Remove(_reportedOrder.Dequeue());
+            findings.Add(new DetectionFinding($"sequence:{violation.Sequence}", $"Historian record for {violation.TagId} was altered",
+                $"Sample {violation.Sequence} ({violation.TagId}, recorded {violation.Timestamp:O}) fails hash-chain verification.",
+                violation.TagId, [Evidence("historian", $"{violation.Sequence}", $"Tag {violation.TagId}")]));
+        }
+
+        return findings;
     }
 }

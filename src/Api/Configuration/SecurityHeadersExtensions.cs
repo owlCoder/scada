@@ -10,6 +10,8 @@ public static class SecurityHeadersExtensions
             context.Response.Headers["X-Frame-Options"] = "DENY";
             context.Response.Headers["Referrer-Policy"] = "no-referrer";
             context.Response.Headers["Cache-Control"] = "no-store";
+            context.Response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
             await next();
         });
         return app;

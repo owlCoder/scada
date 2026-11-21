@@ -6,3 +6,6 @@
 *.suo
 TestResults/
 .env
+
+# Local secrets and tool output (dev credentials, PKI, review inputs)
+.scada/

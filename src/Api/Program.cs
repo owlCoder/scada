@@ -13,11 +13,14 @@ using Api.Endpoints.Scenarios;
 using Api.Endpoints.Simulation;
 using Api.Endpoints.System;
 using Api.Endpoints.Telemetry;
+using Security.Accounts;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddScadaServices();
 
 var app = builder.Build();
+// Accounts must exist before the first request is authenticated.
+await app.Services.GetRequiredService<AccountSeeder>().SeedAsync(CancellationToken.None);
 app.UseScadaSecurityHeaders();
 app.UseDefaultFiles();
 app.UseStaticFiles();

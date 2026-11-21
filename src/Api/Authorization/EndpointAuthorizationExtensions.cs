@@ -17,8 +17,11 @@ public static class EndpointAuthorizationExtensions
         {
             var http = context.HttpContext;
             var authenticator = http.RequestServices.GetRequiredService<ApiKeyAuthenticator>();
-            var user = authenticator.Authenticate(http.Request.Headers[ApiKeyHeader].ToString());
-            if (user is null || user.Role < role)
+            var source = $"ip:{http.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+            var result = await authenticator.AuthenticateAsync(http.Request.Headers[ApiKeyHeader].ToString(), source, http.RequestAborted);
+            if (result.Status == AuthenticationStatus.Throttled)
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+            if (result.User is not { } user || user.Role < role)
                 return Results.Unauthorized();
 
             http.Items[ScadaPrincipal.ItemKey] = new ScadaPrincipal(user);
