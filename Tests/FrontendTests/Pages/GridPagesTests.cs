@@ -25,6 +25,8 @@ public sealed class GridPagesTests
     [InlineData(typeof(GridMeasurements), "RTU1")]
     [InlineData(typeof(GridInstructor), "Grid instructor")]
     [InlineData(typeof(GridEditor), "Network editor")]
+    [InlineData(typeof(GridScenarios), "Scenario catalog")]
+    [InlineData(typeof(GridRules), "Grid detection rules")]
     public async Task EachGridPageRendersAFakeNetwork(Type component, string expected)
     {
         await using var host = HmiTestHost.Create(AccessRole.Administrator, mode: SimulationMode.Grid);

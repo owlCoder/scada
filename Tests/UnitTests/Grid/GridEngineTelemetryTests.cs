@@ -68,4 +68,60 @@ public sealed class GridEngineTelemetryTests
         Assert.Equal(1500, view.Protections.Single(p => p.Id == "QF1-50").PickupValue);
         return Task.CompletedTask;
     }
+
+    [Fact]
+    public Task RedactorComputesImportAndLossesFromReportedMeasurements()
+    {
+        var world = new GridWorld(DefaultGridDefinition.Create(), 104, TimeSpan.FromHours(8));
+        world.Step(1);
+        var truth = world.Snapshot();
+        var view = GridViewRedactor.ForOperators(truth, world.Definition);
+
+        var tr1Reported = truth.Measurements.Single(m => m.ElementId == "TR1" && m.Kind == GridMeasurementKind.ActivePower).ReportedValue;
+        Assert.Equal(tr1Reported, view.Totals.SourceImportMw, 9);
+        Assert.InRange(view.Totals.SourceImportMw / truth.Totals.SourceImportMw, 0.99, 1.01);
+        Assert.True(view.Totals.SourceImportMw > 0);
+        var load = view.Totals.LoadMw;
+        var generation = view.Totals.GenerationMw;
+        Assert.Equal(Math.Max(0, view.Totals.SourceImportMw + generation - load), view.Totals.LossesMw, 9);
+        // The reported balance differs from the true losses only by telemetry noise, and stays positive and small.
+        Assert.InRange(view.Totals.LossesMw / truth.Totals.SourceImportMw, 0, 0.05);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task RedactorTotalsFollowSpoofedSourcePowerAndShedLoad()
+    {
+        var world = new GridWorld(DefaultGridDefinition.Create(), 104, TimeSpan.FromHours(8));
+        world.Step(1);
+        // Spoof the 110/20 kV transformer power to a low value: the operator's import and losses follow the spoof.
+        world.SetSpoof("RTU1:TR1:ActivePower", 0.5, "attacker");
+        var spoofed = GridViewRedactor.ForOperators(world.Snapshot(), world.Definition);
+        Assert.Equal(0.5, spoofed.Totals.SourceImportMw, 9);
+        Assert.Equal(Math.Max(0, 0.5 + spoofed.Totals.GenerationMw - spoofed.Totals.LoadMw), spoofed.Totals.LossesMw, 9);
+        // The administrator still sees the true import.
+        Assert.True(world.Snapshot().Totals.SourceImportMw > spoofed.Totals.SourceImportMw);
+        world.SetSpoof("RTU1:TR1:ActivePower", null, "instructor");
+
+        // Open the incomer: reported import collapses and every customer is unsupplied.
+        world.OperateSwitch("Q0", false, "instructor", GridChangeCause.Operator);
+        world.Step(1);
+        var deenergized = GridViewRedactor.ForOperators(world.Snapshot(), world.Definition);
+        Assert.True(deenergized.Totals.SourceImportMw < 0.01);
+        Assert.Equal(0, deenergized.Totals.CustomersSupplied);
+        Assert.Equal(0, deenergized.Totals.LossesMw);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task RedactorComputesImportWithoutDefinitionFromSourceSideBuses()
+    {
+        var world = new GridWorld(DefaultGridDefinition.Create(), 104, TimeSpan.FromHours(8));
+        world.Step(1);
+        var withDefinition = GridViewRedactor.ForOperators(world.Snapshot(), world.Definition);
+        var without = GridViewRedactor.ForOperators(world.Snapshot());
+        Assert.Equal(withDefinition.Totals.SourceImportMw, without.Totals.SourceImportMw, 9);
+        Assert.Equal(withDefinition.Totals.LossesMw, without.Totals.LossesMw, 9);
+        return Task.CompletedTask;
+    }
 }

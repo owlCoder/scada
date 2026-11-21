@@ -48,7 +48,8 @@ public sealed class Iec104AsduHandler(
         }
 
         responses.Add(Echo(asdu, CauseOfTransmission.ActivationConfirm));
-        var snapshot = view.Snapshot();
+        // A master interrogates the operator view: reported values, never true values, spoofing state or injected faults.
+        var snapshot = GridViewRedactor.ForOperators(view.Snapshot(), view.Definition);
         var now = time.GetUtcNow();
         var packType = (Iec104TypeId?)null;
         var objects = new List<Iec104InformationObject>();

@@ -1,25 +1,30 @@
+using Application.Grid;
+using Domain.Grid.Definition;
 using Domain.Grid.Snapshots;
 
 namespace Protocols.Iec104;
 
 /// <summary>
-/// Reads the current value of a mapped point from a grid snapshot. Measurements use the reported value and quality
-/// (the operator view), never <see cref="GridMeasurementSnapshot.TrueValue"/>; switch and tap states come from the
-/// switch/branch snapshots.
+/// Reads the current value of a mapped point from a grid snapshot. The slave only ever reports the operator view:
+/// measurements use the reported value and quality, and switch/tap states come from the reported RTU measurements —
+/// never <see cref="GridMeasurementSnapshot.TrueValue"/>, spoofing state or injected faults. Pass the definition to
+/// have the snapshot projected through <see cref="GridViewRedactor.ForOperators"/> first; callers that already hold
+/// the redacted view (monitor/GI iterate many points over one snapshot) pass it with a null definition.
 /// </summary>
 public static class Iec104PointEvaluator
 {
-    public static Iec104Sample? Evaluate(Iec104Point point, GridSnapshot snapshot)
+    public static Iec104Sample? Evaluate(Iec104Point point, GridSnapshot snapshot, GridDefinition? definition = null)
     {
         ArgumentNullException.ThrowIfNull(point);
         ArgumentNullException.ThrowIfNull(snapshot);
+        var view = definition is null ? snapshot : GridViewRedactor.ForOperators(snapshot, definition);
         return point.Kind switch
         {
-            Iec104PointKind.Measurement => EvaluateMeasurement(point, snapshot),
-            Iec104PointKind.SwitchStatus => EvaluateSwitch(point, snapshot),
-            Iec104PointKind.TapPosition => EvaluateTap(point, snapshot),
-            Iec104PointKind.ProtectionTrip => EvaluateProtection(point, snapshot),
-            Iec104PointKind.RtuStatus => EvaluateRtuStatus(point, snapshot),
+            Iec104PointKind.Measurement => EvaluateMeasurement(point, view),
+            Iec104PointKind.SwitchStatus => EvaluateSwitch(point, view),
+            Iec104PointKind.TapPosition => EvaluateTap(point, view),
+            Iec104PointKind.ProtectionTrip => EvaluateProtection(point, view),
+            Iec104PointKind.RtuStatus => EvaluateRtuStatus(point, view),
             _ => null
         };
     }

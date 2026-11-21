@@ -8,6 +8,8 @@ public enum GridScenarioTargetKind
 {
     /// <summary>Breakers switching lines, ordered by current loading descending; <c>Count</c> of them.</summary>
     FeederBreakers,
+    /// <summary>The line branches switched by feeder breakers, ordered by current loading descending; <c>Count</c> of them.</summary>
+    FeederLines,
     /// <summary>The line branch with the highest current loading.</summary>
     MostLoadedFeeder,
     /// <summary>A protection relay whose switch is a feeder breaker.</summary>

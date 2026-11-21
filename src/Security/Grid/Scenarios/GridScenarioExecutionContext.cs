@@ -1,5 +1,7 @@
+using Application.Commands;
 using Application.Grid;
 using Application.Identity;
+using Security.Grid.Control;
 
 namespace Security.Grid.Scenarios;
 
@@ -9,7 +11,8 @@ public sealed class GridScenarioExecutionContext(
     IGridTraining training,
     IGridControl control,
     GridScenarioTargets targets,
-    Guid runId)
+    Guid runId,
+    CommandReplayGuard replayGuard)
 {
     private readonly Dictionary<string, long> _sequences = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _captured = new(StringComparer.Ordinal);
@@ -20,11 +23,14 @@ public sealed class GridScenarioExecutionContext(
     public IGridControl Control { get; } = control;
     public GridScenarioTargets Targets { get; } = targets;
 
-    /// <summary>The next sequence number this run would issue for <paramref name="actor"/> (tracks what the run already sent).</summary>
+    /// <summary>
+    /// The next sequence number this run would issue for <paramref name="actor"/>: monotonic across runs, because the
+    /// platform replay guard is process-wide — a second run must not restart at 1 or every command would be a replay.
+    /// </summary>
     public long NextSequence(string actor)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actor);
-        var next = _sequences.TryGetValue(actor, out var last) ? last + 1 : 1;
+        var next = Math.Max(_sequences.TryGetValue(actor, out var last) ? last : 0, replayGuard.LastSequence(GridControlService.ReplayKey(actor))) + 1;
         _sequences[actor] = next;
         return next;
     }

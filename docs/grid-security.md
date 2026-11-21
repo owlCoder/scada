@@ -54,12 +54,12 @@ Catalog in `src/Security/Grid/Scenarios/Catalog/DefaultGridScenarios.cs`, mapped
 | --- | --- | --- | --- | --- |
 | `grid-industroyer-breaker-opening` | 30 | Forced opening of 3 feeder breakers in quick succession | `grid-unsolicited-switching`, `grid-mass-switching` | Industroyer 2016 payload |
 | `grid-oltc-manipulation` | 120 | OLTC forced to max tap → overvoltage at consumers | `grid-tap-manipulation`, `grid-voltage-violation` | Voltage manipulation via tap changers |
-| `grid-protection-tampering-fault` | 60 | Relay disabled + pickup raised, then a short circuit → backup trips | `grid-protection-tampering`, `grid-mass-switching` | Industroyer protection tampering |
+| `grid-protection-tampering-fault` | 60 | The relays of one feeder breaker are disabled and their pickup raised, then three-phase short circuits on every feeder head trip several breakers (the tampered feeder only falls to incomer backup) | `grid-protection-tampering`, `grid-mass-switching` | Industroyer protection tampering |
 | `grid-false-data-injection` | 90 | Feeder current/voltage measurements spoofed to hide an overload | `grid-measurement-inconsistency` | Ukraine 2015 KillDisk/FDI style |
 | `grid-load-shedding-spoofing` | 60 | 8 shed-load commands from an unexpected iec104 actor | `grid-load-shedding-anomaly`, `grid-unauthorized-command` | Ukraine 2015 BlackEnergy blackout |
 | `grid-rtu-denial-of-service` | 60 | Feeder RTU offline, then a breaker opened in the blind period | `grid-rtu-communication-loss`, `grid-unsolicited-switching` | Industroyer serial/RTU kill |
 | `grid-unauthorized-commands` | 40 | Viewer commands (NotAuthorized) + replayed sequence number | `grid-unauthorized-command` | Ukraine 2015 stolen credentials |
-| `grid-capacitor-manipulation` | 120 | AVR disabled, all capacitor steps in → overvoltage | `grid-voltage-violation` | Coordinated reactive-power attack |
+| `grid-capacitor-manipulation` | 120 | AVR switched to manual, all capacitor steps in one iec104 burst, then the OLTC stepped to its limit by iec104 commands → overvoltage plus the command burst | `grid-voltage-violation`, `grid-unauthorized-command` | Coordinated reactive-power attack |
 
 Targets are selectors resolved at run start against the running definition: `FeederBreakers` (most loaded first),
 `MostLoadedFeeder`, `FeederProtection`, `TransformerWithOltc`, `LargestLoads`, `FeederRtu`, `RtuBreaker`, `AnyBreaker`,
@@ -78,7 +78,16 @@ Measurements per run include customers lost, max loading, min/max voltage, alarm
   its pattern and stays silent on normal data; dedup/cooldown; incidents; scope reset between runs; a full simulated day
   produces zero findings; every scenario resolves targets on both networks, runs to completion, issues the expected
   training/control calls and is scored Detected; back-to-back runs; role checks and audit; clear start failures.
+- `Tests/UnitTests/Grid/GridRealEngineSecurityTests.cs` (+ `Support/GridRealEngineRig.cs`) runs the **real** merged stack —
+  `GridEngine` + `GridCoordinator.StepAsync` with the real `GridDetectionEngine`, `GridScenarioEngine`,
+  `GridControlService` and `GridTrainingService` over in-memory stores and a fake clock (deterministic, no wall-clock
+  waits): a full simulated day on the default network with the default seed produces **zero** findings, each of the 8
+  catalog scenarios ends `Completed`/`Detected` with its expected rule ids observed and all actions succeeded, and after
+  the run's cleanup/restore the network is back to a sane state (all breakers closed but the normally-open tie, no
+  faults/spoofs/active alarms, taps/capacitors/protections at definition defaults, converged); all 8 also run back-to-back
+  on one engine instance (this exercises the scenario engine's re-entrancy guard and the process-wide replay guard).
 - `Tests/IntegrationTests/Api/GridSecurityApiTests.cs` drives the REST surface (roles, 401/403/404/400, run lifecycle,
-  detections/incidents per run, rule tuning) against a fake view registered in the test host.
-- `GridEngineEndToEndTodoTests` is the lead's TODO: the same end-to-end coverage against Agent A's real grid engine
-  once it is merged (skipped until then).
+  detections/incidents per run, rule tuning) against a fake view, **and** the real engine: with the hosted loop disabled
+  the test steps `GridCoordinator` directly — a full simulated day produces zero grid findings through
+  `/api/grid/detections`, and each catalog scenario started through `POST /api/grid/scenarios/{id}/start` ends
+  `Detected` with the expected detections observed and the network sane again (checked through the admin view).

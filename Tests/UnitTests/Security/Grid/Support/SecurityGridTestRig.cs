@@ -1,3 +1,4 @@
+using Application.Commands;
 using Application.Detection;
 using Application.Events;
 using global::Application.Grid;
@@ -39,7 +40,7 @@ public sealed class SecurityGridTestRig
         DetectionStore = new InMemoryDetectionStore();
         RunStore = new InMemoryScenarioRunStore();
         Scenarios = new GridScenarioEngine(DefaultGridScenarios.Create(), View, Training, Control, DetectionStore, RunStore,
-            Events, Realtime, Time, NullLogger<GridScenarioEngine>.Instance);
+            Events, Realtime, Time, new CommandReplayGuard(), NullLogger<GridScenarioEngine>.Instance);
         Detection = new GridDetectionEngine(DefaultGridDetectionRules.Create(View), Buffer, DetectionStore, Incidents,
             Events, Realtime, Scenarios, View, NullLogger<GridDetectionEngine>.Instance);
     }

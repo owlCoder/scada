@@ -1,6 +1,6 @@
 # Incidents
 
-Detection findings create incidents through `IncidentService`, rather than a background monitor scanning SecurityAlert events. Each detection retains rule/evidence metadata and a linked incident ID. New findings merge into an active incident with the same correlation key: `scenario:{runId}` during a scenario, otherwise category plus device/rule. Duplicate evidence references are not attached twice. Merging can raise severity and add affected devices.
+Detection findings create incidents through `IncidentService`, rather than a background monitor scanning SecurityAlert events. Each detection retains rule/evidence metadata and a linked incident ID. New findings merge into an active incident with the same correlation key: `scenario:{runId}` during a scenario, otherwise category plus device/rule. Duplicate evidence references are not attached twice. Merging can raise severity and add affected devices. Water and grid detection both raise through the same `IncidentService`, so the shared incidents page and `/api/incidents` list incidents of both modes (filter by `scenarioRunId` for a specific scenario run).
 
 Incidents have UUID IDs, human numbers such as `INC-00042`, category/severity/priority, assignment, affected devices, scenario linkage, evidence, timeline, comments, resolution notes and an optimistic `version`. PostgreSQL allocates numbers from `scada.incident_number_seq`.
 

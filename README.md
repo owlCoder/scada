@@ -57,6 +57,10 @@ The HMI covers overview, plant diagram, tanks, pumps, valves, sensors, PLC/RTU, 
 
 Both external protocols are disabled by default. Modbus binds to `127.0.0.1:1502`; OPC UA binds to `127.0.0.1:4840`. OPC UA anonymous access and automatic certificate acceptance both default to `false`. [Protocol details](docs/protocols.md)
 
+## Grid mode
+
+Next to the water plant the API can run a second, independent simulation mode: a 110/20/0.4 kV electrical distribution grid (power flow, protection relays, OLTC/AVR, RTU telemetry with noise/spoofing). Pick **Electrical distribution grid** on the sign-in page; water sessions are untouched. The grid HMI adds overview, single-line diagram, feeders, transformers, switches, loads, protection, measurements, alarms, instructor training, grid scenarios (`/grid/scenarios`), grid detection rules (`/grid/rules`) and a network editor (`/grid/editor`). Grid mode has its own detection rules and 8 attack scenarios (Ukraine 2015/2016), an optional IEC 60870-5-104 slave that reports the operator view only, and REST under `/api/grid`. See [grid mode](docs/grid.md), [grid HMI](docs/hmi-grid.md), [IEC 104](docs/iec104.md) and [grid security](docs/grid-security.md).
+
 ## Development checks
 
 ```bash

@@ -394,4 +394,68 @@ public sealed class Iec104WireTests
         using var anonymous = host.Factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/grid/iec104/map")).StatusCode);
     }
+
+    [Fact]
+    public async Task InterrogationReportsTheOperatorViewNotGroundTruth()
+    {
+        await using var host = await Iec104TestHost.StartAsync();
+        // Ground truth: SW1 is open and the tap is 3, but the RTUs report the switch closed (spoofed) and tap 1.
+        host.View.SetSnapshot(SpoofedSnapshot(switchReportedClosed: true, tapReported: 1));
+
+        await using var client = await StartedClientAsync(host.Port);
+        await client.SendAsync(RawIec104Client.Information(0, 0, Interrogation(1)));
+        var responses = await CollectUntilTerminationAsync(client, firstSendSequence: 0);
+        var objects = responses.Where(r => r.Header.Cause == CauseOfTransmission.InterrogationResponse)
+            .SelectMany(r => r.Objects).ToList();
+        var switchPoint = objects.Single(o => o.InformationObjectAddress == 2000);
+        Assert.Equal(Iec104ElementCodec.DoublePointClosed, Iec104ElementCodec.DecodeDoublePoint(switchPoint.Data[0]));
+
+        await client.SendAsync(RawIec104Client.Information(1, 0, Interrogation(2)));
+        var tapResponses = await CollectUntilTerminationAsync(client, firstSendSequence: responses.Count);
+        var tapObjects = tapResponses.Where(r => r.Header.Cause == CauseOfTransmission.InterrogationResponse)
+            .SelectMany(r => r.Objects).ToList();
+        var tapPoint = tapObjects.Single(o => o.InformationObjectAddress == 3000);
+        Assert.Equal(1, Iec104ElementCodec.DecodeStepPosition(tapPoint.Data[0]));
+    }
+
+    [Fact]
+    public async Task SpontaneousFramesFollowTheReportedValuesNotGroundTruth()
+    {
+        await using var host = await Iec104TestHost.StartAsync();
+        await using var client = await StartedClientAsync(host.Port);
+        var monitor = host.Factory.Services.GetRequiredService<Iec104GridMonitor>();
+        var t0 = new DateTimeOffset(2026, 5, 6, 7, 8, 9, TimeSpan.Zero);
+        // Prime: the breaker truly closed, reported closed.
+        await monitor.OnGridStepAsync(new GridStepReport(t0, SpoofedSnapshot(switchReportedClosed: true, tapReported: 3), []), CancellationToken.None);
+        // The RTU now reports the breaker open (spoof) while the true state stays closed: the master sees the reported change.
+        await monitor.OnGridStepAsync(new GridStepReport(t0.AddSeconds(1), SpoofedSnapshot(switchReportedClosed: false, tapReported: 3), []), CancellationToken.None);
+        var (switchFrame, _) = await client.ReceiveAsduAsync();
+        Assert.Equal(Iec104TypeId.M_DP_TB_1, switchFrame.Header.Type);
+        Assert.Equal(2000, switchFrame.Objects[0].InformationObjectAddress);
+        Assert.Equal(Iec104ElementCodec.DoublePointOpen, Iec104ElementCodec.DecodeDoublePoint(switchFrame.Objects[0].Data[0]));
+        // No measurement point ever carries the true value: the spoofed voltage measurement is reported as-is, quality Good.
+        await monitor.OnGridStepAsync(new GridStepReport(t0.AddSeconds(2), SpoofedSnapshot(switchReportedClosed: false, tapReported: 3, busVoltageReported: 9.9), []), CancellationToken.None);
+        var (measurement, _) = await client.ReceiveAsduAsync();
+        Assert.Equal(1005, measurement.Objects[0].InformationObjectAddress);
+        Assert.Equal(9.9f, Iec104ElementCodec.DecodeMeasurement(measurement.Objects[0].Data[..4]));
+    }
+
+    /// <summary>Ground truth: switch open, tap 3, bus 10.2 kV; the RTU-reported (possibly spoofed) values are parameterised.</summary>
+    private static Domain.Grid.Snapshots.GridSnapshot SpoofedSnapshot(bool switchReportedClosed, int tapReported, double busVoltageReported = 10.2)
+    {
+        var baseSnapshot = Iec104SampleGrid.CreateSnapshot(lineCurrentA: 120, busVoltageKv: 10.2, switchClosed: false, tap: 3);
+        var measurements = baseSnapshot.Measurements.Where(m => m.Id != "M-B-LV-V").Concat(
+        [
+            new Domain.Grid.Snapshots.GridMeasurementSnapshot("M-SW1-S", Iec104SampleGrid.SwitchId, Iec104SampleGrid.Rtu1Id,
+                Domain.Grid.Snapshots.GridMeasurementKind.SwitchState, "", switchReportedClosed ? 1 : 0,
+                Domain.Process.Devices.MeasurementQuality.Good, 0, true, switchReportedClosed ? 1 : 0),
+            new Domain.Grid.Snapshots.GridMeasurementSnapshot("M-TR1-T", Iec104SampleGrid.TransformerId, Iec104SampleGrid.Rtu2Id,
+                Domain.Grid.Snapshots.GridMeasurementKind.TapPosition, "step", tapReported,
+                Domain.Process.Devices.MeasurementQuality.Good, 3, true, tapReported),
+            new Domain.Grid.Snapshots.GridMeasurementSnapshot("M-B-LV-V", Iec104SampleGrid.BusLvId, Iec104SampleGrid.Rtu1Id,
+                Domain.Grid.Snapshots.GridMeasurementKind.Voltage, "kV", busVoltageReported,
+                Domain.Process.Devices.MeasurementQuality.Good, 10.2, true, busVoltageReported)
+        ]).ToArray();
+        return baseSnapshot with { Measurements = measurements };
+    }
 }
