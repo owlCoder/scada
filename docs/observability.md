@@ -61,4 +61,12 @@ The dashboard is at `http://127.0.0.1:18888`. Its login token is printed in `doc
 | --- | --- |
 | `/health/live` | The process is up |
 | `/health/ready` | Storage is reachable and the write queue is not saturated; returns 503 otherwise and reports counters only |
-| `/health` | Reports the storage provider |
+| `/health` | Reports the storage provider; no database probe. Browser HTML requests open the authenticated HMI health page |
+
+## Operational interpretation
+
+Readiness probes have a two-second storage deadline and fail at 90% queue occupancy. Liveness does not guarantee that simulation time advances. `scada.persistence.dropped` and `scada.persistence.failed` are cumulative process counters; monitor increases, not just current readiness. Realtime subscriptions drop oldest messages independently and are not represented by the persistence drop counter.
+
+Detection rule evaluation/findings/suppression/duration are exposed through `GET /api/detections/metrics` and the HMI health page; they are not separate instruments in `Scada.Runtime`. There is no checked-in Prometheus `/metrics` endpoint: configure OTLP/gRPC export to a collector/dashboard. Without `Observability:OtlpEndpoint`, console logging still runs but no OTLP export is enabled.
+
+[Runbook](operations.md) covers diagnostics and common failures; [configuration](configuration.md) gives exact defaults and environment forms.
