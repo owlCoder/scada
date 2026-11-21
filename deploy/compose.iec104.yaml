@@ -1,0 +1,10 @@
+# Opt in to publishing IEC 60870-5-104 (grid SCADA protocol); combine with either base Compose file.
+# Set SCADA_IEC104_ENABLED=true as well to start the listener. The container listens on all interfaces,
+# but the port is published on loopback only.
+services:
+  api:
+    ports:
+      - "127.0.0.1:${SCADA_IEC104_PORT:-2404}:2404"
+    environment:
+      Protocols__Iec104__Enabled: ${SCADA_IEC104_ENABLED:-false}
+      Protocols__Iec104__BindAddress: 0.0.0.0
