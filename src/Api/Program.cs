@@ -1,32 +1,42 @@
 using Api.Configuration;
-using Api.Endpoints.Commands;
-using Api.Endpoints.Read;
+using Api.Endpoints.Accounts;
+using Api.Endpoints.Alarms;
+using Api.Endpoints.Controllers;
+using Api.Endpoints.Detections;
+using Api.Endpoints.Events;
+using Api.Endpoints.Identity;
+using Api.Endpoints.Incidents;
+using Api.Endpoints.Network;
+using Api.Endpoints.Plant;
+using Api.Endpoints.Registers;
+using Api.Endpoints.Scenarios;
+using Api.Endpoints.Simulation;
 using Api.Endpoints.System;
-using Infrastructure;
+using Api.Endpoints.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddScadaServices();
 
 var app = builder.Build();
-if ((builder.Configuration["Storage:Provider"] ?? "Memory").Equals("Postgres", StringComparison.OrdinalIgnoreCase))
-    await app.Services.GetRequiredService<PostgresSchemaService>().VerifyAsync();
-
 app.UseScadaSecurityHeaders();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 HealthEndpoints.Map(app);
 IdentityEndpoints.Map(app);
-PlantReadEndpoints.Map(app);
-EventReadEndpoints.Map(app);
-IncidentReadEndpoints.Map(app);
-ScenarioReadEndpoints.Map(app);
-RegisterReadEndpoints.Map(app);
-PlantCommandEndpoints.Map(app);
-RegisterCommandEndpoints.Map(app);
+PlantEndpoints.Map(app);
+SimulationEndpoints.Map(app);
+ControllerEndpoints.Map(app);
+NetworkEndpoints.Map(app);
+RegisterEndpoints.Map(app);
+AlarmEndpoints.Map(app);
+EventEndpoints.Map(app);
+TelemetryEndpoints.Map(app);
 IncidentEndpoints.Map(app);
 ScenarioEndpoints.Map(app);
+DetectionEndpoints.Map(app);
+AccountEndpoints.Map(app);
 
 app.Run();
 
-public partial class Program { }
+public partial class Program;

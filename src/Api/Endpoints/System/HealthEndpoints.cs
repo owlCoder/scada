@@ -1,28 +1,27 @@
+using Application.Persistence;
+using Application.Simulation;
+
 namespace Api.Endpoints.System;
 
 public static class HealthEndpoints
 {
+    private const double SaturationThreshold = 0.9;
+
     public static WebApplication Map(WebApplication app)
     {
-        app.MapGet("/health", async (IServiceProvider services, CancellationToken cancellationToken) =>
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy", storage = "memory" }));
+        app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
+        app.MapGet("/health/ready", (IPersistenceQueue queue, SimulationEngine engine) =>
         {
-            var dataSource = services.GetService<Npgsql.NpgsqlDataSource>();
-            if (dataSource is null)
-                return Results.Ok(new { status = "healthy", storage = "memory" });
-
-            try
+            var persistence = queue.Status;
+            var saturated = persistence.Pending >= persistence.Capacity * SaturationThreshold;
+            var body = new
             {
-                await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-                return Results.Ok(new { status = "healthy", storage = "postgres" });
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception) when (exception is Npgsql.NpgsqlException or TimeoutException or OperationCanceledException)
-            {
-                return Results.Json(new { status = "degraded", storage = "postgres" }, statusCode: 503);
-            }
+                status = saturated ? "degraded" : "ready",
+                persistence,
+                simulation = engine.Status
+            };
+            return saturated ? Results.Json(body, statusCode: StatusCodes.Status503ServiceUnavailable) : Results.Ok(body);
         });
         return app;
     }

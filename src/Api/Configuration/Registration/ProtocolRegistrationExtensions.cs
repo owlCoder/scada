@@ -1,4 +1,4 @@
-using Protocols;
+using Protocols.Modbus;
 
 namespace Api.Configuration.Registration;
 
@@ -6,16 +6,23 @@ public static class ProtocolRegistrationExtensions
 {
     public static WebApplicationBuilder AddProtocolServices(this WebApplicationBuilder builder)
     {
-        if (!builder.Configuration.GetValue<bool>("Protocols:ModbusEnabled"))
+        var configuration = builder.Configuration;
+        var options = configuration.Bind<ModbusOptions>(ConfigurationSections.Modbus);
+        // Legacy keys from earlier releases remain supported.
+        if (configuration.GetValue<bool?>("Protocols:ModbusEnabled") is { } legacyEnabled)
+            options.Enabled = legacyEnabled;
+        if (configuration.GetValue<int?>("Protocols:ModbusPort") is { } legacyPort)
+            options.Port = legacyPort;
+
+        builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton<ModbusRequestProcessor>();
+        if (!options.Enabled)
             return builder;
 
-        var port = builder.Configuration.GetValue<int?>("Protocols:ModbusPort") ?? 1502;
-        if (port is < 1024 or > 65535)
-            throw new InvalidOperationException("Modbus port must be between 1024 and 65535.");
-
-        builder.Services.AddSingleton<IHostedService>(services =>
-            new ModbusTcpService(services.GetRequiredService<ModbusFrameService>(),
-                services.GetRequiredService<ILogger<ModbusTcpService>>(), port));
+        var errors = options.Validate();
+        if (errors.Count > 0)
+            throw new InvalidOperationException(string.Join(" ", errors));
+        builder.Services.AddSingleton<ModbusTcpServer>();
         return builder;
     }
 }

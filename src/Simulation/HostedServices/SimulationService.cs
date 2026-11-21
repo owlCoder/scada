@@ -1,23 +1,39 @@
-using Application;
+using Application.Simulation;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Simulation.Configuration;
 
-namespace Simulation;
+namespace Simulation.HostedServices;
 
-public sealed class SimulationService(IPlantService plant, ILogger<SimulationService> logger) : BackgroundService
+/// <summary>Real-time loop: one step every StepSeconds / TimeScale wall-clock seconds. Paused steps are skipped by the engine.</summary>
+public sealed class SimulationService(
+    SimulationCoordinator coordinator,
+    SimulationEngine engine,
+    SimulationHostOptions options,
+    ILogger<SimulationService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        if (!options.RunLoop)
+            return;
+
+        var period = TimeSpan.FromSeconds(engine.Options.StepSeconds / engine.Options.TimeScale);
+        using var timer = new PeriodicTimer(period);
+        logger.LogInformation("Simulation loop started: {Step}s simulated every {Period} ms", engine.Options.StepSeconds,
+            period.TotalMilliseconds);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
-                plant.Advance(1);
+                await coordinator.StepAsync(false, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Simulation error");
+                logger.LogError(exception, "Simulation step failed");
             }
         }
     }

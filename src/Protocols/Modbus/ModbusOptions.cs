@@ -1,0 +1,29 @@
+namespace Protocols.Modbus;
+
+public sealed class ModbusOptions
+{
+    public bool Enabled { get; set; }
+    public int Port { get; set; } = 1502;
+    public int MaxConnections { get; set; } = 16;
+    public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Modbus has no authentication, so accepted writes (only when register writes are enabled) are attributed to
+    /// this local operator identity.
+    /// </summary>
+    public string WriteActor { get; set; } = "modbus-local";
+
+    public IReadOnlyList<string> Validate()
+    {
+        var errors = new List<string>();
+        if (Port is < 1024 or > 65535)
+            errors.Add("Modbus port must be between 1024 and 65535.");
+        if (MaxConnections is < 1 or > 256)
+            errors.Add("Modbus MaxConnections must be between 1 and 256.");
+        if (IdleTimeout <= TimeSpan.Zero || IdleTimeout > TimeSpan.FromMinutes(10))
+            errors.Add("Modbus IdleTimeout must be between 0 and 10 minutes.");
+        if (string.IsNullOrWhiteSpace(WriteActor))
+            errors.Add("Modbus WriteActor is required.");
+        return errors;
+    }
+}
