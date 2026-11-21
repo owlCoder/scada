@@ -7,13 +7,13 @@ using Security.Authentication;
 namespace Api.Authentication;
 
 /// <summary>
-/// Blazor circuits outlive single requests, so the HMI re-checks password sessions every minute: a disabled or locked
+/// Blazor circuits outlive single requests, so the HMI re-checks password sessions periodically (every minute by default): a disabled or locked
 /// account, a changed password or a changed role ends the circuit's authentication and sends the user back to sign-in.
 /// </summary>
-public sealed class ScadaRevalidatingAuthenticationStateProvider(ILoggerFactory loggerFactory, IServiceScopeFactory scopes)
+public sealed class ScadaRevalidatingAuthenticationStateProvider(ILoggerFactory loggerFactory, IServiceScopeFactory scopes, SessionSettings settings)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)
 {
-    protected override TimeSpan RevalidationInterval => TimeSpan.FromMinutes(1);
+    protected override TimeSpan RevalidationInterval => settings.RevalidationInterval;
 
     protected override async Task<bool> ValidateAuthenticationStateAsync(AuthenticationState authenticationState, CancellationToken cancellationToken)
     {

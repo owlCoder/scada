@@ -13,6 +13,7 @@
     <Project Path="Tests/UnitTests/UnitTests.csproj" />
     <Project Path="Tests/DatabaseTests/DatabaseTests.csproj" />
     <Project Path="Tests/FrontendTests/FrontendTests.csproj" />
+    <Project Path="Tests/EndToEndTests/EndToEndTests.csproj" />
     <Project Path="Tests/IntegrationTests/IntegrationTests.csproj" />
     <Project Path="Tests/ArchitectureTests/ArchitectureTests.csproj" />
     <Project Path="Tests/ProtocolTests/ProtocolTests.csproj" />
