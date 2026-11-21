@@ -291,6 +291,46 @@ namespace Infrastructure.Persistence.Postgres.Migrations
                     b.ToTable("events", "scada");
                 });
 
+            modelBuilder.Entity("Infrastructure.Persistence.Postgres.Entities.GridDefinitionEntity", b =>
+                {
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean")
+                        .HasColumnName("active");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definition");
+
+                    b.HasKey("Version");
+
+                    b.HasIndex("Active")
+                        .IsUnique()
+                        .HasFilter("active = TRUE");
+
+                    b.ToTable("grid_definitions", "scada");
+                });
+
             modelBuilder.Entity("Infrastructure.Persistence.Postgres.Entities.IncidentCommentEntity", b =>
                 {
                     b.Property<Guid>("Id")
