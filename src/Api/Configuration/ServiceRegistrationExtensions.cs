@@ -23,6 +23,7 @@ public static class ServiceRegistrationExtensions
             .AddGridHmiServices()
             .AddProtocolServices()
             .AddGridServices()
+            .AddGridDispatcherServices()
             .AddHostedWorkers();
     }
 }

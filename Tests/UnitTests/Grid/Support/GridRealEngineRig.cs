@@ -46,9 +46,11 @@ public sealed class GridRealEngineRig
         var observers = new List<IGridObserver>();
         Coordinator = new GridCoordinator(Engine, Store, Events, Realtime, observers, Time, NullLogger<GridCoordinator>.Instance);
         Training = new GridTrainingService(Coordinator);
+        Tagging = new GridTaggingService(Engine, Events, Realtime, Time);
+        History = new GridHistoryService(Engine, Options);
         ReplayGuard = new CommandReplayGuard();
         Control = new GridControlService(Coordinator, Options, Time,
-            new CommandMonitor(Events, Time, new CommandRateOptions()), ReplayGuard);
+            new CommandMonitor(Events, Time, new CommandRateOptions()), ReplayGuard, Tagging, Engine);
         Scenarios = new GridScenarioEngine(DefaultGridScenarios.Create(), Engine, Training, Control, DetectionStore, RunStore,
             Events, Realtime, Time, ReplayGuard, NullLogger<GridScenarioEngine>.Instance);
         Detection = new GridDetectionEngine(DefaultGridDetectionRules.Create(Engine), Buffer, DetectionStore, Incidents,
@@ -71,6 +73,8 @@ public sealed class GridRealEngineRig
     public InMemoryScenarioRunStore RunStore { get; }
     public GridCoordinator Coordinator { get; }
     public GridTrainingService Training { get; }
+    public GridTaggingService Tagging { get; }
+    public GridHistoryService History { get; }
     public GridControlService Control { get; }
     public CommandReplayGuard ReplayGuard { get; }
     public GridScenarioEngine Scenarios { get; }

@@ -21,8 +21,10 @@ public sealed class GridEngineTestRig
         Options = options ?? new();
         Engine = new(Options, Time);
         Store = new(Time);
+        Tagging = new(Engine, Events, realtime ?? new NullRealtimePublisher(), Time);
+        History = new(Engine, Options);
         Coordinator = new(Engine, Store, Events, realtime ?? new NullRealtimePublisher(), observers ?? [], Time, NullLogger<GridCoordinator>.Instance);
-        Control = new(Coordinator, Options, Time, new CommandMonitor(Events, Time, rate ?? new() { Limit = 1000 }), new());
+        Control = new(Coordinator, Options, Time, new CommandMonitor(Events, Time, rate ?? new() { Limit = 1000 }), new(), Tagging, Engine);
         Training = new(Coordinator);
     }
 
@@ -31,6 +33,8 @@ public sealed class GridEngineTestRig
     public GridEngine Engine { get; }
     public InMemoryGridDefinitionStore Store { get; }
     public GridEngineEventCollector Events { get; } = new();
+    public GridTaggingService Tagging { get; }
+    public GridHistoryService History { get; }
     public GridCoordinator Coordinator { get; }
     public GridControlService Control { get; }
     public GridTrainingService Training { get; }

@@ -175,9 +175,24 @@ the editor picker is covered by `Tests/FrontendTests/Pages/GridTemplatePickerTes
 
 ## Security model
 
-- `GridControlService` (`IGridControl`, Operator): role check → command rate limit → replay guard (sequence numbers) →
+- `GridControlService` (`IGridControl`, Operator): role check → **dispatcher-tag check** → command rate limit →
+  replay guard (sequence numbers) →
   atomic select-before-operate with `Grid:SelectTimeoutSeconds` (default 30 s, wall clock) → audit of every accept/reject.
   Disconnectors refuse to operate under load (> 1 A); an offline owning RTU yields `CommunicationLoss`.
+- Dispatcher tags (`GridTaggingService`, `IGridTagging`, Operator): `PlaceTagAsync`/`RemoveTagAsync` validate the element
+  against the active definition, require a reason (≤ 200 chars), cap the store at 200 tags with unique ids, audit every
+  place/remove (category `Audit`, source `grid:tags`) and publish the tag list on the realtime topic `grid-tags`.
+  Tags are cleared when a different definition is activated. `DoNotOperate`/`Earthed`/`WorkInProgress` tags are enforced
+  by `GridControlService`: switching commands (`SelectOpen`/`SelectClose`/`Execute`) on a tagged switch — or on a switch
+  whose element (line/transformer/load) carries such a tag — and tap/capacitor/load commands on a tagged element are
+  rejected with `GridCommandRejection.Interlocked` and a message naming the tag; `Information` never blocks. IEC
+  60870-5-104 commands pass through the same service, so a tagged switch also gets a negative activation confirmation on
+  the wire. **Training actions (`IGridTraining`, e.g. `ForceSwitchAsync`) deliberately ignore tags** — attack scenarios
+  must be able to override a dispatcher's tag.
+- Grid historian (`GridHistoryService`, `IGridHistory` + `IGridObserver`): on every `Grid:HistoryEverySteps`-th step it
+  records the **reported** measurement values of `GridViewRedactor.ForOperators` (never true values, so a spoofed
+  measurement trends as the spoofed operator-visible value) into a bounded ring buffer of 2,000 points per measurement,
+  cleared on definition activation; reads are thread-safe.
 - `GridTrainingService` (`IGridTraining`, Administrator, audited, `Scenario` events): inject/clear faults, spoof
   measurements, change protection settings, force switches/taps, toggle RTUs, restore training defaults.
 - `GridViewRedactor.ForOperators` hides injected faults, true values, spoofing, protection setting changes and the
@@ -203,6 +218,7 @@ Section `Grid` (see [configuration.md](configuration.md)):
 | `Grid:TimeScale` | `60` | Simulated seconds per wall second; the loop uses a wall-clock timer |
 | `Grid:RandomSeed` | `104` | Seed for frequency and measurement noise |
 | `Grid:SelectTimeoutSeconds` | `30` | Select-before-operate timeout (wall clock) |
+| `Grid:HistoryEverySteps` | `1` | Record a historian point every N grid steps |
 | `Grid:StartTimeOfDay` | `08:00` | Simulated time of day at startup (HH:mm) |
 
 The loop timer is deliberately wall-clock (`new PeriodicTimer(period)`), like the water `SimulationService`: tests may
@@ -237,6 +253,10 @@ Base path `/api/grid`, same API-key/cookie + CSRF + rate-limit conventions as th
 | `GET /api/grid/definition` | Viewer | Live definition |
 | `GET /api/grid/definitions` | Viewer | All stored versions |
 | `GET /api/grid/measurements` | Viewer | Reported measurements (redacted unless Administrator) |
+| `GET /api/grid/tags` | Viewer | Active dispatcher tags |
+| `POST /api/grid/tags` | Operator | Place a tag: `{ elementId, kind, reason }` (`DoNotOperate`/`Earthed`/`WorkInProgress`/`Information`) |
+| `DELETE /api/grid/tags/{id}` | Operator | Remove a tag |
+| `GET /api/grid/history/{measurementId}?points=` | Viewer | Last `points` (default 200, max 2000) reported historian samples of one measurement |
 | `POST /api/grid/commands` | Operator | `GridCommand` (SBO switches, taps, capacitor steps, load shed, protection reset, alarm ack) |
 | `POST /api/grid/runtime/pause` / `resume` | Operator | Pause/resume the loop |
 | `POST /api/grid/runtime/reset` | Administrator | Reset the world to the active definition |
@@ -253,9 +273,12 @@ Rejections map to 403 (not authorized), 429 (rate limited) and 400 (everything e
 - Physics: `src/Domain/Grid/Network/GridWorld.cs`, `PowerFlow/`, `Protection/`, `Profiles/`
 - Engine, coordinator, redaction: `src/Application/Grid/`
 - Control/training security: `src/Security/Grid/Control/`
+- Dispatcher backend (tags + historian): `src/Security/Grid/Control/GridTaggingService.cs`,
+  `src/Application/Grid/GridHistoryService.cs`
 - Stores and migration: `src/Infrastructure/Persistence/{InMemory,Postgres}/`, `Migrations/`
 - Hosted loop: `src/Simulation/HostedServices/GridSimulationService.cs`
-- REST and registration: `src/Api/Endpoints/Grid/`, `src/Api/Configuration/Registration/GridRegistrationExtensions.cs`
+- REST and registration: `src/Api/Endpoints/Grid/`, `src/Api/Configuration/Registration/GridRegistrationExtensions.cs`,
+  `src/Api/Configuration/Registration/GridDispatcherRegistrationExtensions.cs`
 - Tests: `Tests/UnitTests/Grid/` (engine physics/control/training/telemetry/redaction incl.
   `GridRealEngineSecurityTests` driving the real coordinator + detection + scenarios deterministically),
   `Tests/IntegrationTests/Grid/` and `Tests/IntegrationTests/Api/GridSecurityApiTests.cs` (REST incl. real-engine
