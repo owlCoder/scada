@@ -9,7 +9,7 @@ using Xunit;
 
 namespace IntegrationTests.Support;
 
-internal sealed class OpcUaTestHost : IAsyncDisposable
+public sealed class OpcUaTestHost : IAsyncDisposable
 {
     public const string NamespaceUri = "urn:scada-training:plant";
     public const string OperatorPassword = "opc-test-operator-password";
