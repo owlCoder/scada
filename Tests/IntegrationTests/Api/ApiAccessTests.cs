@@ -9,6 +9,26 @@ namespace IntegrationTests.Api;
 public sealed class ApiAccessTests
 {
     [Fact]
+    public async Task OperatorsCannotReadInjectedFaultsOrBypassesButInstructorsCan()
+    {
+        using var factory = ApiTestFactory.Create(("Simulation:Host:RunLoop", "false"));
+        using var op = factory.Client(ApiTestFactory.OperatorKey);
+        using var admin = factory.Client(ApiTestFactory.AdminKey);
+        var training = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService<Application.Training.ITrainingEnvironment>(factory.Services);
+        training.InjectFault(new Domain.Process.Commands.FaultInjection("P-101", PumpFault: Domain.Process.Devices.PumpFault.Seized));
+        training.SetInterlockBypass(true, "scenario");
+        var view = await op.GetJsonAsync("/api/plant");
+        var truth = await admin.GetJsonAsync("/api/plant");
+        Assert.False(view.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.True(truth.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.Equal("None", view.GetProperty("pumps")[0].GetProperty("fault").GetString());
+        Assert.Equal("Seized", truth.GetProperty("pumps")[0].GetProperty("fault").GetString());
+        var device = await op.GetJsonAsync("/api/plant/devices/P-101");
+        Assert.Equal("None", device.GetProperty("fault").GetString());
+    }
+
+    [Fact]
     public async Task HealthIsPublicButPlantRequiresKey()
     {
         using var factory = ApiTestFactory.Create();

@@ -9,6 +9,7 @@
 @inject DetectionRuleAdministrationService RuleAdmin
 
 <PageTitle>Accounts &amp; rules · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 @if (Session.IsInstructor)
 {
     <h1>Accounts &amp; rules</h1>

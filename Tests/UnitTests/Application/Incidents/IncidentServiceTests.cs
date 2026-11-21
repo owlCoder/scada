@@ -15,6 +15,26 @@ public sealed class IncidentServiceTests
             key, ["P-101"], null, new IncidentEvidence(rig.Time.GetUtcNow(), "detection", Guid.NewGuid().ToString("N"), "evidence"));
 
     [Fact]
+    public async Task EveryDeniedMutationIsAuditedWithoutChangingTheIncident()
+    {
+        var rig = new TestRig();
+        var incident = (await rig.Incidents.RaiseAsync(Draft(rig), CancellationToken.None)).Incident!;
+        var viewer = new Actor("guest", AccessRole.Viewer);
+        var results = new[]
+        {
+            await rig.Incidents.ChangeStatusAsync(incident.Id, IncidentStatus.Acknowledged, null, null, viewer, CancellationToken.None),
+            await rig.Incidents.AssignAsync(incident.Id, "guest", null, viewer, CancellationToken.None),
+            await rig.Incidents.ChangePriorityAsync(incident.Id, IncidentPriority.Urgent, null, viewer, CancellationToken.None),
+            await rig.Incidents.AddCommentAsync(incident.Id, "denied", viewer, CancellationToken.None)
+        };
+        Assert.All(results, r => Assert.False(r.Succeeded));
+        Assert.Equal(4, rig.Buffer.GetRecent().Count(e => e.Category == global::Application.Events.EventCategories.AuthorizationDenied
+            && e.Actor == "guest" && e.Message.Contains(incident.Id.ToString(), StringComparison.Ordinal)));
+        Assert.Equal(incident, await rig.Incidents.GetAsync(incident.Id, CancellationToken.None));
+        Assert.Empty(await rig.IncidentStore.GetCommentsAsync(incident.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task RaisingCreatesANumberedIncidentAndMergesCorrelatedDetections()
     {
         var rig = new TestRig();

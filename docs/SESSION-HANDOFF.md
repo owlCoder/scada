@@ -283,3 +283,29 @@ dotnet build src/Security/Security.csproj -c Release
 ```
 
 Steps 1–4 are done; start with **Step 5** above. Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.
+
+
+## 5. Steps 3–6 review resolution (`fix/review-step6`)
+
+Verified `.scada/review/mistral-hmi.txt` and `mistral-fixes.txt` against the merged code before changing it.
+
+- F1/F6: extended the shared plant redactor; REST, HMI (Pumps, Valves, Diagram, Overview), hub snapshots and live operator messages all use it. Independent safety trips remain visible. Current domain interlock reasons originate in the safety evaluator, not injected faults; defensive filtering also hides fault-specific diagnoses when a hidden fault exists.
+- F2/F3/F4/F5: actor-checked, audited simulation pause/resume; confirmation for pause/resume and alarm acknowledgement; denied incident mutation audits; serialized account updates with self/last-enabled-administrator guards.
+- F9/F10/F11: logged refresh failures with a shared recoverable banner on every live page; awaited, cancellable Overview/Alarms reads with load-id guards; cached lifetime token and awaited pump disposal.
+- F12/F13/F15: page cap 10,000, UI/server filter cap 200 with trimming, and scenario publication after successful saves (including periodic realtime publications). Failed starts do not reserve an active run; failed pause/resume saves restore the previous state.
+- Persistence/auth review: stable telemetry UUIDs, conflict-ignoring inserts and EF-generated `AddTelemetrySampleIdentity`; three-attempt password conflict budget; warning-only advisory-unlock errors; PBKDF2 verification capped at 1,000,000 iterations. Regression tests include ambiguous commits, existing-schema upgrades and unlock failure following migration failure.
+- F7 is intentional field diagnostics: forced-register flags/counts are already documented operator-visible register data. No requirement here hides register forces. F8 is intentional health diagnostics: documented counters are also available from public readiness probes and contain no secrets. F14 is the deliberate health HTML/JSON negotiation contract; monitors should request JSON, now explicit in the operations guide. These are not authorization defects. F6 duplicates F1.
+- Seeder review item 4 is intentional bootstrap-only behavior (already implemented with `TryCreateAsync`); clarified restart and lost-development-credentials recovery in the security guide. Clock-skew item 5 is deferred as requested; strict future-session rejection remains.
+
+
+Validation for this review fix:
+
+- `dotnet build scada.slnx -c Release --disable-build-servers`: passed, zero warnings/errors (native macOS and Linux SDK 10.0.100).
+- `dotnet ef migrations add AddTelemetrySampleIdentity --project src/Infrastructure --startup-project src/Infrastructure --output-dir Persistence/Postgres/Migrations --namespace Infrastructure.Persistence.Postgres.Migrations`: generated the migration/designer/snapshot. Database tests verified the model has no pending changes.
+- `dotnet test Tests/<Project> -c Release --no-build`: all eight suites passed in Linux containers: ArchitectureTests 13, UnitTests 223, IntegrationTests 149, FrontendTests 40, ProtocolTests 51, PerformanceTests 6, DatabaseTests 30, EndToEndTests 8; total 520, zero skips.
+- Docker 29.9.3 was available. DatabaseTests used PostgreSQL 17.7 Testcontainers with isolated databases; atomic sign-in `UPDATE ... RETURNING` tests passed.
+- Native macOS architecture/unit/frontend tests passed. Native OPC UA hit unavailable-keychain errors, the database API-restart test timed out during host startup, and native Chromium was denied Mach-port access by the sandbox. Linux reruns resolved these environment failures. Remaining stalled native integration/protocol/performance attempts were cancelled after the Linux replacements completed.
+- Browser command used `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright SCADA_E2E_REQUIRED=1 dotnet test Tests/EndToEndTests -c Release --no-build`. The Linux container used a separate host cache subdirectory to avoid treating macOS Chromium installation markers as Linux binaries.
+- One unchanged protocol stalled-client timing test timed out on the first Linux run; the complete protocol suite passed on the next run. No assertion or timeout was weakened.
+- `git diff --check`: passed. No push, merge, rebase or other worktree changes.
+- Commit attempt: sandbox denied creating `/Users/danijel/Desktop/scada/.git/worktrees/scada-review6/index.lock` during both staging and commit. Changes are deliberately left uncommitted for the lead, per the task instructions.

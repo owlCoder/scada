@@ -9,6 +9,7 @@ public static class IncidentQueryEvaluator
     public static PagedResult<Incident> Apply(IEnumerable<Incident> source, IncidentQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
+        query = query.Normalize();
         var items = source;
         if (query.Status is { } status)
             items = items.Where(i => i.Status == status);

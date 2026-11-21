@@ -1,0 +1,8 @@
+@if (Error is not null)
+{
+    <p class="banner banner-error" role="alert">@Error</p>
+}
+
+@code {
+    [Parameter] public string? Error { get; set; }
+}

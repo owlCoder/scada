@@ -102,7 +102,7 @@ public sealed class IncidentService(
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (!actor.HasRole(AccessRole.Operator))
-            return IncidentChange.Failure(IncidentOperationStatus.InvalidInput, "Operator role required.");
+            return Denied(id, actor, AccessRole.Operator);
         if (string.IsNullOrWhiteSpace(text) || text.Length > IncidentWorkflow.MaxTextLength)
             return IncidentChange.Failure(IncidentOperationStatus.InvalidInput, "Comment must contain 1 to 4000 characters.");
 
@@ -134,7 +134,7 @@ public sealed class IncidentService(
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (!actor.HasRole(required))
-            return IncidentChange.Failure(IncidentOperationStatus.InvalidInput, $"{required} role required.");
+            return Denied(id, actor, required);
 
         var incident = await store.GetAsync(id, cancellationToken);
         if (incident is null)
@@ -163,6 +163,13 @@ public sealed class IncidentService(
 
         realtime.Publish(RealtimeTopics.Incidents, updated);
         return change with { Incident = updated };
+    }
+
+    private IncidentChange Denied(Guid id, Actor actor, AccessRole required)
+    {
+        events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.AuthorizationDenied, EventSeverity.High,
+            "incidents", $"Denied mutation of incident {id}: {required} role required.", actor.Name));
+        return IncidentChange.Failure(IncidentOperationStatus.InvalidInput, $"{required} role required.");
     }
 
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];

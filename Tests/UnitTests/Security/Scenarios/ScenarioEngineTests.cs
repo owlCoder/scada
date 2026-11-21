@@ -11,6 +11,63 @@ public sealed class ScenarioEngineTests
 {
     private static readonly Actor Instructor = new("instructor", AccessRole.Administrator);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedSavesNeverPublishTheUnsavedRecord(bool throws)
+    {
+        var rig = new TestRig();
+        var store = new FailingScenarioRunStore();
+        var feed = new global::Infrastructure.Realtime.RealtimeBroadcaster(rig.Time);
+        await using var subscription = feed.Subscribe([global::Application.Realtime.RealtimeTopics.Scenarios], 64);
+        var scenarios = new ScenarioEngine(global::Security.Scenarios.Catalog.DefaultScenarios.Create(),
+            new ScenarioServices(rig.Training, rig.Commands, rig.ReplayGuard, rig.Registers, rig.Alarms, rig.Accounts),
+            rig.Engine, rig.DetectionStore, store, rig.Events, feed, rig.Time,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ScenarioEngine>.Instance);
+        await scenarios.StartAsync("sensor-spoofing", Instructor, CancellationToken.None);
+        var saved = scenarios.Current;
+        Assert.True(subscription.Reader.TryRead(out _));
+        store.Fail = !throws;
+        store.Throw = throws;
+        await scenarios.PauseAsync(Instructor, CancellationToken.None);
+        Assert.Equal(saved, scenarios.Current);
+        Assert.False(subscription.Reader.TryRead(out _));
+        store.Fail = false;
+        store.Throw = false;
+        await scenarios.PauseAsync(Instructor, CancellationToken.None);
+        Assert.Equal(ScenarioRunState.Paused, scenarios.Current!.State);
+        Assert.True(subscription.Reader.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task FailedStartsAndPeriodicSavesDoNotPublishUnsavedRuns()
+    {
+        var rig = new TestRig();
+        var store = new FailingScenarioRunStore { Fail = true };
+        var feed = new global::Infrastructure.Realtime.RealtimeBroadcaster(rig.Time);
+        await using var subscription = feed.Subscribe([global::Application.Realtime.RealtimeTopics.Scenarios], 64);
+        var scenarios = new ScenarioEngine(global::Security.Scenarios.Catalog.DefaultScenarios.Create(),
+            new ScenarioServices(rig.Training, rig.Commands, rig.ReplayGuard, rig.Registers, rig.Alarms, rig.Accounts),
+            rig.Engine, rig.DetectionStore, store, rig.Events, feed, rig.Time,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ScenarioEngine>.Instance);
+        Assert.False((await scenarios.StartAsync("sensor-spoofing", Instructor, CancellationToken.None)).Succeeded);
+        Assert.Null(scenarios.Current);
+        Assert.Null(scenarios.ActiveRunId);
+        Assert.False(subscription.Reader.TryRead(out _));
+        store.Fail = false;
+        Assert.True((await scenarios.StartAsync("sensor-spoofing", Instructor, CancellationToken.None)).Succeeded);
+        Assert.True(subscription.Reader.TryRead(out _));
+        store.Fail = true;
+        for (var step = 0; step < 20; step++)
+            await scenarios.OnStepAsync(rig.Engine.Step(true)!, CancellationToken.None);
+        Assert.False(subscription.Reader.TryRead(out _));
+        store.Fail = false;
+        await scenarios.OnStepAsync(rig.Engine.Step(true)!, CancellationToken.None);
+        Assert.True(subscription.Reader.TryRead(out var message));
+        var published = Assert.IsType<ScenarioRunRecord>(message.Payload);
+        Assert.Equal(published, await store.GetAsync(published.RunId, CancellationToken.None));
+    }
+
     [Fact]
     public async Task OnlyOneRunCanBeActiveAndUnknownScenariosAreRejected()
     {

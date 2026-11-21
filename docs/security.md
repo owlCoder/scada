@@ -42,7 +42,7 @@ Both the session and antiforgery cookies use `SameAsRequest` by default, which m
 
 ## Accounts
 
-Configured users are created on first start and are then managed through `/api/accounts` (Administrator only).
+Configured users are created on first start and are then managed through `/api/accounts` (Administrator only). Configuration is bootstrap-only: changing a configured password, role or enabled state does not overwrite an existing account on restart. Administrators cannot disable or demote themselves, or disable/demote the last enabled Administrator.
 
 ```bash
 export Security__Users__0__Username="alice"
@@ -64,6 +64,7 @@ In the `Development` environment, `appsettings.Development.json` enables `Securi
 
 - **What it creates:** the accounts `dev-viewer`, `dev-operator` and `dev-admin`, each with a random password and API key.
 - **Where the credentials go:** `.scada/dev-credentials.txt` at the repository root. The file is gitignored, readable by its owner only, and only the `SCADA_DEV_*` lines are rewritten. Credentials are never logged.
+- **Existing development accounts:** retained without resetting credentials or re-enabling accounts. Deleting the credentials file does not recover existing passwords; use another administrator to rotate the password/API key.
 - **Production:** never. The feature is off in every other environment.
 
 ## Keycloak (optional)

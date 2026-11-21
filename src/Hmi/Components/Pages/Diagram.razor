@@ -2,6 +2,7 @@
 @inherits RealtimeComponentBase
 
 <PageTitle>Plant diagram · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <h1>Plant diagram</h1>
 <p class="muted">@(Session.IsInstructor ? "Instructor view: true process values." : "Values as reported by the field instruments.")
     Select a device for details.</p>

@@ -29,9 +29,9 @@ The HMI uses authenticated Blazor interactive server components. Open `/account/
 
 ## Confirming changes
 
-Pump commands/mode/interlock reset, valve position/mode, controller controls, network changes, register writes, all incident edits, all scenario controls, account changes and rule saves open a confirmation dialog. The action executes only after **Confirm**; **Cancel** closes it without execution. The dialog disables buttons while running, displays the result and refreshes the page afterward. Confirmation is a UI workflow, not a REST requirement.
+Simulation pause/resume, alarm acknowledgement, pump commands/mode/interlock reset, valve position/mode, controller controls, network changes, register writes, all incident edits, all scenario controls, account changes and rule saves open a confirmation dialog. The action executes only after **Confirm**; **Cancel** closes it without execution. The dialog disables buttons while running, displays the result and refreshes the page afterward. Confirmation is a UI workflow, not a REST requirement.
 
-Overview pause/resume and alarm acknowledgement execute directly. Read filters, device selection and health probes do not need confirmation. Credential rotation shows the new secret in a separate dialog only once; copy it securely before selecting Done.
+Read filters, device selection and health probes do not need confirmation. Credential rotation shows the new secret in a separate dialog only once; copy it securely before selecting Done.
 
 Plant commands still enforce modes, interlocks, rate limits and reachable controller/field paths after confirmation. A valve travels to its setpoint at its stroke rate. Incident changes capture the displayed version; a concurrent change produces a conflict and refreshed details to review before retrying.
 
@@ -39,12 +39,14 @@ Plant commands still enforce modes, interlocks, rate limits and reachable contro
 
 Components subscribe to application topics and refresh from services, normally at most every 250 ms; alarms and health use one second. Queues hold 64 messages and drop oldest messages for slow consumers. This is a current-state display, not guaranteed delivery of every transition. Events page one follows new and persisted events; later pages stay stable until navigation/filtering. Incident pages follow updates while preserving filters and paging. Scenarios reload history when the current run ID/state changes. Accounts/rules load on entry and after local actions rather than subscribe to live changes.
 
+Refresh failures are logged and shown in a shared error banner; later updates retry and clear the banner after recovery. Asynchronous history/count loads are awaited and cancelled when their page is disposed. Search filters are limited to 200 characters in the UI and stores; paging is capped at page 10,000.
+
 Health storage checks run on entry and, when messages trigger refreshes, at most every 15 seconds, with a two-second timeout. The Check storage button requests a fresh probe. If the simulation is paused, there may be fewer refresh triggers.
 
 Blazor circuits require a live connection; reconnect/reload after an interruption to refresh state. The external SignalR hub is documented separately in [API](api.md). Local password account identity is revalidated every minute within HMI circuits; a role change also invalidates that circuit identity. HTTP password-cookie requests validate each time and adopt role changes. OIDC circuit identity is not rechecked against the local account store. Session expiry, disablement or password changes require sign-in again.
 
 ## Redaction
 
-For Viewers and Operators, `PlantViewRedactor` replaces sensor true values with reported values, clears sensor fault/drift/spoof fields and derives tank level/volume from the reported level sensor. Sensor health becomes Healthy for good quality or Warning otherwise. Administrators receive the original plant snapshot.
+For Viewers and Operators, `PlantViewRedactor` replaces sensor true values with reported values, clears sensor fault/drift/spoof fields and derives tank level/volume from the reported level sensor. Sensor health becomes Healthy for good quality or Warning otherwise. Pump/valve fault fields become None, scenario actuator attribution is hidden, and interlock bypass state is hidden. Actuator health reflects observable safety trips rather than injected fault diagnoses. Independent overfill, dry-run, deadhead and pressure trips remain visible, even alongside an injected fault; fault-specific interlock diagnostics are hidden. Administrators receive the original plant snapshot.
 
-This is limited plant-view redaction, not an instructor/trainee secrecy boundary across all data: actuator faults, interlocks/overflow, controller forced-register metadata, scenario action logs, rule settings, events and incident evidence remain visible where the page/API permits them. Trends and telemetry contain reported measurements for every role. OPC UA uses operator measurements even for Administrators.
+This is limited plant-view redaction, not an instructor/trainee secrecy boundary across all data: real safety trips/overflow, controller forced-register metadata, scenario action logs, rule settings, events and incident evidence remain visible where the page/API permits them. Trends and telemetry contain reported measurements for every role. OPC UA uses operator measurements even for Administrators.

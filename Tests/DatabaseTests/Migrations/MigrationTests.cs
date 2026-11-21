@@ -15,6 +15,48 @@ namespace DatabaseTests.Migrations;
 public sealed class MigrationTests(PostgresContainerFixture postgres)
 {
     [Fact]
+    public async Task UnlockFailureDoesNotReplaceTheOriginalMigrationFailure()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+        var interceptor = new MigrationFailureInterceptor();
+        var options = Infrastructure.Persistence.Postgres.ScadaDbContext.Configure(
+            new DbContextOptionsBuilder<Infrastructure.Persistence.Postgres.ScadaDbContext>(), database.ConnectionString)
+            .AddInterceptors(interceptor).Options;
+        var factory = new PooledDbContextFactory<Infrastructure.Persistence.Postgres.ScadaDbContext>(options);
+        var migrator = new Infrastructure.Persistence.Postgres.ScadaDatabaseMigrator(factory,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Infrastructure.Persistence.Postgres.ScadaDatabaseMigrator>.Instance);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => migrator.MigrateAsync(CancellationToken.None));
+        Assert.Equal("original migration failure", exception.Message);
+        Assert.True(interceptor.UnlockAttempted);
+        // Connection disposal releases the lock even though explicit unlock failed.
+        Assert.NotEmpty(await database.MigrateAsync());
+    }
+
+    [Fact]
+    public async Task ExistingTelemetryGetsDistinctStableIdentitiesWithoutLosingRows()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+        await using (var db = await database.ContextFactory().CreateDbContextAsync())
+        {
+            var previous = db.Database.GetMigrations().Single(id => id.EndsWith("_AddUserAccountVersion", StringComparison.Ordinal));
+            await db.GetService<IMigrator>().MigrateAsync(previous);
+        }
+        await database.ExecuteAsync("""
+            INSERT INTO scada.telemetry (sequence, timestamp, simulation_time, tag_id, value, quality, hash)
+            VALUES (1, '2025-03-01T10:00:00Z', interval '1 second', 'LT-101', 42, 'Good', 'legacy-hash'),
+                   (1, '2025-03-01T10:00:00Z', interval '1 second', 'LT-101', 42, 'Good', 'legacy-hash')
+            """);
+        Assert.Single(await database.MigrateAsync());
+        var store = new PostgresTelemetryStore(database.ContextFactory());
+        var rows = await store.QueryAsync(new TelemetryQuery(null, null, null), CancellationToken.None);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(2, rows.Select(r => r.SampleId).Distinct().Count());
+        Assert.DoesNotContain(rows, r => r.SampleId == Guid.Empty);
+        Assert.Equal(0, await store.AppendAsync(rows, CancellationToken.None));
+        Assert.Equal(2, (await store.QueryAsync(new TelemetryQuery(null, null, null), CancellationToken.None)).Count);
+    }
+
+    [Fact]
     public async Task MigrationsCreateTheSchemaAndMatchTheModel()
     {
         var database = await postgres.CreateDatabaseAsync();
@@ -68,7 +110,8 @@ public sealed class MigrationTests(PostgresContainerFixture postgres)
             VALUES ('ana', 'Ana', 'Ana', 'Operator', 'password-hash', 'key-hash', true, '2025-03-01T10:00:00Z', 2)
             """);
 
-        Assert.Single(await database.MigrateAsync());
+        Assert.Equal(new[] { "AddUserAccountVersion", "AddTelemetrySampleIdentity" },
+            (await database.MigrateAsync()).Select(id => id[(id.IndexOf('_') + 1)..]));
 
         var store = new PostgresUserAccountStore(factory);
         var account = await store.FindByApiKeyHashAsync("key-hash", CancellationToken.None);

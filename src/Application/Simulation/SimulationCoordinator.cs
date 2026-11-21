@@ -1,4 +1,5 @@
 using Application.Diagnostics;
+using Application.Identity;
 using Application.Alarms;
 using Application.Events;
 using Application.Persistence;
@@ -70,13 +71,20 @@ public sealed class SimulationCoordinator(
         return snapshot;
     }
 
-    public SimulationStatus SetPaused(bool paused, string actor)
+    public SimulationStatus SetPaused(bool paused, Actor actor)
     {
+        ArgumentNullException.ThrowIfNull(actor);
+        if (!actor.HasRole(AccessRole.Operator))
+        {
+            events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.AuthorizationDenied, EventSeverity.High,
+                "simulation", "Pause/resume requires Operator role", actor.Name));
+            return engine.Status;
+        }
         var changed = paused ? engine.Pause() : engine.Resume();
         if (changed)
         {
             events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.Audit, EventSeverity.Information,
-                "simulation", paused ? "Simulation paused" : "Simulation resumed", actor));
+                "simulation", paused ? "Simulation paused" : "Simulation resumed", actor.Name));
             persistence.TryEnqueue(new SimulationStateWorkItem(engine.CaptureState()));
         }
 

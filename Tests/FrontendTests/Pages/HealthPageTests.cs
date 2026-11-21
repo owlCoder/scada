@@ -24,7 +24,7 @@ public sealed class HealthPageTests
         Assert.Contains("Running", page.Markup);
         Assert.Equal("Check storage", Assert.Single(page.FindAll("button")).TextContent);
 
-        host.Rig.Coordinator.SetPaused(true, "tester");
+        host.Rig.Coordinator.SetPaused(true, new Application.Identity.Actor("tester", Application.Identity.AccessRole.Operator));
         page.WaitForAssertion(() => Assert.Contains("Paused", page.Markup));
     }
 }

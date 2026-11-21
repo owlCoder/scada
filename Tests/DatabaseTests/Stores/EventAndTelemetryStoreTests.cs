@@ -18,6 +18,28 @@ public sealed class EventAndTelemetryStoreTests(PostgresContainerFixture postgre
     private static readonly CancellationToken None = CancellationToken.None;
 
     [Fact]
+    public async Task TelemetryRetriesAfterAnAmbiguousCommitDoNotDuplicateRows()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+        await database.MigrateAsync();
+        var interceptor = new TelemetryCommitFailureInterceptor();
+        var options = Infrastructure.Persistence.Postgres.ScadaDbContext.Configure(
+            new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<Infrastructure.Persistence.Postgres.ScadaDbContext>(), database.ConnectionString)
+            .AddInterceptors(interceptor).Options;
+        var factory = new Microsoft.EntityFrameworkCore.Infrastructure.PooledDbContextFactory<Infrastructure.Persistence.Postgres.ScadaDbContext>(options);
+        var store = new PostgresTelemetryStore(factory);
+        var sample = new TelemetrySample(1, Samples.Start, TimeSpan.Zero, "LT-101", 42, "Good", "same-hash-after-restart");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AppendAsync([sample], None));
+        Assert.True(interceptor.Failed);
+        Assert.Equal(0, await store.AppendAsync([sample, sample], None));
+        // A new historian can restart its chain; equal sequence/hash/content must remain a distinct sample.
+        var restarted = new TelemetrySample(1, Samples.Start, TimeSpan.Zero, "LT-101", 42, "Good", "same-hash-after-restart");
+        Assert.Equal(1, (await Task.WhenAll(store.AppendAsync([restarted], None), store.AppendAsync([sample, restarted], None))).Sum());
+        var rows = await store.QueryAsync(new TelemetryQuery(null, null, null), None);
+        Assert.Equal(new[] { sample, restarted }, rows);
+    }
+
+    [Fact]
     public async Task EventsArePagedNewestFirstAndFilteredLiterally()
     {
         var store = new PostgresEventStore(await (await postgres.CreateDatabaseAsync()).MigratedAsync());

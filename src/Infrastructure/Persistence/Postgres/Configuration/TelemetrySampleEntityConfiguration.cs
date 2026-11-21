@@ -14,6 +14,8 @@ public static class TelemetrySampleEntityConfiguration
             e.Property(x => x.Id).UseIdentityAlwaysColumn();
             e.HasIndex(x => new { x.TagId, x.Timestamp });
             e.HasIndex(x => x.Timestamp);
+            e.Property(x => x.SampleId).HasDefaultValueSql("gen_random_uuid()");
+            e.HasIndex(x => x.SampleId).IsUnique();
             e.Property(x => x.TagId).HasMaxLength(64);
             e.Property(x => x.Quality).HasMaxLength(32);
             e.Property(x => x.Hash).HasMaxLength(128);

@@ -65,6 +65,37 @@ public sealed class ScadaHubTests
         Assert.Equal(97, Level(viewerSnapshot.GetProperty("plant")), 1);
     }
 
+    [Fact]
+    public async Task InjectedActuatorFaultsAndBypassesAreRedactedInSnapshotsAndLiveMessages()
+    {
+        using var factory = ApiTestFactory.Create(("Simulation:Host:RunLoop", "false"));
+        var training = factory.Services.GetRequiredService<ITrainingEnvironment>();
+        training.InjectFault(new Domain.Process.Commands.FaultInjection("P-101", PumpFault: Domain.Process.Devices.PumpFault.Seized));
+        training.SetInterlockBypass(true, "scenario");
+        await using var op = Connect(factory, ApiTestFactory.OperatorKey);
+        await using var admin = Connect(factory, ApiTestFactory.AdminKey);
+        var opMessages = Channel.CreateUnbounded<JsonElement>();
+        var adminMessages = Channel.CreateUnbounded<JsonElement>();
+        op.On<string, JsonElement>("Realtime", (topic, payload) => { if (topic == "plant") opMessages.Writer.TryWrite(payload); });
+        admin.On<string, JsonElement>("Realtime", (topic, payload) => { if (topic == "plant") adminMessages.Writer.TryWrite(payload); });
+        await op.StartAsync();
+        await admin.StartAsync();
+        var opSnapshot = (await op.InvokeAsync<JsonElement>("GetSnapshot")).GetProperty("plant");
+        var adminSnapshot = (await admin.InvokeAsync<JsonElement>("GetSnapshot")).GetProperty("plant");
+        Assert.False(opSnapshot.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.Equal((int)Domain.Process.Devices.PumpFault.None, opSnapshot.GetProperty("pumps")[0].GetProperty("fault").GetInt32());
+        Assert.True(adminSnapshot.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.Equal((int)Domain.Process.Devices.PumpFault.Seized, adminSnapshot.GetProperty("pumps")[0].GetProperty("fault").GetInt32());
+        factory.Services.GetRequiredService<Application.Realtime.IRealtimePublisher>().Publish("plant", training.Snapshot());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var opLive = await opMessages.Reader.ReadAsync(timeout.Token);
+        var adminLive = await adminMessages.Reader.ReadAsync(timeout.Token);
+        Assert.False(opLive.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.Equal((int)Domain.Process.Devices.PumpFault.None, opLive.GetProperty("pumps")[0].GetProperty("fault").GetInt32());
+        Assert.True(adminLive.GetProperty("interlocksBypassed").GetBoolean());
+        Assert.Equal((int)Domain.Process.Devices.PumpFault.Seized, adminLive.GetProperty("pumps")[0].GetProperty("fault").GetInt32());
+    }
+
     private static bool Collect(string topic, JsonElement payload, Channel<double> levels) =>
         topic == "plant" && levels.Writer.TryWrite(Level(payload));
 

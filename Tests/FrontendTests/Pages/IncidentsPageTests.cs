@@ -11,6 +11,15 @@ namespace FrontendTests.Pages;
 public sealed class IncidentsPageTests
 {
     [Fact]
+    public async Task SearchInputsHaveAMaximumLength()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Viewer);
+        var page = host.Context.Render<Incidents>();
+        Assert.All(page.FindAll("input[type=search]"), input =>
+            Assert.Equal("200", input.GetAttribute("maxlength")));
+    }
+
+    [Fact]
     public async Task ListLinksToDetailsAndAppliesFiltersSortingAndPaging()
     {
         await using var host = HmiTestHost.Create(AccessRole.Viewer);

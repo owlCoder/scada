@@ -22,8 +22,16 @@ public sealed class ScadaDatabaseMigrator(IDbContextFactory<ScadaDbContext> fact
         }
         finally
         {
-            if (db.Database.GetDbConnection().State == System.Data.ConnectionState.Open)
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_unlock({MigrationLock})", CancellationToken.None);
+            try
+            {
+                if (db.Database.GetDbConnection().State == System.Data.ConnectionState.Open)
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_unlock({MigrationLock})", CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                // Disposing the connection releases the session lock even when an explicit unlock fails.
+                logger.LogWarning(exception, "Could not release the database migration advisory lock");
+            }
         }
     }
 

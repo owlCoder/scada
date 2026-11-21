@@ -16,6 +16,52 @@ public sealed class UserAdministrationServiceTests
         return rig;
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SelfLockoutAndRemovingTheLastEnabledAdministratorAreDenied(bool disable)
+    {
+        var rig = new TestRig();
+        var ct = CancellationToken.None;
+        await rig.AccountStore.TryCreateAsync(new UserAccount("admin", "Admin", AccessRole.Administrator, "hash", null, true,
+            rig.Time.GetUtcNow(), null, null, 0, null), ct);
+        var self = new Actor("ADMIN", AccessRole.Administrator);
+        var selfResult = disable ? await rig.Accounts.SetEnabledAsync("admin", false, self, ct)
+            : await rig.Accounts.ChangeRoleAsync("admin", AccessRole.Operator, self, ct);
+        Assert.Equal(AccountOperationStatus.Denied, selfResult.Status);
+        Assert.Contains("own account", selfResult.Message);
+        var lastResult = disable ? await rig.Accounts.SetEnabledAsync("admin", false, Actor.System("external-admin"), ct)
+            : await rig.Accounts.ChangeRoleAsync("admin", AccessRole.Operator, Actor.System("external-admin"), ct);
+        Assert.Equal(AccountOperationStatus.Denied, lastResult.Status);
+        Assert.Contains("last enabled Administrator", lastResult.Message);
+        var account = (await rig.AccountStore.FindAsync("admin", ct))!;
+        Assert.True(account.IsEnabled);
+        Assert.Equal(AccessRole.Administrator, account.Role);
+        await rig.AccountStore.TryCreateAsync(account with { Username = "second", IsEnabled = false }, ct);
+        Assert.False((await rig.Accounts.SetEnabledAsync("admin", false, Actor.System("external-admin"), ct)).Succeeded);
+        await rig.Accounts.SetEnabledAsync("second", true, Actor.System("external-admin"), ct);
+        Assert.False((disable ? await rig.Accounts.SetEnabledAsync("admin", false, self, ct)
+            : await rig.Accounts.ChangeRoleAsync("admin", AccessRole.Operator, self, ct)).Succeeded);
+        var allowed = disable ? await rig.Accounts.SetEnabledAsync("admin", false, Actor.System("second"), ct)
+            : await rig.Accounts.ChangeRoleAsync("admin", AccessRole.Operator, Actor.System("second"), ct);
+        Assert.True(allowed.Succeeded);
+    }
+
+    [Fact]
+    public async Task ConcurrentDemotionsCannotRemoveBothAdministrators()
+    {
+        var rig = new TestRig();
+        var ct = CancellationToken.None;
+        foreach (var name in new[] { "a", "b" })
+            await rig.AccountStore.TryCreateAsync(new UserAccount(name, name, AccessRole.Administrator, "hash", null, true,
+                rig.Time.GetUtcNow(), null, null, 0, null), ct);
+        var results = await Task.WhenAll(
+            rig.Accounts.ChangeRoleAsync("a", AccessRole.Operator, Actor.System("b"), ct),
+            rig.Accounts.SetEnabledAsync("b", false, Actor.System("a"), ct));
+        Assert.Single(results, r => r.Succeeded);
+        Assert.Single(await rig.AccountStore.ListAsync(ct), a => a.IsEnabled && a.Role == AccessRole.Administrator);
+    }
+
     [Fact]
     public async Task OperatorCannotEscalateAndTheAttemptIsAudited()
     {
