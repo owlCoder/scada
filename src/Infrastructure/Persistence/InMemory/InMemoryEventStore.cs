@@ -30,6 +30,7 @@ public sealed class InMemoryEventStore(int capacity = 50_000) : IEventStore, IRe
     public Task<PagedResult<SecurityEvent>> QueryAsync(EventQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+        query = query.Normalize();
         SecurityEvent[] snapshot;
         lock (_sync)
             snapshot = _events.Reverse().ToArray();

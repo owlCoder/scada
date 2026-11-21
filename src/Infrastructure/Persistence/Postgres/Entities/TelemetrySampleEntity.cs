@@ -5,6 +5,7 @@ namespace Infrastructure.Persistence.Postgres.Entities;
 public sealed class TelemetrySampleEntity
 {
     public long Id { get; set; }
+    public Guid SampleId { get; set; }
     public long Sequence { get; set; }
     public DateTimeOffset Timestamp { get; set; }
     public TimeSpan SimulationTime { get; set; }
@@ -15,9 +16,9 @@ public sealed class TelemetrySampleEntity
 
     public static TelemetrySampleEntity From(TelemetrySample s) => new()
     {
-        Sequence = s.Sequence, Timestamp = Timestamps.Utc(s.Timestamp), SimulationTime = s.SimulationTime, TagId = s.TagId,
+        SampleId = s.SampleId, Sequence = s.Sequence, Timestamp = Timestamps.Utc(s.Timestamp), SimulationTime = s.SimulationTime, TagId = s.TagId,
         Value = s.Value, Quality = s.Quality, Hash = s.Hash
     };
 
-    public TelemetrySample ToRecord() => new(Sequence, Timestamp, SimulationTime, TagId, Value, Quality, Hash);
+    public TelemetrySample ToRecord() => new(Sequence, Timestamp, SimulationTime, TagId, Value, Quality, Hash) { SampleId = SampleId };
 }

@@ -11,6 +11,20 @@ public sealed class PasswordAuthenticatorTests
     private const string Password = "correct-horse-battery";
     private static readonly CancellationToken None = CancellationToken.None;
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RepeatedAccountConflictsHaveABoundedRetryBudget(bool correctPassword)
+    {
+        var (rig, _) = await CreateAsync();
+        var store = new SignInConflictStore(rig.AccountStore);
+        var authenticator = new PasswordAuthenticator(store, new AuthenticationThrottle(rig.Time), new PasswordLockoutOptions(), rig.Events, rig.Time);
+        var result = await authenticator.AuthenticateAsync("eva", correctPassword ? Password : "wrong-password", "ip:a", None);
+        Assert.Equal(AuthenticationStatus.Invalid, result.Status);
+        Assert.Equal(3, store.Attempts);
+        Assert.Contains(rig.Buffer.GetRecent(), e => e.Message.Contains("concurrent account changes", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task CorrectPasswordSignsInAndResetsTheFailureCount()
     {
@@ -117,6 +131,15 @@ public sealed class PasswordAuthenticatorTests
         Assert.Null(account!.ApiKeyHash);
         Assert.DoesNotContain(Password, account.PasswordHash);
         Assert.True(PasswordHasher.Verify(Password, account.PasswordHash));
+    }
+
+    [Theory]
+    [InlineData("pbkdf2-sha256$1000000$AAAAAAAAAAAAAAAAAAAAAA==$8aFO3fNfB2KvlUVOybq05OojoRrfFLXJGWe8Q/Bss0g=", true)]
+    [InlineData("pbkdf2-sha256$1000001$AAAAAAAAAAAAAAAAAAAAAA==$pLjmTH27STNKpmovlxv739oHXYCoxjQTNxZO8CrHUiU=", false)]
+    public Task ValidHashesAboveTheWorkFactorLimitAreRejected(string hash, bool accepted)
+    {
+        Assert.Equal(accepted, PasswordHasher.Verify(Password, hash));
+        return Task.CompletedTask;
     }
 
     [Theory]

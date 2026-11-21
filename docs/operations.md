@@ -11,7 +11,7 @@ docker compose --env-file .scada/compose.env -f deploy/compose.yaml ps
 docker compose --env-file .scada/compose.env -f deploy/compose.yaml logs --since=10m api postgres
 ```
 
-`/health/live` reports process liveness, not simulation progress. `/health` JSON reports the selected provider, not database connectivity. `/health/ready` probes storage with a two-second deadline and returns 503 if unavailable or queue pending reaches 90% of capacity. It includes only counters, not error text. In a browser `/health` is the authenticated HMI health page, with storage, simulation, queue and per-rule metrics. Pause is an expected state and does not itself fail readiness.
+`/health/live` reports process liveness, not simulation progress. `/health` JSON reports the selected provider, not database connectivity. `/health/ready` probes storage with a two-second deadline and returns 503 if unavailable or queue pending reaches 90% of capacity. It includes only counters, not error text. Send `Accept: application/json` from monitors: `Accept: text/html` selects the authenticated HMI, so an unauthenticated HTML request can return 401. In a browser `/health` is the authenticated HMI health page, with storage, simulation, queue and per-rule metrics. Pause is an expected state and does not itself fail readiness.
 
 Watch simulated step count and time advance when running. Alert on growing queue pending, any increase in dropped/failed items, repeated observer/step errors or missing OTLP data. Queue drops and exhausted retries mean lost high-volume history, even after readiness recovers. [Instrument names](observability.md)
 

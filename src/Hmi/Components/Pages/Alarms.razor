@@ -3,6 +3,7 @@
 @inject Application.Alarms.AlarmService AlarmService
 
 <PageTitle>Alarms · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <h1>Alarms</h1>
 <OutcomeBanner Outcome="_outcome" />
 
@@ -28,7 +29,7 @@
                         <td>
                             @if (Session.CanOperate && !alarm.IsAcknowledged)
                             {
-                                <button class="btn" @onclick="() => AcknowledgeAsync(alarm.Key)">Acknowledge</button>
+                                <button class="btn" @onclick="() => AskAcknowledge(alarm.Key)">Acknowledge</button>
                             }
                         </td>
                     </tr>
@@ -56,10 +57,14 @@
     </table>
 </section>
 
+<ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
+
 @code {
     private IReadOnlyList<ProcessAlarm> _current = [];
     private IReadOnlyList<Application.Alarms.AlarmHistoryRecord> _history = [];
     private ActionOutcome? _outcome;
+    private PendingAction? _pending;
+    private long _loadId;
 
     protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Alarms];
     protected override TimeSpan MinimumRefreshInterval => TimeSpan.FromSeconds(1);
@@ -67,20 +72,29 @@
     protected override bool Refresh()
     {
         _current = AlarmService.GetCurrent().OrderByDescending(a => a.IsActive).ThenByDescending(a => a.Severity).ThenByDescending(a => a.RaisedAt).ToArray();
-        _ = LoadHistoryAsync();
         return true;
     }
 
-    private async Task<bool> LoadHistoryAsync()
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
     {
-        _history = await AlarmService.GetHistoryAsync(50, CancellationToken.None);
-        await InvokeAsync(StateHasChanged);
+        var loadId = ++_loadId;
+        var history = await AlarmService.GetHistoryAsync(50, cancellationToken);
+        if (loadId == _loadId && !cancellationToken.IsCancellationRequested)
+            _history = history;
+    }
+
+    private bool AskAcknowledge(string key)
+    {
+        _pending = new PendingAction("Acknowledge alarm?", "Record your acknowledgement of this alarm.", () =>
+            Task.FromResult(AlarmService.Acknowledge(key, Session.Actor)
+                ? ActionOutcome.Done("Alarm acknowledged.") : ActionOutcome.Failed("Alarm acknowledgement failed.")));
         return true;
     }
 
-    private async Task AcknowledgeAsync(string key)
+    private async Task OnCompletedAsync(ActionOutcome? outcome)
     {
-        _outcome = AlarmService.Acknowledge(key, Session.Actor) ? ActionOutcome.Done("Alarm acknowledged.") : ActionOutcome.Failed("The alarm no longer exists.");
+        _pending = null;
+        _outcome = outcome ?? _outcome;
         await RefreshNowAsync();
     }
 }

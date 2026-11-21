@@ -5,12 +5,13 @@
 @inject IEventStore EventStore
 
 <PageTitle>Events · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <h1>Events</h1>
 
 <form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
-    <label>Category<input type="search" @bind="_category" /></label>
-    <label>Actor<input type="search" @bind="_actor" /></label>
-    <label>Search messages<input type="search" @bind="_search" /></label>
+    <label>Category<input type="search" maxlength="@QueryText.MaxLength" @bind="_category" /></label>
+    <label>Actor<input type="search" maxlength="@QueryText.MaxLength" @bind="_actor" /></label>
+    <label>Search messages<input type="search" maxlength="@QueryText.MaxLength" @bind="_search" /></label>
     <button class="btn btn-primary" type="submit">Apply filters</button>
 </form>
 

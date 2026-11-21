@@ -191,9 +191,14 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
             }
 
             var publish = executed > 0 || ++run.StepsSincePublish >= PublishEverySteps;
+            var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
             if (publish)
-                run.StepsSincePublish = 0;
-            UpdateCurrent(run.ToRecord(null, [], ScenarioOutcome.Pending), run.RunId, publish);
+            {
+                if (await PersistCurrentAsync(record, run.RunId, cancellationToken))
+                    run.StepsSincePublish = 0;
+            }
+            else
+                UpdateCurrent(record, run.RunId, publish: false);
 
             return executed;
         }
@@ -219,9 +224,10 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
             var plant = _services.Training.Snapshot();
             var run = new ScenarioRun(definition, new ScenarioExecutionContext(_services, runId), new ScenarioMeasurements(plant),
                 actor.Name, _time.GetUtcNow(), plant.SimulationTime, replayOf);
-            _active = run;
             var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
-            await PersistCurrentAsync(record, runId, cancellationToken);
+            if (!await PersistCurrentAsync(record, runId, cancellationToken))
+                return ScenarioControlResult.Fail("Could not save the scenario run. Please try again.", Current);
+            _active = run;
             Publish(EventSeverity.Medium, replayOf is null
                 ? $"Scenario {definition.Name} started"
                 : $"Scenario {definition.Name} started as a replay of run {replayOf}", actor.Name, runId);
@@ -249,7 +255,18 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
 
             run.State = to;
             var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
-            await PersistCurrentAsync(record, run.RunId, cancellationToken);
+            var saved = false;
+            try
+            {
+                saved = await PersistCurrentAsync(record, run.RunId, cancellationToken);
+            }
+            finally
+            {
+                if (!saved)
+                    run.State = from;
+            }
+            if (!saved)
+                return ScenarioControlResult.Fail("Could not save the scenario change. Please try again.", Current);
             Publish(EventSeverity.Information, $"Scenario {run.Definition.Name} {to.ToString().ToLowerInvariant()}", actor.Name, run.RunId);
             return ScenarioControlResult.Ok($"Scenario {run.Definition.Name} {to.ToString().ToLowerInvariant()}.", record);
         }
@@ -285,6 +302,9 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         var record = run.ToRecord(_time.GetUtcNow(), observed, outcome);
         ScadaInstrumentation.ScenarioRuns.Add(1, new KeyValuePair<string, object?>("scenario", run.Definition.Id),
             new KeyValuePair<string, object?>("outcome", outcome.ToString()));
+        // Completion restores the environment even if persistence is unavailable, but never advertises an unsaved result.
+        lock (_snapshotSync)
+            _activeRunId = null;
         await PersistCurrentAsync(record, null, cancellationToken);
 
         var missing = run.Definition.ExpectedDetections.Except(observed, StringComparer.Ordinal).ToArray();
@@ -334,16 +354,12 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         return publish && _realtime.Publish(RealtimeTopics.Scenarios, record);
     }
 
-    private async Task PersistCurrentAsync(ScenarioRunRecord record, Guid? activeRunId, CancellationToken cancellationToken)
+    private async Task<bool> PersistCurrentAsync(ScenarioRunRecord record, Guid? activeRunId, CancellationToken cancellationToken)
     {
-        try
-        {
-            await SaveAsync(record, cancellationToken);
-        }
-        finally
-        {
-            UpdateCurrent(record, activeRunId);
-        }
+        if (!await SaveAsync(record, cancellationToken))
+            return false;
+        UpdateCurrent(record, activeRunId);
+        return true;
     }
 
     private async Task<bool> SaveAsync(ScenarioRunRecord record, CancellationToken cancellationToken)

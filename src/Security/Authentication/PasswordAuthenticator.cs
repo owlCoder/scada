@@ -26,7 +26,7 @@ public sealed class PasswordAuthenticator(
             return new AuthenticationResult(AuthenticationStatus.Throttled, null);
 
         var name = username.Trim();
-        while (true)
+        for (var attempt = 0; attempt < 3; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var account = await accounts.FindAsync(name, cancellationToken);
@@ -59,6 +59,7 @@ public sealed class PasswordAuthenticator(
             return new AuthenticationResult(AuthenticationStatus.Succeeded,
                 new AuthenticatedUser(signedIn.Username, signedIn.Role, CredentialIdFor(signedIn.Username)));
         }
+        return Fail(AuthenticationStatus.Invalid, source, $"Sign-in for {Truncate(name)} could not complete after concurrent account changes");
     }
 
     /// <summary>

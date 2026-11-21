@@ -18,9 +18,18 @@ public sealed class PostgresTelemetryStore(IDbContextFactory<ScadaDbContext> fac
             return 0;
 
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        db.Telemetry.AddRange(samples.Select(TelemetrySampleEntity.From));
-        await db.SaveChangesAsync(cancellationToken);
-        return samples.Count;
+        var rows = samples.Select(TelemetrySampleEntity.From).ToArray();
+        return await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO scada.telemetry (sample_id, sequence, timestamp, simulation_time, tag_id, value, quality, hash)
+            SELECT sample_id, sequence, timestamp, simulation_time, tag_id, value, quality, hash
+            FROM unnest({rows.Select(s => s.SampleId).ToArray()}, {rows.Select(s => s.Sequence).ToArray()},
+                {rows.Select(s => s.Timestamp).ToArray()}, {rows.Select(s => s.SimulationTime).ToArray()},
+                {rows.Select(s => s.TagId).ToArray()}, {rows.Select(s => s.Value).ToArray()},
+                {rows.Select(s => s.Quality).ToArray()}, {rows.Select(s => s.Hash).ToArray()})
+                WITH ORDINALITY AS input(sample_id, sequence, timestamp, simulation_time, tag_id, value, quality, hash, input_position)
+            ORDER BY input_position
+            ON CONFLICT (sample_id) DO NOTHING
+            """, cancellationToken);
     }
 
     /// <summary>Returns the newest matching samples in chronological order.</summary>

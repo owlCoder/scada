@@ -6,6 +6,7 @@
 @inject IncidentService IncidentService
 
 <PageTitle>Incidents · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <h1>Incidents</h1>
 
 <form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
@@ -27,7 +28,7 @@
             }
         </select>
     </label>
-    <label>Search<input type="search" @bind="_search" /></label>
+    <label>Search<input type="search" maxlength="@QueryText.MaxLength" @bind="_search" /></label>
     <label>Sort by
         <select @bind="_sort">
             @foreach (var field in Enum.GetValues<IncidentSortField>())

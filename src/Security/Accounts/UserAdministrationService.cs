@@ -8,6 +8,7 @@ namespace Security.Accounts;
 public sealed class UserAdministrationService(IUserAccountStore store, IEventPublisher events, TimeProvider time)
 {
     private const int MaxUpdateAttempts = 5;
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
     public async Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken cancellationToken)
     {
@@ -65,6 +66,20 @@ public sealed class UserAdministrationService(IUserAccountStore store, IEventPub
             return new AccountOperationResult(AccountOperationStatus.Denied, "Administrator role required.");
         }
 
+        await _mutationGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await ModifyAuthorizedAsync(username, actor, description, change, cancellationToken);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private async Task<AccountOperationResult> ModifyAuthorizedAsync(string username, Actor actor, string description,
+        Func<UserAccount, (UserAccount? Updated, AccountOperationResult Result)> change, CancellationToken cancellationToken)
+    {
         for (var attempt = 0; attempt < MaxUpdateAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -74,6 +89,23 @@ public sealed class UserAdministrationService(IUserAccountStore store, IEventPub
             var (updated, result) = change(account);
             if (updated is null || !result.Succeeded)
                 return result;
+            if ((!updated.IsEnabled && account.IsEnabled) || updated.Role < account.Role)
+            {
+                string? denial = null;
+                if (string.Equals(account.Username, actor.Name, StringComparison.OrdinalIgnoreCase))
+                    denial = "You cannot disable or demote your own account.";
+                else if (account is { IsEnabled: true, Role: AccessRole.Administrator }
+                    && (!updated.IsEnabled || updated.Role != AccessRole.Administrator)
+                    && !(await store.ListAsync(cancellationToken)).Any(a => a.IsEnabled && a.Role == AccessRole.Administrator
+                        && !string.Equals(a.Username, account.Username, StringComparison.OrdinalIgnoreCase)))
+                    denial = "Cannot disable or demote the last enabled Administrator.";
+                if (denial is not null)
+                {
+                    events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.AuthorizationDenied, EventSeverity.High,
+                        "accounts", $"Denied attempt to {description}: {denial}", actor.Name));
+                    return new AccountOperationResult(AccountOperationStatus.Denied, denial);
+                }
+            }
             if (!await store.TryUpdateAsync(updated, cancellationToken))
                 continue;
 

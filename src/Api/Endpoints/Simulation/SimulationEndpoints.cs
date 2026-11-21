@@ -13,9 +13,9 @@ public static class SimulationEndpoints
 
         var control = app.MapGroup("/api/simulation").RequireRole(AccessRole.Operator).RequireCredentialRateLimit();
         control.MapPost("/pause", (SimulationCoordinator coordinator, HttpContext http) =>
-            Results.Ok(coordinator.SetPaused(true, http.Actor().Name)));
+            Results.Ok(coordinator.SetPaused(true, http.Actor())));
         control.MapPost("/resume", (SimulationCoordinator coordinator, HttpContext http) =>
-            Results.Ok(coordinator.SetPaused(false, http.Actor().Name)));
+            Results.Ok(coordinator.SetPaused(false, http.Actor())));
         control.MapPost("/step", async (StepRequest? request, SimulationCoordinator coordinator, SimulationEngine engine,
             CancellationToken cancellationToken) =>
         {

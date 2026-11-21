@@ -29,7 +29,7 @@ public static class PasswordHasher
             return false;
 
         if (encoded?.Split('$') is [Prefix, var workFactor, var saltText, var hashText]
-            && int.TryParse(workFactor, out var iterations) && iterations >= 10_000)
+            && int.TryParse(workFactor, out var iterations) && iterations is >= 10_000 and <= 1_000_000)
         {
             try
             {

@@ -9,6 +9,20 @@ namespace FrontendTests.Pages;
 
 public sealed class PumpsPageTests
 {
+    [Theory]
+    [InlineData(AccessRole.Operator, false)]
+    [InlineData(AccessRole.Administrator, true)]
+    public async Task OnlyInstructorsSeeInjectedFaultsAndBypass(AccessRole role, bool seesTruth)
+    {
+        await using var host = HmiTestHost.Create(role);
+        host.Rig.Training.InjectFault(new Domain.Process.Commands.FaultInjection("P-101", PumpFault: PumpFault.Seized));
+        host.Rig.Training.SetInterlockBypass(true, "scenario");
+        var page = host.Context.Render<Pumps>();
+        Assert.Equal(seesTruth, page.Markup.Contains("Seized", StringComparison.Ordinal));
+        var overview = host.Context.Render<Overview>();
+        Assert.Equal(seesTruth, overview.Markup.Contains("BYPASSED", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ViewersSeePumpsButNoCommands()
     {

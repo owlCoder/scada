@@ -36,6 +36,7 @@ public sealed class PostgresIncidentStore(IDbContextFactory<ScadaDbContext> fact
     {
         ArgumentNullException.ThrowIfNull(query);
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
+        query = query.Normalize();
         var items = Filter(db.Incidents.AsNoTracking(), query);
         var (page, size) = Paging.Normalize(query.Page, query.PageSize);
         var total = await items.CountAsync(cancellationToken);

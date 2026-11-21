@@ -6,6 +6,7 @@
 @inject Application.Incidents.IncidentService Incidents
 
 <PageTitle>Overview · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <h1>Overview</h1>
 
 <section class="metrics">
@@ -39,11 +40,11 @@
             <div class="actions">
                 @if (_status?.IsPaused == true)
                 {
-                    <button class="btn btn-primary" @onclick="() => SetPausedAsync(false)">Resume</button>
+                    <button class="btn btn-primary" @onclick="() => AskPause(false)">Resume</button>
                 }
                 else
                 {
-                    <button class="btn" @onclick="() => SetPausedAsync(true)">Pause</button>
+                    <button class="btn" @onclick="() => AskPause(true)">Pause</button>
                 }
             </div>
         }
@@ -62,6 +63,7 @@
     </article>
 </section>
 <OutcomeBanner Outcome="_outcome" />
+<ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
 
 @code {
     private PlantSnapshot _plant = default!;
@@ -69,15 +71,11 @@
     private Application.Scenarios.ScenarioRunRecord? _scenario;
     private int _openIncidents;
     private ActionOutcome? _outcome;
+    private PendingAction? _pending;
+    private long _loadId;
 
     protected override IReadOnlyCollection<string> Topics =>
         [RealtimeTopics.Plant, RealtimeTopics.Simulation, RealtimeTopics.Scenarios, RealtimeTopics.Incidents];
-
-    protected override async Task OnInitializedAsync()
-    {
-        await base.OnInitializedAsync();
-        await LoadIncidentsAsync();
-    }
 
     protected override bool Refresh()
     {
@@ -88,24 +86,30 @@
         return true;
     }
 
-    protected override bool OnMessage(RealtimeMessage message)
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
     {
-        if (message.Topic == RealtimeTopics.Incidents)
-            _ = InvokeAsync(LoadIncidentsAsync);
+        var loadId = ++_loadId;
+        var page = await Incidents.QueryAsync(new Application.Incidents.IncidentQuery(ActiveOnly: true, PageSize: 1), cancellationToken);
+        if (loadId == _loadId && !cancellationToken.IsCancellationRequested)
+            _openIncidents = page.TotalCount;
+    }
+
+    private bool AskPause(bool paused)
+    {
+        _pending = new PendingAction(paused ? "Pause simulation?" : "Resume simulation?", "This changes the live simulation for all operators.", () =>
+        {
+            Coordinator.SetPaused(paused, Session.Actor);
+            return Task.FromResult(Session.CanOperate
+                ? ActionOutcome.Done(paused ? "Simulation paused." : "Simulation resumed.")
+                : ActionOutcome.Failed("Operator role required."));
+        });
         return true;
     }
 
-    private async Task LoadIncidentsAsync()
+    private async Task OnCompletedAsync(ActionOutcome? outcome)
     {
-        var page = await Incidents.QueryAsync(new Application.Incidents.IncidentQuery(ActiveOnly: true, PageSize: 1), CancellationToken.None);
-        _openIncidents = page.TotalCount;
-        StateHasChanged();
-    }
-
-    private async Task SetPausedAsync(bool paused)
-    {
-        Coordinator.SetPaused(paused, Session.Actor.Name);
-        _outcome = ActionOutcome.Done(paused ? "Simulation paused." : "Simulation resumed.");
+        _pending = null;
+        _outcome = outcome ?? _outcome;
         await RefreshNowAsync();
     }
 }

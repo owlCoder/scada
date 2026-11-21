@@ -649,6 +649,12 @@ namespace Infrastructure.Persistence.Postgres.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("quality");
 
+                    b.Property<Guid>("SampleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("sample_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.Property<long>("Sequence")
                         .HasColumnType("bigint")
                         .HasColumnName("sequence");
@@ -672,6 +678,9 @@ namespace Infrastructure.Persistence.Postgres.Migrations
                         .HasColumnName("value");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SampleId")
+                        .IsUnique();
 
                     b.HasIndex("Timestamp");
 

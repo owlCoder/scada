@@ -21,6 +21,7 @@ Notes on how the data is handled:
 
 - **Incident numbers** (`INC-00042`) come from the `scada.incident_number_seq` sequence.
 - **Concurrent edits:** each incident has a `version` column used as an optimistic concurrency token. A stale update is rejected even if several API instances share the database.
+- **Telemetry retries:** every new sample has a stable client-generated `sample_id` UUID. A unique index and `ON CONFLICT DO NOTHING` make retried/overlapping batches idempotent, including after an ambiguous commit. `AddTelemetrySampleIdentity` assigns distinct UUIDs to existing rows without dropping historical duplicates or assuming hash/sequence uniqueness across restarts.
 - **Write path:** high-volume writes (events, telemetry, alarm history, plant state) go through the bounded write-behind queue, so those producers do not wait for database I/O. Detections, incidents, scenario records and account/rule operations use direct store calls and can still delay their callers or simulation observers.
 
 ## Migrations

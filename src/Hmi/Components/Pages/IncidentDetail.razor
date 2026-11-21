@@ -5,6 +5,7 @@
 @inject IncidentService IncidentService
 
 <PageTitle>Incident · SCADA</PageTitle>
+<RefreshErrorBanner Error="@RefreshError" />
 <p><a href="incidents">Back to incidents</a></p>
 @if (_details is { } details)
 {
