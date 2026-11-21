@@ -86,8 +86,7 @@ public sealed class DetectionEngine : ISimulationObserver
     public bool UpdateSettings(DetectionRuleSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (!Enum.IsDefined(settings.Severity) || settings.WindowSeconds is < 1 or > 86_400 ||
-            settings.CooldownSeconds is < 0 or > 86_400 || !double.IsFinite(settings.Threshold) || settings.Threshold < 0)
+        if (!AreSettingsValid(settings))
             return false;
 
         lock (_sync)
@@ -99,6 +98,10 @@ public sealed class DetectionEngine : ISimulationObserver
             return true;
         }
     }
+
+    internal static bool AreSettingsValid(DetectionRuleSettings settings) =>
+        Enum.IsDefined(settings.Severity) && settings.WindowSeconds is >= 1 and <= 86_400 &&
+        settings.CooldownSeconds is >= 0 and <= 86_400 && double.IsFinite(settings.Threshold) && settings.Threshold >= 0;
 
     public int ResetState()
     {

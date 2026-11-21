@@ -22,6 +22,22 @@ public sealed class RegisterAccessService(
     public string? ControllerForUnit(byte unitId) => engine.Read(world =>
         unitId >= 1 && unitId <= world.Controllers.Count ? world.Controllers[unitId - 1].Id : null);
 
+    public IReadOnlyList<RegisterSnapshot> BrowseUnit(byte unitId, RegisterArea area) => engine.Read<IReadOnlyList<RegisterSnapshot>>(world =>
+    {
+        if (unitId < 1 || unitId > world.Controllers.Count)
+            return [];
+
+        var controller = world.Controllers[unitId - 1];
+        var described = controller.Snapshot().Registers.Where(register => register.Area == area)
+            .ToLookup(register => register.Address);
+        return Enumerable.Range(0, ControllerRegisterMap.Size).Select(index =>
+        {
+            var address = (ushort)index;
+            return described[address].FirstOrDefault() ??
+                new RegisterSnapshot(area, address, "Unmapped", controller.Registers.Read(area, address), false);
+        }).ToArray();
+    });
+
     public RegisterReadResult Read(byte unitId, RegisterArea area, ushort start, ushort count, string source)
     {
         var result = engine.Read(world =>

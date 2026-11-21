@@ -1,0 +1,134 @@
+@page "/registers"
+@inherits ConfirmedComponentBase
+@using Application.Registers
+@using Domain.Control
+@inject RegisterAccessService RegisterAccess
+@inject RegisterWriteOptions WriteOptions
+
+<PageTitle>Registers · SCADA</PageTitle>
+<h1>Registers</h1>
+<OutcomeBanner Outcome="Outcome" />
+
+<div class="form-row">
+    <label>Controller unit
+        <select @bind="_unit" @bind:after="ChangeSelectionAsync">
+            @foreach (var controller in _controllers)
+            {
+                <option value="@controller.UnitId">@controller.UnitId · @controller.ControllerId (@controller.Kind)</option>
+            }
+        </select>
+    </label>
+    <label>Area
+        <select @bind="_area" @bind:after="ChangeSelectionAsync">
+            <option value="@RegisterArea.Holding">Holding</option>
+            <option value="@RegisterArea.Input">Input</option>
+        </select>
+    </label>
+    <label class="check"><input type="checkbox" @bind="_showAll" @bind:after="ChangeSelectionAsync" /> Show all addresses</label>
+</div>
+
+@if (SelectedController is { } selected)
+{
+    <div class="table-scroll">
+        <table class="grid">
+            <thead><tr><th>Address</th><th>Tag</th><th>Value</th><th>Forced</th>
+                @if (CanWrite) { <th>Setpoint</th> }
+            </tr></thead>
+            <tbody>
+                @foreach (var register in _visibleRegisters)
+                {
+                    <tr @key="register.Address">
+                        <th scope="row">@register.Address</th><td>@register.Tag</td><td>@register.Value</td><td>@(register.IsForced ? "Yes" : "—")</td>
+                        @if (CanWrite)
+                        {
+                            <td>
+                                @if (register.Address is >= ControllerRegisterMap.SetpointBase and < ControllerRegisterMap.StatusBase)
+                                {
+                                    <button class="btn" @onclick="() => Edit(register)">Edit @register.Address</button>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (CanWrite && _address is { } address)
+    {
+        <section class="panel hmi-details">
+            <h2>@selected.ControllerId · Holding register @address</h2>
+            <div class="form-row">
+                <label>New value<input type="number" min="0" max="@WriteOptions.MaxSetpointValue" @bind="_value" /></label>
+                <button class="btn btn-primary" disabled="@(_value is null)" @onclick="() => AskWrite()">Write setpoint</button>
+            </div>
+        </section>
+    }
+}
+else
+{
+    <p class="muted">No controller units are available.</p>
+}
+
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private IReadOnlyList<ControllerRegisterView> _controllers = [];
+    private IReadOnlyList<RegisterSnapshot> _visibleRegisters = [];
+    private byte _unit = 1;
+    private RegisterArea _area = RegisterArea.Holding;
+    private bool _showAll;
+    private ushort? _address;
+    private ushort? _value;
+
+    private ControllerRegisterView? SelectedController => _controllers.FirstOrDefault(controller => controller.UnitId == _unit);
+    private bool CanWrite => Session.CanOperate && WriteOptions.WritesEnabled && _area == RegisterArea.Holding;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Controllers];
+
+    protected override bool Refresh()
+    {
+        _controllers = RegisterAccess.ListControllers();
+        if (SelectedController is null && _controllers.Count > 0)
+        {
+            _unit = _controllers[0].UnitId;
+            ClearWrite();
+        }
+        _visibleRegisters = SelectedController is { } controller
+            ? _showAll
+                ? RegisterAccess.BrowseUnit(controller.UnitId, _area)
+                : controller.Registers.Where(register => register.Area == _area).OrderBy(register => register.Address).ToArray()
+            : [];
+        return true;
+    }
+
+    private Task ChangeSelectionAsync()
+    {
+        ClearWrite();
+        return RefreshNowAsync();
+    }
+
+    private bool ClearWrite()
+    {
+        _address = null;
+        _value = null;
+        return true;
+    }
+
+    private bool Edit(RegisterSnapshot register)
+    {
+        _address = register.Address;
+        _value = register.Value;
+        return true;
+    }
+
+    private bool AskWrite() =>
+        CanWrite && SelectedController is { } controller && _address is { } address && _value is { } value &&
+        Ask($"Write holding register {address}?", $"Set {controller.ControllerId} (unit {controller.UnitId}) register {address} to {value}.", () =>
+        {
+            var result = RegisterAccess.WriteSetpoint(controller.UnitId, address, value, Session.Actor, $"hmi:{Session.Actor.Name}");
+            return result.Status == RegisterOperationStatus.Success
+                ? ActionOutcome.Done($"Holding register {address} updated.")
+                : ActionOutcome.Failed(result.Message);
+        });
+}

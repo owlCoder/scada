@@ -21,7 +21,7 @@
 
     private async Task ConfirmAsync()
     {
-        if (Pending is null)
+        if (Pending is null || _busy)
             return;
         _busy = true;
         ActionOutcome outcome;
@@ -31,7 +31,7 @@
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            outcome = ActionOutcome.Failed("The action failed: " + exception.Message);
+            outcome = ActionOutcome.Failed("The action failed. Please try again.");
         }
         _busy = false;
         await Completed.InvokeAsync(outcome);

@@ -53,7 +53,7 @@ public sealed class InMemoryIncidentStore : IIncidentStore
     }
 
     public Task<bool> UpdateAsync(Incident incident, int expectedVersion, IReadOnlyList<IncidentTimelineEntry> timeline,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, IncidentComment? comment = null)
     {
         ArgumentNullException.ThrowIfNull(incident);
         lock (_sync)
@@ -63,6 +63,8 @@ public sealed class InMemoryIncidentStore : IIncidentStore
 
             _incidents[incident.Id] = incident with { Number = current.Number };
             _timelines[incident.Id].AddRange(timeline);
+            if (comment is not null)
+                _comments[incident.Id].Add(comment);
             return Task.FromResult(true);
         }
     }

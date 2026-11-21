@@ -1,9 +1,11 @@
 using Api.Authentication;
 using Api.Authorization;
+using Api.Endpoints.System;
 using Api.Realtime;
 using Hmi.Components;
 using Hmi.Services;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Routing.Matching;
 
 namespace Api.Configuration.Registration;
 
@@ -19,6 +21,7 @@ public static class HmiRegistrationExtensions
         services.AddCascadingAuthenticationState();
         services.AddScoped<AuthenticationStateProvider, ScadaRevalidatingAuthenticationStateProvider>();
         services.AddScoped<HmiSession>();
+        services.AddSingleton<MatcherPolicy, HealthFormatPolicy>();
         services.AddSignalR();
         services.AddSingleton<RealtimeHubForwarder>();
         services.AddHostedService(sp => sp.GetRequiredService<RealtimeHubForwarder>());

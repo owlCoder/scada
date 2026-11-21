@@ -13,7 +13,8 @@ public interface IIncidentStore
     Task<Incident> AddAsync(Incident incident, IReadOnlyList<IncidentTimelineEntry> timeline, CancellationToken cancellationToken);
 
     /// <summary>Optimistic update: succeeds only if the stored version equals <paramref name="expectedVersion"/>.</summary>
-    Task<bool> UpdateAsync(Incident incident, int expectedVersion, IReadOnlyList<IncidentTimelineEntry> timeline, CancellationToken cancellationToken);
+    Task<bool> UpdateAsync(Incident incident, int expectedVersion, IReadOnlyList<IncidentTimelineEntry> timeline,
+        CancellationToken cancellationToken, IncidentComment? comment = null);
 
     Task<bool> AddCommentAsync(IncidentComment comment, IncidentTimelineEntry entry, CancellationToken cancellationToken);
     Task<IReadOnlyList<IncidentComment>> GetCommentsAsync(Guid incidentId, CancellationToken cancellationToken);

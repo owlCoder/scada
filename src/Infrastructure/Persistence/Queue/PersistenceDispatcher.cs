@@ -1,6 +1,7 @@
 using Application.Alarms;
 using Application.Events;
 using Application.Persistence;
+using Application.Realtime;
 using Application.Simulation;
 using Application.Telemetry;
 
@@ -11,7 +12,8 @@ public sealed class PersistenceDispatcher(
     IEventStore events,
     ITelemetryStore telemetry,
     IAlarmHistoryStore alarms,
-    IPlantStateStore plantState)
+    IPlantStateStore plantState,
+    IRealtimePublisher? realtime = null)
 {
     public async Task<int> DispatchAsync(IReadOnlyList<PersistenceWorkItem> batch, CancellationToken cancellationToken)
     {
@@ -19,7 +21,10 @@ public sealed class PersistenceDispatcher(
         var written = 0;
         var securityEvents = batch.OfType<SecurityEventWorkItem>().Select(i => i.Event).ToArray();
         if (securityEvents.Length > 0)
+        {
             written += await events.AppendAsync(securityEvents, cancellationToken);
+            realtime?.Publish(RealtimeTopics.EventsPersisted, securityEvents.Length);
+        }
 
         var samples = batch.OfType<TelemetryBatchWorkItem>().SelectMany(i => i.Samples).ToArray();
         if (samples.Length > 0)

@@ -94,7 +94,11 @@ public sealed class IncidentService(
         UpdateAsync(id, expectedVersion, actor, AccessRole.Operator,
             incident => IncidentWorkflow.ChangePriority(incident, priority, actor.Name, time.GetUtcNow()), cancellationToken);
 
-    public async Task<IncidentChange> AddCommentAsync(Guid id, string text, Actor actor, CancellationToken cancellationToken)
+    public Task<IncidentChange> AddCommentAsync(Guid id, string text, Actor actor, CancellationToken cancellationToken) =>
+        AddCommentAsync(id, text, null, actor, cancellationToken);
+
+    public async Task<IncidentChange> AddCommentAsync(Guid id, string text, int? expectedVersion, Actor actor,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (!actor.HasRole(AccessRole.Operator))
@@ -105,6 +109,9 @@ public sealed class IncidentService(
         var incident = await store.GetAsync(id, cancellationToken);
         if (incident is null)
             return IncidentChange.Failure(IncidentOperationStatus.NotFound, "Incident not found.");
+        if (expectedVersion is { } version && version != incident.Version)
+            return IncidentChange.Failure(IncidentOperationStatus.ConcurrencyConflict,
+                $"Incident was modified (expected version {version}, current {incident.Version}).");
         if (incident.Status == IncidentStatus.Closed)
             return IncidentChange.Failure(IncidentOperationStatus.InvalidTransition, "Closed incidents cannot receive comments.");
 
@@ -112,12 +119,14 @@ public sealed class IncidentService(
         var comment = new IncidentComment(Guid.NewGuid(), id, actor.Name, text.Trim(), now);
         var entry = new IncidentTimelineEntry(Guid.NewGuid(), id, now, actor.Name, IncidentTimelineEntryKind.Commented,
             "Comment added", null, null);
-        if (!await store.AddCommentAsync(comment, entry, cancellationToken))
-            return IncidentChange.Failure(IncidentOperationStatus.NotFound, "Incident not found.");
+        var result = await PersistAsync(incident, new IncidentChange(IncidentOperationStatus.Succeeded,
+            incident with { UpdatedAt = now }, [entry], "Comment added"), cancellationToken, comment);
+        if (!result.Succeeded)
+            return result;
 
         events.Publish(SecurityEvent.Create(now, EventCategories.Audit, EventSeverity.Information, "incidents",
             $"Comment added to {incident.DisplayId}", actor.Name));
-        return new IncidentChange(IncidentOperationStatus.Succeeded, incident, [entry], "Comment added");
+        return result;
     }
 
     private async Task<IncidentChange> UpdateAsync(Guid id, int? expectedVersion, Actor actor, AccessRole required,
@@ -145,10 +154,11 @@ public sealed class IncidentService(
         return persisted;
     }
 
-    private async Task<IncidentChange> PersistAsync(Incident original, IncidentChange change, CancellationToken cancellationToken)
+    private async Task<IncidentChange> PersistAsync(Incident original, IncidentChange change, CancellationToken cancellationToken,
+        IncidentComment? comment = null)
     {
         var updated = change.Incident! with { Version = original.Version + 1 };
-        if (!await store.UpdateAsync(updated, original.Version, change.Timeline, cancellationToken))
+        if (!await store.UpdateAsync(updated, original.Version, change.Timeline, cancellationToken, comment))
             return IncidentChange.Failure(IncidentOperationStatus.ConcurrencyConflict, "Incident was modified concurrently.");
 
         realtime.Publish(RealtimeTopics.Incidents, updated);

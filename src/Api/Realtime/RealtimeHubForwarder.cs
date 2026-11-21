@@ -15,7 +15,7 @@ public sealed class RealtimeHubForwarder(IRealtimeFeed feed, IHubContext<ScadaHu
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await using var subscription = feed.Subscribe([], capacity: 1024);
+        await using var subscription = feed.Subscribe(RealtimeTopics.All, capacity: 1024);
         try
         {
             await foreach (var message in subscription.Reader.ReadAllAsync(stoppingToken))

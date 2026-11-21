@@ -295,6 +295,15 @@ public abstract class VirtualController
         registers.Add(Describe(RegisterArea.Holding, ControllerRegisterMap.FieldCommunication, "Field communication state"));
         registers.Add(Describe(RegisterArea.Holding, ControllerRegisterMap.ScanCounter, "Scan counter"));
         registers.Add(Describe(RegisterArea.Holding, ControllerRegisterMap.ConsecutiveFailures, "Consecutive failures"));
+        if (Registers.Forced.Count > 0)
+        {
+            var described = registers.Select(register => (register.Area, register.Address)).ToHashSet();
+            foreach (var (area, address) in Registers.Forced.Keys.Order())
+            {
+                if (!described.Contains((area, address)))
+                    registers.Add(Describe(area, address, "Unmapped"));
+            }
+        }
         return registers;
     }
 

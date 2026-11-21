@@ -1,0 +1,221 @@
+@page "/accounts"
+@attribute [Authorize(Policy = "Administrator")]
+@inherits ConfirmedComponentBase
+@using Application.Detection
+@using Security.Accounts
+@using Security.Detection
+@inject UserAdministrationService AccountAdmin
+@inject DetectionEngine Detection
+@inject DetectionRuleAdministrationService RuleAdmin
+
+<PageTitle>Accounts &amp; rules · SCADA</PageTitle>
+@if (Session.IsInstructor)
+{
+    <h1>Accounts &amp; rules</h1>
+    <OutcomeBanner Outcome="Outcome" />
+    <section class="panel">
+        <h2>Accounts</h2>
+        @if (_accounts.Count == 0)
+        {
+            <p class="muted">No local accounts.</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="grid">
+                    <thead><tr><th>Account</th><th>Role</th><th>State</th><th>API key</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        @foreach (var account in _accounts)
+                        {
+                            <tr @key="account.Username">
+                                <th scope="row"><strong class="cell-title">@account.Username</strong> @account.DisplayName</th>
+                                <td>@account.Role</td>
+                                <td>@(!account.IsEnabled ? "Disabled" : account.IsLocked ? "Locked" : "Enabled")</td>
+                                <td>@(account.HasApiKey ? "Active" : "None")</td>
+                                <td class="actions-cell">
+                                    <button class="btn" @onclick="() => EditRole(account)">Edit role</button>
+                                    <button class="btn" @onclick="() => AskEnabled(account)">@(account.IsEnabled ? "Disable" : "Enable")</button>
+                                    <button class="btn" @onclick='() => AskAccount(account, "Rotate password", "The existing password will stop working.", AccountAdmin.RotatePasswordAsync)'>Rotate password</button>
+                                    <button class="btn" @onclick='() => AskAccount(account, "Rotate API key", "Any existing API key will stop working.", AccountAdmin.RotateApiKeyAsync)'>Rotate API key</button>
+                                    <button class="btn" disabled="@(!account.HasApiKey)"
+                                            @onclick='() => AskAccount(account, "Revoke API key", "The existing API key will stop working.", AccountAdmin.RevokeApiKeyAsync)'>Revoke API key</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_roleAccount is { } username)
+        {
+            <div class="form-row hmi-details">
+                <label>Role for @username
+                    <select @bind="_role">
+                        @foreach (var role in Enum.GetValues<AccessRole>())
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </select>
+                </label>
+                <button class="btn btn-primary" @onclick="() => AskRole(username)">Change role</button>
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Detection rule settings</h2>
+        <div class="form-row">
+            <label>Rule
+                <select @bind="_ruleId" @bind:after="LoadRule">
+                    @foreach (var rule in _rules)
+                    {
+                        <option value="@rule.Id">@rule.Name · @rule.Id</option>
+                    }
+                </select>
+            </label>
+        </div>
+        @if (_rules.FirstOrDefault(rule => rule.Id == _ruleId) is { } selected)
+        {
+            <p class="muted">@selected.Description</p>
+            <div class="form-row">
+                <label class="check"><input type="checkbox" @bind="_enabled" /> Enabled</label>
+                <label>Severity
+                    <select @bind="_severity">
+                        @foreach (var severity in Enum.GetValues<DetectionSeverity>())
+                        {
+                            <option value="@severity">@severity</option>
+                        }
+                    </select>
+                </label>
+                <label>Threshold<input type="number" step="any" min="0" @bind="_threshold" /></label>
+                <label>Window (s)<input type="number" min="1" max="86400" @bind="_window" /></label>
+                <label>Cooldown (s)<input type="number" min="0" max="86400" @bind="_cooldown" /></label>
+                <button class="btn btn-primary" @onclick="() => AskRule()">Save rule settings</button>
+            </div>
+            <OutcomeBanner Outcome="_ruleInputError" />
+        }
+    </section>
+
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+    @if (_secret is { } secret)
+    {
+        <div class="dialog-backdrop">
+            <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="rotation-title">
+                <h2 id="rotation-title">@secret.Title</h2>
+                <p>Copy the new credential now. It will only be shown here.</p>
+                <input class="secret-value" aria-label="New credential" readonly value="@secret.Value" autocomplete="off" />
+                <div class="dialog-actions"><button class="btn btn-primary" @onclick="() => CloseSecret()">Done</button></div>
+            </section>
+        </div>
+    }
+}
+else
+{
+    <AccessDenied />
+}
+
+@code {
+    private IReadOnlyList<AccountSummary> _accounts = [];
+    private IReadOnlyList<RuleDescriptor> _rules = [];
+    private (string Title, string Value)? _secret;
+    private string? _roleAccount;
+    private AccessRole _role;
+    private string? _ruleId;
+    private bool _enabled;
+    private DetectionSeverity _severity;
+    private double? _threshold;
+    private int? _window;
+    private int? _cooldown;
+    private ActionOutcome? _ruleInputError;
+
+    protected override bool Refresh()
+    {
+        if (!Session.IsInstructor)
+            return false;
+
+        _rules = Detection.Rules;
+        if (_ruleId is null && _rules.Count > 0)
+        {
+            _ruleId = _rules[0].Id;
+            LoadRule();
+        }
+        return true;
+    }
+
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        if (Session.IsInstructor)
+            _accounts = await AccountAdmin.ListAsync(cancellationToken);
+    }
+
+    private bool EditRole(AccountSummary account)
+    {
+        _roleAccount = account.Username;
+        _role = account.Role;
+        return true;
+    }
+
+    private bool AskRole(string username)
+    {
+        var role = _role;
+        return Ask($"Change role for {username}?", $"Set this account’s role to {role}.", async () =>
+        {
+            var result = await AccountAdmin.ChangeRoleAsync(username, role, Session.Actor, StoppingToken);
+            if (result.Succeeded)
+                _roleAccount = null;
+            return new ActionOutcome(result.Succeeded, result.Message);
+        });
+    }
+
+    private bool AskEnabled(AccountSummary account)
+    {
+        var operation = account.IsEnabled ? "Disable" : "Enable";
+        return AskAccount(account, operation, $"{operation} this account.",
+            (username, actor, token) => AccountAdmin.SetEnabledAsync(username, !account.IsEnabled, actor, token));
+    }
+
+    private bool AskAccount(AccountSummary account, string operation, string description,
+        Func<string, Actor, CancellationToken, Task<AccountOperationResult>> run) =>
+        Ask($"{operation} · {account.Username}?", description, async () =>
+        {
+            var result = await run(account.Username, Session.Actor, StoppingToken);
+            if (result.Succeeded && result.Secret is { } secret && Session.IsInstructor)
+                _secret = ($"{result.Message} · {account.Username}", secret);
+            return new ActionOutcome(result.Succeeded, result.Message);
+        });
+
+    private bool CloseSecret()
+    {
+        _secret = null;
+        return true;
+    }
+
+    private Task LoadRule()
+    {
+        if (_rules.FirstOrDefault(rule => rule.Id == _ruleId)?.Settings is { } settings)
+        {
+            _enabled = settings.Enabled;
+            _severity = settings.Severity;
+            _threshold = settings.Threshold;
+            _window = settings.WindowSeconds;
+            _cooldown = settings.CooldownSeconds;
+        }
+        _ruleInputError = null;
+        return Task.CompletedTask;
+    }
+
+    private bool AskRule()
+    {
+        if (_ruleId is not { } id || _threshold is not { } threshold || _window is not { } window || _cooldown is not { } cooldown)
+        {
+            _ruleInputError = ActionOutcome.Failed("Enter a threshold, window and cooldown.");
+            return false;
+        }
+
+        _ruleInputError = null;
+        var settings = new DetectionRuleSettings(id, _enabled, _severity, threshold, window, cooldown);
+        return Ask($"Save settings for {id}?", "Apply these detection settings to the simulation.",
+            async () => ActionOutcome.From(await RuleAdmin.UpdateAsync(settings, Session.Actor, StoppingToken)), dangerous: false);
+    }
+}

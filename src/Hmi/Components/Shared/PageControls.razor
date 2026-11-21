@@ -1,0 +1,12 @@
+<nav class="pager" aria-label="Result pages">
+    <button class="btn" disabled="@(Page <= 1)" @onclick="() => PageChanged.InvokeAsync(Page - 1)">Previous</button>
+    <span>Page @Page of @Math.Max(1, TotalPages) · @TotalCount results</span>
+    <button class="btn" disabled="@(Page >= TotalPages)" @onclick="() => PageChanged.InvokeAsync(Page + 1)">Next</button>
+</nav>
+
+@code {
+    [Parameter] public int Page { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+}

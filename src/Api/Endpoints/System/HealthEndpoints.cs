@@ -10,7 +10,9 @@ public static class HealthEndpoints
 
     public static WebApplication Map(WebApplication app)
     {
-        app.MapGet("/health", (IStorageProbe storage) => Results.Ok(new { status = "healthy", storage = storage.Provider }));
+        app.MapGet("/health", (IStorageProbe storage) => Results.Ok(new { status = "healthy", storage = storage.Provider }))
+            .WithName(HealthFormatPolicy.JsonEndpoint)
+            .WithOrder(-1);
         app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
         app.MapGet("/health/ready", async (IPersistenceQueue queue, SimulationEngine engine, IStorageProbe storage,
             CancellationToken cancellationToken) =>

@@ -8,6 +8,7 @@ public static class RealtimeTopics
     public const string Network = "network";
     public const string Alarms = "alarms";
     public const string Events = "events";
+    public const string EventsPersisted = "events-persisted";
     public const string Incidents = "incidents";
     public const string Scenarios = "scenarios";
     public const string Detections = "detections";

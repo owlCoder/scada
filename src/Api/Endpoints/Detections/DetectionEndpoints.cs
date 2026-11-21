@@ -2,6 +2,7 @@ using Api.Authorization;
 using Api.Contracts;
 using Application.Detection;
 using Application.Identity;
+using Domain.Process.Commands;
 using Security.Detection;
 
 namespace Api.Endpoints.Detections;
@@ -18,17 +19,19 @@ public static class DetectionEndpoints
         read.MapGet("/rules", (DetectionEngine detection) => Results.Ok(detection.Rules));
         read.MapGet("/metrics", (DetectionEngine detection) => Results.Ok(detection.Metrics));
 
-        app.MapPut("/api/detections/rules/{ruleId}", async (string ruleId, RuleSettingsRequest request, DetectionEngine detection,
-            IDetectionRuleSettingsStore store, CancellationToken cancellationToken) =>
+        app.MapPut("/api/detections/rules/{ruleId}", async (string ruleId, RuleSettingsRequest request, DetectionRuleAdministrationService rules,
+            HttpContext http, CancellationToken cancellationToken) =>
         {
             var settings = new DetectionRuleSettings(ruleId, request.Enabled, request.Severity, request.Threshold,
                 request.WindowSeconds, request.CooldownSeconds);
-            if (detection.Rules.All(r => r.Id != ruleId))
-                return Results.NotFound();
-            if (!detection.UpdateSettings(settings))
-                return Results.BadRequest("Invalid rule settings.");
-            await store.SaveAsync(settings, cancellationToken);
-            return Results.Ok(settings);
+            var result = await rules.UpdateAsync(settings, http.Actor(), cancellationToken);
+            return result.Accepted ? Results.Ok(settings) : result.Reason switch
+            {
+                CommandRejectionReason.UnknownDevice => Results.NotFound(),
+                CommandRejectionReason.NotAuthorized => Results.Forbid(),
+                CommandRejectionReason.InvalidValue => Results.BadRequest("Invalid rule settings."),
+                _ => result.ToHttp()
+            };
         }).RequireRole(AccessRole.Administrator).RequireCredentialRateLimit();
         return app;
     }

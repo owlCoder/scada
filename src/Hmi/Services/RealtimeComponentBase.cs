@@ -23,26 +23,32 @@ public abstract class RealtimeComponentBase : ComponentBase, IAsyncDisposable
     /// <summary>Re-reads the component's state from the application services. Return true when it should re-render.</summary>
     protected abstract bool Refresh();
 
+    /// <summary>Loads data from asynchronous services as part of a refresh.</summary>
+    protected virtual Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    protected CancellationToken StoppingToken => _stopping.Token;
+
     /// <summary>Called for each received message before <see cref="Refresh"/>; for components that use the payload itself.</summary>
     protected virtual bool OnMessage(RealtimeMessage message) => false;
 
     protected override async Task OnInitializedAsync()
     {
         await Session.InitializeAsync();
-        Refresh();
         if (Topics.Count > 0)
-        {
             _subscription = Feed.Subscribe(Topics, capacity: 64);
+        Refresh();
+        await RefreshAsync(StoppingToken);
+        if (_subscription is not null)
             _ = PumpAsync(_subscription, _stopping.Token);
-        }
     }
 
     /// <summary>Runs an action and re-renders, for button handlers that change state.</summary>
     protected async Task<bool> RefreshNowAsync()
     {
-        await InvokeAsync(() =>
+        await InvokeAsync(async () =>
         {
             Refresh();
+            await RefreshAsync(StoppingToken);
             StateHasChanged();
         });
         return true;
@@ -56,9 +62,11 @@ public abstract class RealtimeComponentBase : ComponentBase, IAsyncDisposable
             {
                 while (subscription.Reader.TryRead(out var message))
                     OnMessage(message);
-                await InvokeAsync(() =>
+                await InvokeAsync(async () =>
                 {
-                    if (Refresh())
+                    var changed = Refresh();
+                    await RefreshAsync(cancellationToken);
+                    if (changed)
                         StateHasChanged();
                 });
                 await Task.Delay(MinimumRefreshInterval, cancellationToken);

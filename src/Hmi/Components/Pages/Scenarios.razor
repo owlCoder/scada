@@ -1,0 +1,177 @@
+@page "/scenarios"
+@inherits ConfirmedComponentBase
+@using Application.Scenarios
+@using Security.Scenarios
+@inject ScenarioEngine ScenarioEngine
+
+<PageTitle>Scenarios · SCADA</PageTitle>
+<h1>Scenarios</h1>
+<OutcomeBanner Outcome="Outcome" />
+
+<section class="panel">
+    <h2>Current run</h2>
+    @if (_current is { } run)
+    {
+        <p><strong>@run.ScenarioName</strong> · @run.State · @run.Outcome</p>
+        <label class="run-progress">
+            <progress max="100" value="@run.ProgressPercent.ToString("0.##", CultureInfo.InvariantCulture)" aria-label="Scenario progress"></progress>
+            @run.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) / @run.Duration.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) simulated seconds
+        </label>
+        @if (Session.IsInstructor && IsActive)
+        {
+            <div class="actions">
+                @if (run.State == ScenarioRunState.Running)
+                {
+                    <button class="btn" @onclick='() => AskCurrent("Pause", run, ScenarioEngine.PauseAsync)'>Pause</button>
+                }
+                else
+                {
+                    <button class="btn" @onclick='() => AskCurrent("Resume", run, ScenarioEngine.ResumeAsync)'>Resume</button>
+                }
+                <button class="btn" @onclick='() => AskCurrent("Stop", run, ScenarioEngine.StopAsync)'>Stop</button>
+            </div>
+        }
+        @if (run.Actions.Count > 0)
+        {
+            <table class="grid hmi-details">
+                <thead><tr><th>Simulated offset</th><th>Action</th><th>Result</th><th>Detail</th></tr></thead>
+                <tbody>
+                    @foreach (var action in run.Actions)
+                    {
+                        <tr><td>@action.Offset.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) s</td>
+                            <td>@action.Action</td><td>@(action.Succeeded ? "Succeeded" : "Failed")</td><td>@action.Detail</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+    else
+    {
+        <p class="muted">No current run.</p>
+    }
+    @if (Session.IsInstructor)
+    {
+        <button class="btn hmi-details" @onclick="() => AskReset()">Reset environment</button>
+    }
+</section>
+
+<section class="panel">
+    <h2>Scenario catalog</h2>
+    <div class="table-scroll">
+        <table class="grid">
+            <thead><tr><th>Scenario</th><th>Category</th><th>Duration</th><th>Expected detections</th>
+                @if (Session.IsInstructor) { <th>Control</th> }</tr></thead>
+            <tbody>
+                @foreach (var scenario in _catalog)
+                {
+                    <tr @key="scenario.Id">
+                        <th scope="row"><strong class="cell-title">@scenario.Name</strong> @scenario.Description</th>
+                        <td>@scenario.Category</td><td>@scenario.DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture) s</td>
+                        <td>@Detections(scenario.ExpectedDetections)</td>
+                        @if (Session.IsInstructor)
+                        {
+                            <td><button class="btn" disabled="@IsActive" @onclick="() => AskStart(scenario)">Start</button></td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Run history</h2>
+    @if (_history.Count == 0)
+    {
+        <p class="muted">No runs recorded.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead><tr><th>Run</th><th>Started (UTC)</th><th>State</th><th>Outcome</th><th>Expected detections</th><th>Observed detections</th>
+                    @if (Session.IsInstructor) { <th>Control</th> }</tr></thead>
+                <tbody>
+                    @foreach (var previous in _history)
+                    {
+                        <tr @key="previous.RunId">
+                            <th scope="row"><strong class="cell-title">@previous.ScenarioName</strong> <span class="break-text">@previous.RunId</span></th>
+                            <td>@previous.StartedAt.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture) · @previous.StartedBy</td>
+                            <td>@previous.State</td><td>@previous.Outcome</td>
+                            <td>@Detections(previous.ExpectedDetections)</td><td>@Detections(previous.ObservedDetections)</td>
+                            @if (Session.IsInstructor)
+                            {
+                                <td><button class="btn" disabled="@(IsActive || previous.EndedAt is null)" @onclick="() => AskReplay(previous)">Replay</button></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private IReadOnlyList<ScenarioDescriptor> _catalog = [];
+    private IReadOnlyList<ScenarioRunRecord> _history = [];
+    private ScenarioRunRecord? _current;
+    private (Guid? Id, ScenarioRunState? State)? _historyFor;
+    private long _historyLoadId;
+
+    private bool IsActive => _current?.State is ScenarioRunState.Running or ScenarioRunState.Paused;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Scenarios];
+
+    protected override bool Refresh()
+    {
+        _current = ScenarioEngine.Current;
+        return true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _catalog = ScenarioEngine.Scenarios;
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        var current = (_current?.RunId, _current?.State);
+        if (_historyFor == current)
+            return;
+
+        var loadId = ++_historyLoadId;
+        var history = await ScenarioEngine.ListRunsAsync(50, cancellationToken);
+        if (loadId != _historyLoadId)
+            return;
+
+        _history = history;
+        _historyFor = current;
+    }
+
+    private bool AskStart(ScenarioDescriptor scenario) =>
+        Ask($"Start {scenario.Name}?", "Start this scenario in the live training simulation.",
+            () => RunAsync((actor, token) => ScenarioEngine.StartAsync(scenario.Id, actor, token)));
+
+    private bool AskCurrent(string operation, ScenarioRunRecord run, Func<Actor, CancellationToken, Task<ScenarioControlResult>> action) =>
+        Ask($"{operation} {run.ScenarioName}?", $"{operation} the current scenario run.", () =>
+            ScenarioEngine.ActiveRunId == run.RunId ? RunAsync(action) :
+                Task.FromResult(ActionOutcome.Failed("The current run changed. Select the action again.")));
+
+    private bool AskReset() =>
+        Ask("Reset the scenario environment?", "Stop any active run and restore training defaults.",
+            () => RunAsync(ScenarioEngine.ResetAsync));
+
+    private bool AskReplay(ScenarioRunRecord run) =>
+        Ask($"Replay {run.ScenarioName}?", "Create a new scenario run based on this recorded run.",
+            () => RunAsync((actor, token) => ScenarioEngine.ReplayAsync(run.RunId, actor, token)));
+
+    private async Task<ActionOutcome> RunAsync(Func<Actor, CancellationToken, Task<ScenarioControlResult>> run)
+    {
+        var result = await run(Session.Actor, StoppingToken);
+        return new ActionOutcome(result.Succeeded, result.Message);
+    }
+
+    private static string Detections(IReadOnlyList<string> detections) => detections.Count == 0 ? "—" : string.Join(", ", detections);
+}
