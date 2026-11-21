@@ -13,7 +13,10 @@ public static class RealtimeTopics
     public const string Scenarios = "scenarios";
     public const string Detections = "detections";
     public const string Simulation = "simulation";
+    public const string Grid = "grid";
+    public const string GridAlarms = "grid-alarms";
+    public const string GridStatus = "grid-status";
 
     public static IReadOnlyList<string> All { get; } =
-        [Plant, Telemetry, Controllers, Network, Alarms, Events, Incidents, Scenarios, Detections, Simulation];
+        [Plant, Telemetry, Controllers, Network, Alarms, Events, Incidents, Scenarios, Detections, Simulation, Grid, GridAlarms, GridStatus];
 }
