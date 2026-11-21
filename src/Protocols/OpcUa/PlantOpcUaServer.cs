@@ -12,6 +12,8 @@ internal sealed class PlantOpcUaServer(
     OpcUaOptions options, IOpcUaIdentityValidator identities, SimulationEngine simulation,
     ControlCommandService commands, TimeProvider time) : StandardServer
 {
+    private static readonly TimeSpan ValidationTimeout = TimeSpan.FromSeconds(10);
+
     public PlantNodeManager Nodes { get; private set; } = null!;
 
     protected override MasterNodeManager CreateMasterNodeManager(IServerInternal server, ApplicationConfiguration configuration)
@@ -45,9 +47,10 @@ internal sealed class PlantOpcUaServer(
 
         try
         {
-            // The SDK's impersonation callback is synchronous and runs on a request thread.
-            var actor = identities.ValidateAsync(token.UserName, Encoding.UTF8.GetString(password), CancellationToken.None)
-                .GetAwaiter().GetResult();
+            // The SDK's impersonation callback is synchronous and runs on a request thread; bound the wait.
+            using var timeout = new CancellationTokenSource(ValidationTimeout);
+            var actor = identities.ValidateAsync(token.UserName, Encoding.UTF8.GetString(password), timeout.Token)
+                .WaitAsync(ValidationTimeout).GetAwaiter().GetResult();
             if (actor is not null)
                 return args.Identity = new OpcUaSessionIdentity(actor, token.PolicyId);
         }

@@ -10,8 +10,8 @@ public sealed class OpcUaOptionsTests
     {
         var options = new OpcUaOptions();
         Assert.False(options.Enabled);
-        Assert.True(options.AllowAnonymous);
-        Assert.True(options.AutoAcceptUntrustedCertificates);
+        Assert.False(options.AllowAnonymous);
+        Assert.False(options.AutoAcceptUntrustedCertificates);
         Assert.Equal(4840, options.Port);
         Assert.Empty(options.Validate());
         return Task.CompletedTask;

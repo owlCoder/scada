@@ -33,6 +33,8 @@ internal sealed class OpcUaTestHost : IAsyncDisposable
                 ("Protocols:OpcUa:Enabled", "true"),
                 ("Protocols:OpcUa:Port", host.Port.ToString()),
                 ("Protocols:OpcUa:PkiDirectory", host.ServerPki),
+                ("Protocols:OpcUa:AllowAnonymous", "true"),
+                ("Protocols:OpcUa:AutoAcceptUntrustedCertificates", "true"),
                 ("Simulation:Host:RunLoop", "false"),
                 ("Security:Users:0:Password", OperatorPassword),
                 ("Security:Users:1:Username", "opc-viewer"),

@@ -32,10 +32,10 @@ The listener binds to IPv4 loopback (`127.0.0.1`).
 | --- | --- | --- |
 | `Enabled` | `false` | Starts the OPC UA server with the API host. |
 | `Port` | `4840` | TCP port, from 1024 to 65535. |
-| `AllowAnonymous` | `true` | Allows anonymous Viewer sessions and enables the `None` endpoint. |
+| `AllowAnonymous` | `false` | Allows anonymous Viewer sessions and enables the unencrypted `None` endpoint. Local training only. |
 | `ApplicationName` | `SCADA Training Plant OPC UA` | Server name shown in discovery. |
 | `PkiDirectory` | `.scada/pki` | Absolute path or a path relative to the directory containing `scada.slnx`, with the API content root as a fallback. |
-| `AutoAcceptUntrustedCertificates` | `true` | Development default. Set it to `false` to require clients to be explicitly trusted. |
+| `AutoAcceptUntrustedCertificates` | `false` | When `true`, every client certificate is trusted permanently. Use it only for local development and tests; otherwise copy client certificates into `<PkiDirectory>/trusted/certs`. |
 
 The `None` endpoint accepts anonymous sessions for browsing, reading and subscriptions. `Basic256Sha256`
 is available for `Sign` and `SignAndEncrypt`. Use `SignAndEncrypt` for message confidentiality.

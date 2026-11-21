@@ -4,10 +4,12 @@ public sealed class OpcUaOptions
 {
     public bool Enabled { get; set; }
     public int Port { get; set; } = 4840;
-    public bool AllowAnonymous { get; set; } = true;
+    // Anonymous access opens an unencrypted SecurityPolicy None endpoint. Enable it only for local training.
+    public bool AllowAnonymous { get; set; }
     public string PkiDirectory { get; set; } = ".scada/pki";
     public string ApplicationName { get; set; } = "SCADA Training Plant OPC UA";
-    public bool AutoAcceptUntrustedCertificates { get; set; } = true;
+    // Auto-accept trusts every client certificate permanently. Enable it only for local development and tests.
+    public bool AutoAcceptUntrustedCertificates { get; set; }
 
     public IReadOnlyList<string> Validate()
     {

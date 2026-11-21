@@ -39,7 +39,9 @@ internal sealed class PlantNodeManager(
         foreach (var device in PlantNodeValues.Map(plant, controllers))
         foreach (var (field, value) in device.Values)
         {
-            if (_variables[(device.Folder, device.Id, field)].Update(SystemContext, value, timestamp))
+            // The address space is built once; a device added later is skipped instead of failing the update loop.
+            if (_variables.TryGetValue((device.Folder, device.Id, field), out var variable) &&
+                variable.Update(SystemContext, value, timestamp))
                 changed++;
         }
 

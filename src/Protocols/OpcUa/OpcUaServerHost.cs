@@ -71,8 +71,25 @@ public sealed class OpcUaServerHost(
             throw;
         }
 
-        _server = server;
-        _updateTask = UpdateNodesAsync(server);
+        bool stopRequested;
+        lock (_shutdown)
+        {
+            stopRequested = _stopTask is not null;
+            if (!stopRequested)
+            {
+                _server = server;
+                _updateTask = UpdateNodesAsync(server);
+            }
+        }
+
+        if (stopRequested)
+        {
+            // StopAsync ran while the server was starting; do not leak the listener.
+            using (server)
+                await server.StopAsync(CancellationToken.None);
+            return;
+        }
+
         logger.LogInformation("OPC UA listening on {Address}", address);
     }
 
@@ -107,6 +124,16 @@ public sealed class OpcUaServerHost(
     private async Task UpdateNodesAsync(PlantOpcUaServer server)
     {
         await foreach (var report in _updates.Reader.ReadAllAsync())
-            server.Nodes.Update(report.Plant.Snapshot, report.Controllers, report.Timestamp.UtcDateTime);
+        {
+            try
+            {
+                server.Nodes.Update(report.Plant.Snapshot, report.Controllers, report.Timestamp.UtcDateTime);
+            }
+            catch (Exception exception)
+            {
+                // One bad step must not freeze every OPC UA value for the rest of the run.
+                logger.LogError(exception, "OPC UA node update failed for step at {Timestamp}", report.Timestamp);
+            }
+        }
     }
 }
