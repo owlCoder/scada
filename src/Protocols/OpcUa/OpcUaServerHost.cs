@@ -33,7 +33,7 @@ public sealed class OpcUaServerHost(
         var address = $"opc.tcp://localhost:{options.Port}";
         // A DNS name in BaseAddresses makes the SDK listen on all interfaces.
         var builder = application.Build(ApplicationUri, ApplicationUri)
-            .AsServer([$"opc.tcp://127.0.0.1:{options.Port}"])
+            .AsServer([$"opc.tcp://{options.BindAddress}:{options.Port}"])
             .AddUnsecurePolicyNone(options.AllowAnonymous)
             .AddPolicy(MessageSecurityMode.Sign, SecurityPolicies.Basic256Sha256)
             .AddPolicy(MessageSecurityMode.SignAndEncrypt, SecurityPolicies.Basic256Sha256)
@@ -90,7 +90,7 @@ public sealed class OpcUaServerHost(
             return;
         }
 
-        logger.LogInformation("OPC UA listening on {Address}", address);
+        logger.LogInformation("OPC UA listening on {Address}:{Port}", options.BindAddress, options.Port);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

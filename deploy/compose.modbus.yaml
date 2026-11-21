@@ -1,0 +1,6 @@
+# Opt in to publishing Modbus; combine with either base Compose file.
+# Set SCADA_MODBUS_ENABLED=true as well to start the listener. Writes remain disabled.
+services:
+  api:
+    ports:
+      - "127.0.0.1:${SCADA_MODBUS_PORT:-1502}:1502"

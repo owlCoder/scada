@@ -1,6 +1,9 @@
 using Api.Configuration;
+using Application.Persistence;
+using Infrastructure.Persistence.InMemory;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace IntegrationTests.Configuration;
@@ -29,6 +32,19 @@ public sealed class ServiceRegistrationTests
         });
 
         Assert.Throws<InvalidOperationException>(() => builder.AddScadaServices());
+        return Task.CompletedTask;
+    }
+
+    [Theory]
+    [InlineData("Memory")]
+    [InlineData("InMemory")]
+    [InlineData("inmemory")]
+    public Task MemoryProviderNamesRegisterInMemoryStorage(string provider)
+    {
+        var builder = CreateBuilder(new Dictionary<string, string?> { ["Storage:Provider"] = provider });
+        builder.AddScadaServices();
+        var registration = Assert.Single(builder.Services, service => service.ServiceType == typeof(IStorageProbe));
+        Assert.Equal(typeof(InMemoryStorageProbe), registration.ImplementationType);
         return Task.CompletedTask;
     }
 

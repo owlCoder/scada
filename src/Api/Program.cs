@@ -17,7 +17,14 @@ using Api.Endpoints.Telemetry;
 using Api.Development;
 using Api.Endpoints.SignIn;
 using Api.Middleware;
+using Api.Hosting;
 using Security.Accounts;
+
+if (args is ["--healthcheck"])
+{
+    Environment.ExitCode = await ContainerHealthCheck.RunAsync();
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddScadaServices();

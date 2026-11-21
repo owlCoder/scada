@@ -17,7 +17,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Configuration.Registration;
 
 /// <summary>
-/// <c>Storage:Provider</c> selects <c>Memory</c> (default) or <c>Postgres</c> (EF Core, needs <c>ConnectionStrings:Scada</c>).
+/// <c>Storage:Provider</c> selects <c>Memory</c>/<c>InMemory</c> (default) or <c>Postgres</c> (EF Core, needs <c>ConnectionStrings:Scada</c>).
 /// With Postgres, pending migrations are applied at startup unless <c>Storage:ApplyMigrations</c> is false.
 /// </summary>
 public static class StorageRegistrationExtensions
@@ -27,7 +27,8 @@ public static class StorageRegistrationExtensions
         var provider = builder.Configuration[$"{ConfigurationSections.Storage}:Provider"] ?? "Memory";
         if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
             AddPostgres(builder);
-        else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
+        else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase)
+            || provider.Equals("InMemory", StringComparison.OrdinalIgnoreCase))
             AddInMemory(builder.Services);
         else
             throw new InvalidOperationException($"Unknown Storage:Provider '{provider}'.");

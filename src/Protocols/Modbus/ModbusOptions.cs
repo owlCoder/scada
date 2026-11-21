@@ -1,8 +1,12 @@
+using System.Net;
+using System.Net.Sockets;
+
 namespace Protocols.Modbus;
 
 public sealed class ModbusOptions
 {
     public bool Enabled { get; set; }
+    public string BindAddress { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 1502;
     public int MaxConnections { get; set; } = 16;
     public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(10);
@@ -15,13 +19,15 @@ public sealed class ModbusOptions
 
     /// <summary>
     /// Modbus writes need this explicit opt-in in addition to <c>Registers:WritesEnabled</c>, because the protocol cannot
-    /// authenticate the client: anything able to reach the (loopback-only) port could otherwise change setpoints.
+    /// authenticate the client: anything able to reach the configured port could otherwise change setpoints.
     /// </summary>
     public bool AllowWrites { get; set; }
 
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
+        if (!IPAddress.TryParse(BindAddress, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
+            errors.Add("Modbus BindAddress must be an IPv4 address.");
         if (Port is < 1024 or > 65535)
             errors.Add("Modbus port must be between 1024 and 65535.");
         if (MaxConnections is < 1 or > 256)

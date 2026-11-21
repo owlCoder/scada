@@ -1,8 +1,12 @@
+using System.Net;
+using System.Net.Sockets;
+
 namespace Protocols.OpcUa;
 
 public sealed class OpcUaOptions
 {
     public bool Enabled { get; set; }
+    public string BindAddress { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 4840;
     // Anonymous access opens an unencrypted SecurityPolicy None endpoint. Enable it only for local training.
     public bool AllowAnonymous { get; set; }
@@ -14,6 +18,8 @@ public sealed class OpcUaOptions
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
+        if (!IPAddress.TryParse(BindAddress, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
+            errors.Add("OPC UA BindAddress must be an IPv4 address.");
         if (Port is < 1024 or > 65535)
             errors.Add("OPC UA port must be between 1024 and 65535.");
         if (!IsValidPath(PkiDirectory))

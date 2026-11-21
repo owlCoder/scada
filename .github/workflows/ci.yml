@@ -2,26 +2,21 @@ name: Build and test
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Tests/**'
-      - '*.slnx'
-      - '*.props'
-      - '.github/workflows/ci.yml'
+    branches: [main, feature/delivery-infra]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: scada-ci-${{ github.ref }}
+  group: scada-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  verify:
+  build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,9 +24,206 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
       - name: Restore
         run: dotnet restore scada.slnx
       - name: Build
-        run: dotnet build scada.slnx -c Release --no-restore
-      - name: Test
-        run: dotnet test scada.slnx -c Release --no-build
+        run: dotnet build scada.slnx -c Release --no-restore --disable-build-servers
+      - name: Architecture, unit and frontend tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for project in ArchitectureTests UnitTests FrontendTests; do
+            dotnet test "Tests/$project" -c Release --no-build --logger trx --results-directory "$PWD/TestResults/$project" || failed=1
+          done
+          exit "$failed"
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-test-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Integration and optional protocol/performance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for project in Tests/{IntegrationTests,ProtocolTests,PerformanceTests}/*.csproj; do
+            [[ -f "$project" ]] || continue
+            name=$(basename "$(dirname "$project")")
+            dotnet test "$project" -c Release --logger trx --results-directory "$PWD/TestResults/$name" || failed=1
+          done
+          exit "$failed"
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Database tests (Testcontainers)
+        run: dotnet test Tests/DatabaseTests -c Release --logger trx --results-directory "$PWD/TestResults/DatabaseTests"
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Build and run optional Playwright tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          projects=(Tests/EndToEndTests/*.csproj)
+          if (( ${#projects[@]} == 0 )); then
+            echo 'EndToEndTests is not present yet.'
+            exit 0
+          fi
+          for project in "${projects[@]}"; do
+            dotnet build "$project" -c Release --disable-build-servers
+          done
+          playwright=$(find Tests/EndToEndTests/bin/Release -name playwright.ps1 -print -quit)
+          [[ -n "$playwright" ]] || { echo 'Generated playwright.ps1 was not found' >&2; exit 1; }
+          pwsh -NoProfile -File "$playwright" install --with-deps chromium
+          for project in "${projects[@]}"; do
+            dotnet test "$project" -c Release --no-build --logger trx --results-directory "$PWD/TestResults/EndToEndTests"
+          done
+      - name: Upload failed test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Verify formatting
+        run: dotnet format scada.slnx --verify-no-changes
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Check smoke script
+        run: |
+          bash -n scripts/*.sh
+          shellcheck scripts/smoke.sh
+      - name: Build image
+        run: docker build --tag scada-api:ci .
+      - name: Compose smoke test (PostgreSQL, Modbus and OPC UA enabled)
+        env:
+          SCADA_IMAGE: scada-api:ci
+          SCADA_MODBUS_ENABLED: 'true'
+          SCADA_OPCUA_ENABLED: 'true'
+        run: scripts/smoke.sh
+      - name: Compose smoke test (in-memory)
+        env:
+          SCADA_IMAGE: scada-api:ci
+          SCADA_SMOKE_PROVIDER: InMemory
+        run: scripts/smoke.sh
+
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Restore
+        run: dotnet restore scada.slnx
+      - name: Fail on vulnerable direct or transitive packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet list scada.slnx package --vulnerable --include-transitive --format json > vulnerabilities.json
+          python3 - <<'PYTHON'
+          import json
+          import sys
+          report = json.load(open("vulnerabilities.json"))
+          if any(item.get("level", "").lower() == "error" for item in report.get("logs", [])):
+              sys.exit("Dependency audit reported an error")
+          projects = report.get("projects", [])
+          if not projects:
+              sys.exit("Dependency audit produced no projects")
+          vulnerable = []
+          for project in projects:
+              for framework in project.get("frameworks", []):
+                  for kind in ("topLevelPackages", "transitivePackages"):
+                      for package in framework.get(kind, []):
+                          if package.get("vulnerabilities"):
+                              vulnerable.append((project["path"], package["id"], package["resolvedVersion"]))
+          for path, package, version in vulnerable:
+              print(f"{path}: {package} {version} is vulnerable", file=sys.stderr)
+          sys.exit(1 if vulnerable else 0)
+          PYTHON
