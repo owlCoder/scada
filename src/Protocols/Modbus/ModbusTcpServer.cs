@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Protocols.Modbus;
 
-/// <summary>Modbus TCP listener bound to loopback only, with a connection limit and per-request idle timeout.</summary>
+/// <summary>Modbus TCP listener with a configurable bind address, with a connection limit and per-request idle timeout.</summary>
 public sealed class ModbusTcpServer(ModbusRequestProcessor processor, ModbusOptions options, ILogger<ModbusTcpServer> logger)
     : BackgroundService
 {
@@ -19,11 +19,11 @@ public sealed class ModbusTcpServer(ModbusRequestProcessor processor, ModbusOpti
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var listener = new TcpListener(IPAddress.Loopback, options.Port);
+        var listener = new TcpListener(IPAddress.Parse(options.BindAddress), options.Port);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         _listening.TrySetResult(port);
-        logger.LogInformation("Modbus TCP listening on 127.0.0.1:{Port}", port);
+        logger.LogInformation("Modbus TCP listening on {Address}:{Port}", options.BindAddress, port);
         try
         {
             while (!stoppingToken.IsCancellationRequested)

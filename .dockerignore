@@ -4,9 +4,10 @@
 .github
 .vs
 .idea
-TestResults
+**/TestResults
 **/*.user
-.env
-.scada
+**/.env
+**/.env.*
+**/.scada
 **/node_modules
 .config

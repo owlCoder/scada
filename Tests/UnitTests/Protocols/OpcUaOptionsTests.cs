@@ -13,6 +13,7 @@ public sealed class OpcUaOptionsTests
         Assert.False(options.AllowAnonymous);
         Assert.False(options.AutoAcceptUntrustedCertificates);
         Assert.Equal(4840, options.Port);
+        Assert.Equal("127.0.0.1", options.BindAddress);
         Assert.Empty(options.Validate());
         return Task.CompletedTask;
     }
@@ -25,6 +26,28 @@ public sealed class OpcUaOptionsTests
     {
         var errors = new OpcUaOptions { Port = port, PkiDirectory = directory, ApplicationName = applicationName }.Validate();
         Assert.Equal(2, errors.Count);
+        return Task.CompletedTask;
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("0.0.0.0")]
+    [InlineData("192.0.2.1")]
+    public Task AcceptsIpv4BindAddress(string address)
+    {
+        Assert.Empty(new OpcUaOptions { BindAddress = address }.Validate());
+        return Task.CompletedTask;
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("localhost")]
+    [InlineData("::1")]
+    [InlineData("999.0.0.1")]
+    public Task RejectsInvalidBindAddress(string address)
+    {
+        var error = Assert.Single(new OpcUaOptions { BindAddress = address }.Validate());
+        Assert.Contains("BindAddress", error);
         return Task.CompletedTask;
     }
 

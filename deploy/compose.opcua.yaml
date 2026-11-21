@@ -1,0 +1,6 @@
+# Opt in to publishing OPC UA; combine with either base Compose file.
+# Set SCADA_OPCUA_ENABLED=true as well to start the listener.
+services:
+  api:
+    ports:
+      - "127.0.0.1:${SCADA_OPCUA_PORT:-4840}:4840"
