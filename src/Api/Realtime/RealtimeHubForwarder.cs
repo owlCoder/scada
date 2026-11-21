@@ -1,53 +1,50 @@
 using Application.Realtime;
-using Application.Simulation;
-using Domain.Process.Snapshots;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Api.Realtime;
 
-/// <summary>
-/// Subscribes to the realtime feed with its own bounded queue and forwards messages to hub clients. Plant snapshots go to
-/// instructors unchanged and to everyone else redacted, so true values and spoofing never reach operators.
-/// </summary>
-public sealed class RealtimeHubForwarder(IRealtimeFeed feed, IHubContext<ScadaHub> hub, ILogger<RealtimeHubForwarder> logger) : BackgroundService
+/// <summary>Each hub connection has a bounded feed and its own send loop, so transport backpressure stays local.</summary>
+public sealed class RealtimeHubForwarder(IRealtimeFeed feed, IHubContext<ScadaHub> hub, ILogger<RealtimeHubForwarder> logger) : IHostedService
 {
-    private static readonly string[] Everyone = [ScadaHubGroups.Instructors, ScadaHubGroups.Operators];
+    private readonly Lock _sync = new();
+    private readonly Dictionary<string, HubClientSubscription> _connections = [];
+    private bool _stopping;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public bool Connect(string connectionId, bool instructor, CancellationToken connectionAborted)
     {
-        await using var subscription = feed.Subscribe(RealtimeTopics.All, capacity: 1024);
-        try
+        lock (_sync)
         {
-            await foreach (var message in subscription.Reader.ReadAllAsync(stoppingToken))
-                await ForwardAsync(message, stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            logger.LogDebug("Realtime hub forwarder stopped ({Dropped} message(s) dropped)", subscription.Dropped);
+            if (_stopping || _connections.ContainsKey(connectionId))
+                return false;
+            var subscription = feed.Subscribe(RealtimeTopics.All, capacity: 256);
+            _connections.Add(connectionId, new HubClientSubscription(subscription, hub.Clients.Client(connectionId),
+                instructor, connectionAborted, logger));
+            return true;
         }
     }
 
-    public async Task<bool> ForwardAsync(RealtimeMessage message, CancellationToken cancellationToken)
+    public async Task<bool> DisconnectAsync(string connectionId)
     {
-        try
-        {
-            if (message.Payload is PlantSnapshot plant)
-            {
-                await hub.Clients.Group(ScadaHubGroups.Instructors).SendAsync(ScadaHub.MessageMethod, message.Topic, plant, cancellationToken);
-                await hub.Clients.Group(ScadaHubGroups.Operators)
-                    .SendAsync(ScadaHub.MessageMethod, message.Topic, PlantViewRedactor.ForOperators(plant), cancellationToken);
-            }
-            else
-            {
-                await hub.Clients.Groups(Everyone).SendAsync(ScadaHub.MessageMethod, message.Topic, message.Payload, cancellationToken);
-            }
-
-            return true;
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning(exception, "Could not forward realtime message on {Topic}", message.Topic);
+        HubClientSubscription? connection;
+        lock (_sync)
+            _connections.Remove(connectionId, out connection);
+        if (connection is null)
             return false;
+        await connection.DisposeAsync();
+        return true;
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        HubClientSubscription[] connections;
+        lock (_sync)
+        {
+            _stopping = true;
+            connections = _connections.Values.ToArray();
+            _connections.Clear();
         }
+        await Task.WhenAll(connections.Select(connection => connection.DisposeAsync().AsTask())).WaitAsync(cancellationToken);
     }
 }

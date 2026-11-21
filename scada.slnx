@@ -15,5 +15,7 @@
     <Project Path="Tests/FrontendTests/FrontendTests.csproj" />
     <Project Path="Tests/IntegrationTests/IntegrationTests.csproj" />
     <Project Path="Tests/ArchitectureTests/ArchitectureTests.csproj" />
+    <Project Path="Tests/ProtocolTests/ProtocolTests.csproj" />
+    <Project Path="Tests/PerformanceTests/PerformanceTests.csproj" />
   </Folder>
 </Solution>
