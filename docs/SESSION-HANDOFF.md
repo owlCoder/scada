@@ -7,9 +7,22 @@ The original task is the "MASTER IMPLEMENTATION PROMPT — COMPLETE SCADA PROJEC
 - `main` on GitHub (owlCoder/scada) contains Steps 1–4 (fast-forward from feature/full-scada-platform, normal push).
 - The lead (Claude) coordinates. Codex CLI (`codex exec -m gpt-6.2-sol -c model_reasoning_effort=high`, workspace-write sandbox with network)
   implements Step 5 in the worktree `../scada-opcua` on branch `feature/opcua` (brief: `.scada/agents/opcua-brief.md`).
-  Mistral (`vibe --model mistral-large-4 --enabled-tools read_file --enabled-tools grep`) reviews diffs read-only
-  (prompts and results in `.scada/review/`). The lead builds Step 6 on `feature/hmi`, merges the branches and runs every test,
-  including the Docker-based DatabaseTests.
+  A second Codex run fixes the Mistral review findings for Steps 3–4 in `../scada-fixes` on branch `fix/review-steps3-4`
+  (brief: `.scada/agents/review-fixes-brief.md`; review: `.scada/review/mistral-steps3-4.txt`, 14 findings, 10 and 12 skipped).
+  A third Codex run builds the remaining HMI pages in `../scada-hmi-pages` on `feature/hmi-pages`, branched from the lead's
+  HMI foundation on `feature/hmi` (brief: `.scada/agents/hmi-pages-brief.md`).
+  Mistral (`vibe --model mistral-large-4 --enabled-tools read_file`) reviews diffs read-only
+  (prompts and results in `.scada/review/`). The lead built the Step 6 foundation on `feature/hmi`; merge order is
+  fix/review-steps3-4 → main, feature/opcua → main, feature/hmi + feature/hmi-pages → main. Run every test after each merge,
+  including the Docker-based DatabaseTests. Agent reports are written to the scratchpad (`codex-*-report.md`).
+- Step 6 foundation (commit 7ff09c6 on feature/hmi):
+  - `src/Hmi` with no prerendering, `HmiSession` (redacted plant for non-instructors) and `RealtimeComponentBase`.
+  - Pages done: overview, diagram, pumps, valves, alarms and identity. `ConfirmDialog` covers critical actions.
+  - `Infrastructure/Realtime/RealtimeBroadcaster`: one bounded DropOldest channel per subscriber, implementing `IRealtimePublisher` and `IRealtimeFeed`.
+  - `Api/Realtime/ScadaHub` at `/hubs/scada` (Viewer) with `GetSnapshot`, plus `RealtimeHubForwarder`; non-instructors get redacted plant data.
+  - `ScadaRevalidatingAuthenticationStateProvider` (1 minute) and an `Issued` claim. Hub paths answer 401/403.
+  - The old `app.js`/`index.html` and the Node tests were replaced by bUnit (`Tests/FrontendTests`).
+  - The SignalR client is pinned to 10.0.15, because 10.0.0 has advisory GHSA-334f-vvp4-7g6p. The local runtime is ASP.NET Core 10.0.0; use a patched runtime image in Step 7.
 - Disk: the Docker build cache was pruned on 2026-11-21 (from 1.8 GB to 28 GB free). Do not prune volumes; they belong to other projects.
 
 ## 1. Environment facts (verified)
