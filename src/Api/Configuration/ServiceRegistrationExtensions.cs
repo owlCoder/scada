@@ -14,6 +14,7 @@ public static class ServiceRegistrationExtensions
             .AddSimulationServices()
             .AddApplicationServices()
             .AddSecurityServices()
+            .AddGridSecurityServices()
             .AddScadaAuthentication()
             .AddScadaOidc()
             .AddScadaAuthorization()

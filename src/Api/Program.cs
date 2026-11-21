@@ -4,6 +4,7 @@ using Api.Endpoints.Accounts;
 using Api.Endpoints.Alarms;
 using Api.Endpoints.Controllers;
 using Api.Endpoints.Detections;
+using Api.Endpoints.GridSecurity;
 using Api.Endpoints.Events;
 using Api.Endpoints.Identity;
 using Api.Endpoints.Incidents;
@@ -60,6 +61,7 @@ TelemetryEndpoints.Map(app);
 IncidentEndpoints.Map(app);
 ScenarioEndpoints.Map(app);
 DetectionEndpoints.Map(app);
+GridSecurityEndpoints.Map(app);
 AccountEndpoints.Map(app);
 app.MapScadaHmi();
 
