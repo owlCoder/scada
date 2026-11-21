@@ -166,12 +166,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: '**/*.csproj'
+      # The image builds inside Docker; no host SDK or NuGet cache is needed (an empty cache fails the post step).
       - name: Check smoke script
         run: |
           bash -n scripts/*.sh
