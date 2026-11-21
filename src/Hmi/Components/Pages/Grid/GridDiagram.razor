@@ -39,7 +39,7 @@
                 <g transform="@GridDiagramGeometry.Transform(node.Position)" class="grid-node @(Energized(node.Id) ? "" : "deenergized") @(_selected == node.Id ? "selected" : "")"
                    role="button" tabindex="0" aria-label="@node.Name" @onclick="() => Select(node.Id)" @onpointerdown:stopPropagation @onkeydown="e => SelectKey(e, node.Id)">
                     <title>@node.Name</title>
-                    <GridSymbol Kind="@node.Kind" Closed="@(grid.Switch(node.Id)?.Closed ?? false)" />
+                    <GridSymbol Kind="@node.Kind" Closed="@(grid.Switch(node.Id)?.Closed ?? false)" Tap="@(grid.Branch(node.Id)?.TapPosition)" />
                     <text x="28" y="-4">@node.Id</text><text x="28" y="13" class="grid-value">@Value(node.Id)</text>
                     @if (grid.Branch(node.Id) is { } branch)
                     {

@@ -98,6 +98,9 @@ public sealed class GridPagesTests
             page.FindAll("g.grid-node").Count);
         Assert.NotEmpty(page.FindAll(".deenergized"));
         Assert.Single(page.FindAll("rect.switch-closed"));
+        Assert.Contains("tap 0", page.Markup);
+        Assert.Contains("voltage-hv", page.Markup);
+        Assert.Contains("voltage-mv", page.Markup);
         var bus = page.FindAll("g.grid-node").Single(n => n.GetAttribute("aria-label") == "MV bus");
         Assert.Equal("translate(80 280)", bus.GetAttribute("transform"));
         bus.Click();
