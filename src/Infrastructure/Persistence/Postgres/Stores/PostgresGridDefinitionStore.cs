@@ -36,8 +36,15 @@ public sealed class PostgresGridDefinitionStore(IDbContextFactory<ScadaDbContext
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await db.Database.ExecuteSqlRawAsync("LOCK TABLE scada.grid_definitions IN EXCLUSIVE MODE", cancellationToken);
         var next = await db.GridDefinitions.MaxAsync(x => x.Version, cancellationToken) + 1;
-        var row = new GridDefinitionEntity { Version = next, Definition = PersistenceJson.Serialize(definition), CreatedBy = createdBy,
-            CreatedAt = time.GetUtcNow(), Comment = comment, Active = false };
+        var row = new GridDefinitionEntity
+        {
+            Version = next,
+            Definition = PersistenceJson.Serialize(definition),
+            CreatedBy = createdBy,
+            CreatedAt = time.GetUtcNow(),
+            Comment = comment,
+            Active = false
+        };
         db.GridDefinitions.Add(row);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

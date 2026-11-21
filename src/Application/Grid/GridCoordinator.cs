@@ -41,8 +41,11 @@ public sealed class GridCoordinator(GridEngine engine, IGridDefinitionStore stor
         }
         finally { _gate.Release(); }
         Audit(result, actor, channel, description);
-        report = report with { Events = [.. report.Events, new(result.Accepted ? GridStepEventKind.CommandAccepted : GridStepEventKind.CommandRejected,
-            targetId, description, actor.Name, training ? GridChangeCause.System : GridChangeCause.Operator, channel)] };
+        report = report with
+        {
+            Events = [.. report.Events, new(result.Accepted ? GridStepEventKind.CommandAccepted : GridStepEventKind.CommandRejected,
+            targetId, description, actor.Name, training ? GridChangeCause.System : GridChangeCause.Operator, channel)]
+        };
         await DistributeAsync(report, cancellationToken);
         return result;
     }
