@@ -5,7 +5,10 @@
 
 <PageTitle>Trends · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Trends</h1>
+<header class="page-head">
+    <h1>Trends</h1>
+    <p class="page-sub muted">Up to three reported tags, 240 live samples per tag, one shared value scale on a UTC time axis.</p>
+</header>
 
 <div class="form-row">
     @for (var index = 0; index < _selected.Length; index++)
@@ -25,7 +28,7 @@
 
 @if (_series.Length == 0)
 {
-    <p class="muted">@(_tags.Count == 0 ? "Waiting for telemetry samples." : "Select up to three tags with telemetry samples.")</p>
+    <EmptyState Message="@(_tags.Count == 0 ? "Waiting for telemetry samples." : "Select up to three tags with telemetry samples.")" />
 }
 else
 {

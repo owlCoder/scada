@@ -119,3 +119,105 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .selected { border-color: white; }
 @media (max-width: 1200px) { .editor-layout { grid-template-columns: 150px minmax(300px, 1fr); }.editor-properties { grid-column: 1 / -1; max-height: none; } }
 @media (max-width: 700px) { .content { padding: 12px; }.editor-layout { grid-template-columns: 1fr; }.palette { display: flex; flex-wrap: wrap; max-height: 260px; }.grid { display: block; overflow-x: auto; }.facts { grid-template-columns: 1fr; }.grid-diagram { min-height: 360px; } }
+
+/* ==========================================================================
+   WATER HMI — ISA-101 refresh (branch ui/water-isa101)
+   --------------------------------------------------------------------------
+   Everything below this banner belongs to the water-mode pages only. The
+   base theme and the "Grid and shared high-performance HMI surfaces" section
+   above are owned by the grid HMI agents; this section only re-declares
+   water-specific selectors (.diagram, .level, .chart are never used by grid
+   pages) or introduces new water-prefixed class names (.page-head, .kpi-*,
+   .sparkline, .plant-faceplate, .pid-* ...), so grid pages keep their look.
+   Calm dark grey; colour is reserved for abnormal/alarm states.
+   ========================================================================== */
+
+/* Consistent page headers */
+.page-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0 0 16px; }
+.page-head h1 { margin: 0; }
+.page-head .page-sub { flex-basis: 100%; margin: 0; font-size: 13px; }
+.page-head .page-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.page-back { margin: 0 0 10px; font-size: 13px; }
+
+/* KPI cards (overview) */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.kpi-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.kpi-card h2 { margin-bottom: 8px; }
+.kpi-card.kpi-alarm { border-color: var(--alarm); }
+.kpi-value { display: block; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0 0 8px; }
+.kpi-value .unit { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.kpi-foot { margin: 8px 0 0; font-size: 12px; }
+
+/* Alarm summary by priority (overview) */
+.alarm-summary { display: grid; gap: 8px; margin: 0 0 10px; }
+.alarm-summary-row { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 13px; }
+.alarm-summary-count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Inline SVG sparklines (no JS) */
+.sparkline { display: block; width: 100%; height: 28px; margin-top: 8px; }
+.sparkline-line { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sparkline-point { fill: var(--accent); }
+.sparkline-alarm .sparkline-line { stroke: var(--alarm); }
+.sparkline-alarm .sparkline-point { fill: var(--alarm); }
+.sparkline-empty { opacity: .35; }
+
+/* Consistent empty states */
+.empty-state { border: 1px dashed var(--line); border-radius: 10px; padding: 16px; margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* LevelBar: grey fill, red only outside limits; limit and setpoint marks */
+.level-track { fill: #33373c; }
+.level-fill { fill: var(--liquid); }
+.level-fill-alarm { fill: var(--alarm); }
+.level-mark { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.level-mark-high { stroke: var(--warn); }
+.level-setpoint { stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+/* Plant diagram — ISA-101 P&ID look: grey process lines and equipment outlines,
+   colour only for alarms/faults. Selected device gets a white outline like the grid diagram. */
+.diagram { background: var(--panel); }
+.diagram .pipe { stroke: #8f979e; stroke-width: 4; }
+.diagram .pipe-flow { stroke: #c9ced3; stroke-dasharray: 10 8; }
+.diagram .tank { fill: none; stroke: #b9c0c7; stroke-width: 2; }
+.diagram .liquid { fill: var(--liquid); opacity: .9; }
+.diagram .liquid-alarm { fill: var(--alarm); opacity: 1; }
+.diagram .tank-limit { stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.diagram .tank-limit-critical { stroke: var(--alarm); }
+.diagram .pump { fill: var(--panel-2); stroke: #c8cdd2; stroke-width: 2; }
+.diagram .pump.running { fill: #565c63; }
+.diagram .pump.stopped { fill: var(--panel); }
+.diagram .pump.faulted, .diagram .faulted { fill: #8a2c2c !important; stroke: var(--alarm); }
+.diagram .pump-arrow { fill: #e7eef7; }
+.diagram .pump-stop { stroke: #c8cdd2; stroke-width: 3; fill: none; stroke-linecap: round; }
+.diagram .pump-fault-mark { fill: #fff; font-size: 22px; font-weight: 700; text-anchor: middle; }
+.diagram .valve { stroke: #c8cdd2; stroke-width: 1.5; }
+.diagram .valve-open { fill: #9aa1a8; }
+.diagram .valve-closed { fill: var(--panel); }
+.diagram .valve-stem { stroke: #c8cdd2; stroke-width: 2; }
+.diagram .label { fill: var(--text); font-size: 14px; text-anchor: middle; }
+.diagram .label.small { font-size: 11px; fill: var(--muted); }
+.diagram .value { fill: var(--text); font-size: 16px; font-weight: 700; text-anchor: middle; }
+.diagram .device-quality { fill: var(--warn); font-size: 11px; text-anchor: middle; }
+.diagram .device { cursor: pointer; }
+.diagram .device.selected .tank, .diagram .device.selected .pump, .diagram .device.selected .valve { stroke: #fff; stroke-width: 3; }
+.diagram .device:focus-visible { outline: 2px solid #e0e4e8; outline-offset: 4px; }
+
+/* Water device faceplate (plant diagram side panel), consistent with the grid faceplate */
+.plant-faceplate { font-size: 13px; overflow-wrap: anywhere; }
+.plant-faceplate h3 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text); }
+.plant-faceplate .actions { margin: 10px 0; }
+
+/* Alarm table (ISA-18.2 presentation) */
+.alarm-table td, .alarm-table th { white-space: nowrap; }
+.alarm-table td:nth-child(5) { white-space: normal; }
+
+/* Responsive down to tablet width */
+@media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .page-head .page-actions { margin-left: 0; }
+}
+@media (max-width: 700px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .kpi-value { font-size: 21px; }
+    .plant-faceplate { position: static; }
+    .page-head h1 { font-size: 22px; }
+}

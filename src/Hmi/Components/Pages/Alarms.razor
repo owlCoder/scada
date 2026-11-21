@@ -1,60 +1,78 @@
 @page "/alarms"
 @inherits RealtimeComponentBase
 @inject Application.Alarms.AlarmService AlarmService
+@inject TimeProvider Clock
 
 <PageTitle>Alarms · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Alarms</h1>
+<header class="page-head">
+    <h1>Alarms</h1>
+    <p class="page-sub muted">ISA-18.2 presentation: priority, state (active/cleared), acknowledgement, time and duration.
+        Unacknowledged active alarms stay highlighted and remain listed after they clear.</p>
+</header>
 <OutcomeBanner Outcome="_outcome" />
 
 <section class="panel">
     <h2>Current</h2>
     @if (_current.Count == 0)
     {
-        <p class="muted">No alarms.</p>
+        <EmptyState Message="No alarms." />
     }
     else
     {
-        <table class="grid">
-            <thead><tr><th>Severity</th><th>Source</th><th>Alarm</th><th>Raised</th><th>State</th><th></th></tr></thead>
-            <tbody>
-                @foreach (var alarm in _current)
-                {
-                    <tr class="@(alarm.IsActive && !alarm.IsAcknowledged ? "row-alarm" : "")">
-                        <td><StatusPill Text="@alarm.Severity.ToString()" Kind="@(alarm.Severity >= AlarmSeverity.High ? "alarm" : "warn")" /></td>
-                        <td>@alarm.SourceId</td>
-                        <td>@alarm.Message</td>
-                        <td>@alarm.RaisedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
-                        <td>@(alarm.IsActive ? "Active" : "Cleared")@(alarm.IsAcknowledged ? $" · acknowledged by {alarm.AcknowledgedBy}" : "")</td>
-                        <td>
-                            @if (Session.CanOperate && !alarm.IsAcknowledged)
-                            {
-                                <button class="btn" @onclick="() => AskAcknowledge(alarm.Key)">Acknowledge</button>
-                            }
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="grid alarm-table">
+                <thead><tr><th>Priority</th><th>Raised</th><th>Duration</th><th>Source</th><th>Alarm</th><th>State</th><th>Acknowledgement</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var alarm in _current)
+                    {
+                        <tr class="@(alarm.IsActive && !alarm.IsAcknowledged ? "row-alarm" : "")">
+                            <td><StatusPill Text="@alarm.Severity.ToString()" Kind="@(alarm.Severity >= AlarmSeverity.High ? "alarm" : "warn")" /></td>
+                            <td class="nowrap">@alarm.RaisedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                            <td class="nowrap">@Duration(alarm)</td>
+                            <td>@alarm.SourceId</td>
+                            <td>@alarm.Message</td>
+                            <td><StatusPill Text="@(alarm.IsActive ? "Active" : "Cleared")" Kind="@(alarm.IsActive ? "alarm" : "ok")" /></td>
+                            <td>@(alarm.IsAcknowledged ? $"Acknowledged by {alarm.AcknowledgedBy}" : "Unacknowledged")</td>
+                            <td>
+                                @if (Session.CanOperate && !alarm.IsAcknowledged)
+                                {
+                                    <button class="btn" @onclick="() => AskAcknowledge(alarm.Key)">Acknowledge</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 </section>
 
 <section class="panel">
     <h2>History</h2>
-    <table class="grid">
-        <thead><tr><th>Time</th><th>Alarm</th><th>Transition</th><th>By</th></tr></thead>
-        <tbody>
-            @foreach (var record in _history)
-            {
-                <tr>
-                    <td>@record.Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
-                    <td>@record.Message</td>
-                    <td>@record.Transition</td>
-                    <td>@(record.Actor ?? "—")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    @if (_history.Count == 0)
+    {
+        <EmptyState Message="No alarm history yet." />
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead><tr><th>Time</th><th>Alarm</th><th>Transition</th><th>By</th></tr></thead>
+                <tbody>
+                    @foreach (var record in _history)
+                    {
+                        <tr>
+                            <td class="nowrap">@record.Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                            <td>@record.Message</td>
+                            <td>@record.Transition</td>
+                            <td>@(record.Actor ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 </section>
 
 <ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
@@ -81,6 +99,14 @@
         var history = await AlarmService.GetHistoryAsync(50, cancellationToken);
         if (loadId == _loadId && !cancellationToken.IsCancellationRequested)
             _history = history;
+    }
+
+    private string Duration(ProcessAlarm alarm)
+    {
+        var duration = (alarm.ClearedAt ?? Clock.GetUtcNow()) - alarm.RaisedAt;
+        return duration < TimeSpan.FromDays(1)
+            ? duration.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)
+            : duration.ToString(@"d\.hh\:mm\:ss", CultureInfo.InvariantCulture);
     }
 
     private bool AskAcknowledge(string key)

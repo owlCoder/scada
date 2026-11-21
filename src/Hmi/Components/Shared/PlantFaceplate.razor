@@ -1,0 +1,141 @@
+@inherits ConfirmedComponentBase
+@inject ControlCommandService Commands
+
+@* Water device faceplate for the plant diagram: same confirm flow as the grid faceplate. *@
+<aside class="panel detail plant-faceplate" aria-label="Device faceplate">
+    <h2>@DeviceId</h2>
+    <OutcomeBanner Outcome="Outcome" />
+    <RefreshErrorBanner Error="@RefreshError" />
+    @if (_plant.Tank(DeviceId) is { } tank)
+    {
+        <h3>@tank.Name</h3>
+        <dl class="facts">
+            <dt>Level</dt><dd>@Number(tank.LevelPercent) %</dd>
+            <dt>Volume</dt><dd>@Number(tank.Volume) / @Number(tank.Capacity) m³</dd>
+            <dt>Alarm limits</dt><dd>LL @Number(tank.Thresholds.LowLow) · L @Number(tank.Thresholds.Low) · H @Number(tank.Thresholds.High) · HH @Number(tank.Thresholds.HighHigh) %</dd>
+            <dt>Overflow</dt><dd>@(tank.IsOverflowing ? "OVERFLOWING" : "No")</dd>
+        </dl>
+        <LevelBar Percent="tank.LevelPercent" Label="@($"{tank.Id} level")" Low="tank.Thresholds.Low" High="tank.Thresholds.High" />
+        <p><a href="tanks">All tanks</a></p>
+    }
+    else if (_plant.Pump(DeviceId) is { } pump)
+    {
+        <h3>@pump.Name</h3>
+        <dl class="facts">
+            <dt>State</dt><dd><StatusPill Text="@pump.State.ToString()" Kind="@(pump.State == PumpState.Running ? "ok" : "neutral")" /> @pump.Mode</dd>
+            <dt>Speed</dt><dd>@pump.Speed.ToString("0", CultureInfo.InvariantCulture) %</dd>
+            <dt>Flow</dt><dd>@Number(pump.FlowRate) m³/min</dd>
+            <dt>Pressure</dt><dd>@Number(pump.DischargePressure) bar</dd>
+            <dt>Health</dt><dd>@pump.Health @(pump.Fault != PumpFault.None ? $"({pump.Fault})" : "")</dd>
+            <dt>Interlock</dt><dd>@(pump.InterlockReason ?? "—")</dd>
+            <dt>Last change</dt><dd>@pump.LastChangeCause @(pump.LastChangedBy is null ? "" : $"by {pump.LastChangedBy}")</dd>
+        </dl>
+        @if (Session.CanOperate)
+        {
+            <div class="actions">
+                <button class="btn" @onclick="() => AskPump(pump, OperatorCommandType.StartPump)">Start</button>
+                <button class="btn" @onclick="() => AskPump(pump, OperatorCommandType.StopPump)">Stop</button>
+                <button class="btn" @onclick="() => AskPump(pump, pump.Mode == ControlMode.Manual
+                    ? OperatorCommandType.SetAutomatic : OperatorCommandType.SetManual)">
+                    @(pump.Mode == ControlMode.Manual ? "Automatic" : "Manual")
+                </button>
+                @if (pump.InterlockReason is not null)
+                {
+                    <button class="btn" @onclick="() => AskPump(pump, OperatorCommandType.ResetInterlock)">Reset interlock</button>
+                }
+            </div>
+            <p class="muted">Commands in automatic mode are rejected: switch the pump to manual first.</p>
+        }
+        <p><a href="pumps">Operate pumps</a></p>
+    }
+    else if (_plant.Valve(DeviceId) is { } valve)
+    {
+        <h3>@valve.Name</h3>
+        <dl class="facts">
+            <dt>Role</dt><dd>@valve.Role</dd>
+            <dt>Position</dt><dd>@valve.Position.ToString("0", CultureInfo.InvariantCulture) % (setpoint @valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %)</dd>
+            <dt>Mode</dt><dd>@valve.Mode</dd>
+            <dt>Flow</dt><dd>@Number(valve.FlowRate) m³/min</dd>
+            <dt>Health</dt><dd>@valve.Health @(valve.Fault != ValveFault.None ? $"({valve.Fault})" : "")</dd>
+            <dt>Interlock</dt><dd>@(valve.InterlockReason ?? "—")</dd>
+        </dl>
+        <LevelBar Percent="valve.Position" Label="@($"{valve.Id} position")" Setpoint="valve.Setpoint" />
+        @if (Session.CanOperate)
+        {
+            <div class="form-row">
+                <label>Position (%)<input class="input-small" type="number" min="0" max="100" step="5" aria-label="@($"New position for {valve.Id}")"
+                                          value="@Target(valve)" @onchange="e => SetTarget(valve.Id, e.Value)" /></label>
+                <button class="btn" @onclick="() => AskPosition(valve)">Set position</button>
+                <button class="btn" @onclick="() => AskMode(valve)">@(valve.Mode == ControlMode.Manual ? "Automatic" : "Manual")</button>
+            </div>
+            <p class="muted">Positions can only be set in manual mode. The valve travels to the new position at its stroke rate.</p>
+        }
+        <p><a href="valves">Operate valves</a></p>
+    }
+    else
+    {
+        <p class="muted">No device @DeviceId in the current plant snapshot.</p>
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+</aside>
+
+@code {
+    [Parameter, EditorRequired] public string DeviceId { get; set; } = "";
+
+    private readonly Dictionary<string, double> _targets = new(StringComparer.Ordinal);
+    private PlantSnapshot _plant = default!;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant];
+
+    protected override bool Refresh()
+    {
+        _plant = Session.Plant();
+        return true;
+    }
+
+    private string Target(ValveSnapshot valve) =>
+        (_targets.TryGetValue(valve.Id, out var target) ? target : valve.Setpoint).ToString("0", CultureInfo.InvariantCulture);
+
+    private bool SetTarget(string id, object? value)
+    {
+        if (double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+            _targets[id] = Math.Clamp(parsed, 0, 100);
+        return true;
+    }
+
+    private bool AskPump(PumpSnapshot pump, OperatorCommandType type) =>
+        Ask($"{Describe(type)} {pump.Id}?", $"{Describe(type)} {pump.Name} ({pump.Id}). This changes the live process.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(
+                new OperatorCommand(pump.Id, type, null, CommandSource.Hmi), Session.Actor))),
+            dangerous: type is OperatorCommandType.StartPump or OperatorCommandType.StopPump);
+
+    private bool AskPosition(ValveSnapshot valve)
+    {
+        var target = _targets.TryGetValue(valve.Id, out var t) ? t : valve.Setpoint;
+        return Ask($"Move {valve.Id} to {target:0} %?", $"{valve.Name} goes from {valve.Position:0} % to {target:0} %.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(
+                new OperatorCommand(valve.Id, OperatorCommandType.SetValvePosition, target, CommandSource.Hmi), Session.Actor))));
+    }
+
+    private bool AskMode(ValveSnapshot valve)
+    {
+        var type = valve.Mode == ControlMode.Manual ? OperatorCommandType.SetAutomatic : OperatorCommandType.SetManual;
+        return Ask($"Switch {valve.Id} to {(type == OperatorCommandType.SetManual ? "manual" : "automatic")}?",
+            type == OperatorCommandType.SetManual ? "The controller stops driving this valve until it is switched back."
+                : "The controller takes over this valve again.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(new OperatorCommand(valve.Id, type, null, CommandSource.Hmi), Session.Actor))),
+            dangerous: false);
+    }
+
+    private static string Describe(OperatorCommandType type) => type switch
+    {
+        OperatorCommandType.StartPump => "Start",
+        OperatorCommandType.StopPump => "Stop",
+        OperatorCommandType.SetManual => "Switch to manual:",
+        OperatorCommandType.SetAutomatic => "Switch to automatic:",
+        OperatorCommandType.ResetInterlock => "Reset interlock of",
+        _ => type.ToString()
+    };
+
+    private static string Number(double value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+}

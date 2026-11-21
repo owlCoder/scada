@@ -1,37 +1,59 @@
 @page "/"
 @inherits RealtimeComponentBase
+@using Application.Telemetry
 @inject NavigationManager Navigation
 @inject Application.Simulation.SimulationEngine Engine
 @inject Application.Simulation.SimulationCoordinator Coordinator
 @inject Security.Scenarios.ScenarioEngine Scenarios
 @inject Application.Incidents.IncidentService Incidents
+@inject Application.Telemetry.TelemetryHistorian Historian
 
 <PageTitle>Overview · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Overview</h1>
+<header class="page-head">
+    <h1>Overview</h1>
+    <p class="page-sub muted">@_plant.PlantName · step @_status?.StepCount · simulated @_status?.SimulationTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</p>
+</header>
 
-<section class="metrics">
+<section class="kpi-grid" aria-label="Plant key indicators">
     @foreach (var tank in _plant.Tanks)
     {
-        <article class="panel metric">
+        var levelSensor = _plant.Sensors.FirstOrDefault(s => s.Kind == SensorKind.Level && s.DeviceId == tank.Id);
+        IReadOnlyList<TelemetryPoint> series = levelSensor is null ? [] : Historian.GetSeries(levelSensor.Id, SparklineSamples);
+        var abnormal = tank.LevelPercent >= tank.Thresholds.High || tank.LevelPercent <= tank.Thresholds.Low || tank.IsOverflowing;
+        <article class="kpi-card @(abnormal ? "kpi-alarm" : "")">
             <h2>@tank.Name</h2>
-            <strong>@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</strong>
-            <LevelBar Percent="tank.LevelPercent" Label="@tank.Name" High="tank.Thresholds.High" Low="tank.Thresholds.Low" />
+            <strong class="kpi-value">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture)<span class="unit">%</span></strong>
+            <LevelBar Percent="tank.LevelPercent" Label="@($"{tank.Id} level")" High="tank.Thresholds.High" Low="tank.Thresholds.Low" />
+            <Sparkline Points="@series" Label="@($"Recent level of {tank.Name} (%)")" Alarm="@abnormal" />
+            <p class="kpi-foot"><a href="tanks">Tank details</a></p>
         </article>
     }
-    <article class="panel metric">
+    <article class="kpi-card @(_activeAlarms > 0 ? "kpi-alarm" : "")">
         <h2>Active alarms</h2>
-        <strong>@_plant.Alarms.Count(a => a.IsActive)</strong>
-        <a href="alarms">Open alarm list</a>
+        <strong class="kpi-value">@_activeAlarms</strong>
+        <p class="kpi-foot"><a href="alarms">Open alarm list</a></p>
     </article>
-    <article class="panel metric">
+    <article class="kpi-card">
         <h2>Open incidents</h2>
-        <strong>@_openIncidents</strong>
-        <a href="incidents">Open incident list</a>
+        <strong class="kpi-value">@_openIncidents</strong>
+        <p class="kpi-foot"><a href="incidents">Open incident list</a></p>
     </article>
 </section>
 
 <section class="columns">
+    <article class="panel">
+        <h2>Active alarms by priority</h2>
+        <div class="alarm-summary">
+            @foreach (var severity in Enum.GetValues<AlarmSeverity>().OrderDescending())
+            {
+                var count = _plant.Alarms.Count(a => a.IsActive && a.Severity == severity);
+                <p class="alarm-summary-row"><span class="pill @(count > 0 ? "pill-alarm" : "pill-neutral")">@severity</span>
+                    <span class="alarm-summary-count">@count</span></p>
+            }
+        </div>
+        <a href="alarms">Alarm list</a>
+    </article>
     <article class="panel">
         <h2>Simulation</h2>
         <p>Step @_status?.StepCount · simulated @_status?.SimulationTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)
@@ -67,6 +89,8 @@
 <ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
 
 @code {
+    private const int SparklineSamples = 60;
+
     private PlantSnapshot _plant = default!;
     private Application.Simulation.SimulationStatus? _status;
     private Application.Scenarios.ScenarioRunRecord? _scenario;
@@ -75,8 +99,10 @@
     private PendingAction? _pending;
     private long _loadId;
 
+    private int _activeAlarms;
+
     protected override IReadOnlyCollection<string> Topics =>
-        [RealtimeTopics.Plant, RealtimeTopics.Simulation, RealtimeTopics.Scenarios, RealtimeTopics.Incidents];
+        [RealtimeTopics.Plant, RealtimeTopics.Telemetry, RealtimeTopics.Simulation, RealtimeTopics.Scenarios, RealtimeTopics.Incidents];
 
     protected override bool Refresh()
     {
@@ -84,6 +110,7 @@
             Navigation.NavigateTo("/grid", replace: true);
         _plant = Session.Plant();
         _status = Engine.Status;
+        _activeAlarms = _plant.Alarms.Count(a => a.IsActive);
         _scenario = Scenarios.Current is { State: Application.Scenarios.ScenarioRunState.Running or Application.Scenarios.ScenarioRunState.Paused } current
             ? current : null;
         return true;

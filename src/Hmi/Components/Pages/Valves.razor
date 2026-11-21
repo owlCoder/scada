@@ -4,40 +4,52 @@
 
 <PageTitle>Valves · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Valves</h1>
+<header class="page-head">
+    <h1>Valves</h1>
+    <p class="page-sub muted">Position and setpoint (bar with setpoint mark), mode, flow, health and interlock. Commands need confirmation.</p>
+</header>
 <OutcomeBanner Outcome="_outcome" />
 
-<table class="grid">
-    <thead>
-        <tr><th>Valve</th><th>Role</th><th>Position</th><th>Setpoint</th><th>Mode</th><th>Flow</th><th>Health</th><th>Interlock</th>
-            @if (Session.CanOperate) { <th>Commands</th> }</tr>
-    </thead>
-    <tbody>
-        @foreach (var valve in _plant.Valves)
-        {
-            <tr>
-                <td><strong class="cell-title">@valve.Id</strong> @valve.Name</td>
-                <td>@valve.Role</td>
-                <td><LevelBar Percent="valve.Position" Label="@($"{valve.Id} position")" /></td>
-                <td>@valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %</td>
-                <td>@valve.Mode</td>
-                <td>@valve.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</td>
-                <td><StatusPill Text="@(valve.Fault == ValveFault.None ? valve.Health.ToString() : valve.Fault.ToString())"
-                                Kind="@(valve.Health == DeviceHealth.Healthy ? "ok" : valve.Health == DeviceHealth.Warning ? "warn" : "alarm")" /></td>
-                <td>@(valve.InterlockReason ?? "—")</td>
-                @if (Session.CanOperate)
+@if (_plant.Valves.Count == 0)
+{
+    <EmptyState Message="No valves in the current plant snapshot." />
+}
+else
+{
+    <div class="table-scroll">
+        <table class="grid">
+            <thead>
+                <tr><th>Valve</th><th>Role</th><th>Position</th><th>Setpoint</th><th>Mode</th><th>Flow</th><th>Health</th><th>Interlock</th>
+                    @if (Session.CanOperate) { <th>Commands</th> }</tr>
+            </thead>
+            <tbody>
+                @foreach (var valve in _plant.Valves)
                 {
-                    <td class="actions-cell">
-                        <input class="input-small" type="number" min="0" max="100" step="5" aria-label="@($"New position for {valve.Id}")"
-                               value="@Target(valve)" @onchange="e => SetTarget(valve.Id, e.Value)" />
-                        <button class="btn" @onclick="() => AskPosition(valve)">Set %</button>
-                        <button class="btn" @onclick="() => AskMode(valve)">@(valve.Mode == ControlMode.Manual ? "Automatic" : "Manual")</button>
-                    </td>
+                    <tr @key="valve.Id">
+                        <td><strong class="cell-title">@valve.Id</strong> @valve.Name</td>
+                        <td>@valve.Role</td>
+                        <td><LevelBar Percent="valve.Position" Label="@($"{valve.Id} position")" Setpoint="valve.Setpoint" /></td>
+                        <td>@valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %</td>
+                        <td>@valve.Mode</td>
+                        <td>@valve.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</td>
+                        <td><StatusPill Text="@(valve.Fault == ValveFault.None ? valve.Health.ToString() : valve.Fault.ToString())"
+                                        Kind="@(valve.Health == DeviceHealth.Healthy ? "ok" : valve.Health == DeviceHealth.Warning ? "warn" : "alarm")" /></td>
+                        <td>@(valve.InterlockReason ?? "—")</td>
+                        @if (Session.CanOperate)
+                        {
+                            <td class="actions-cell">
+                                <input class="input-small" type="number" min="0" max="100" step="5" aria-label="@($"New position for {valve.Id}")"
+                                       value="@Target(valve)" @onchange="e => SetTarget(valve.Id, e.Value)" />
+                                <button class="btn" @onclick="() => AskPosition(valve)">Set %</button>
+                                <button class="btn" @onclick="() => AskMode(valve)">@(valve.Mode == ControlMode.Manual ? "Automatic" : "Manual")</button>
+                            </td>
+                        }
+                    </tr>
                 }
-            </tr>
-        }
-    </tbody>
-</table>
+            </tbody>
+        </table>
+    </div>
+}
 <p class="muted">Positions can only be set in manual mode. The valve travels to the new position at its stroke rate.</p>
 <ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
 

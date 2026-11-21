@@ -3,36 +3,46 @@
 
 <PageTitle>Tanks · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Tanks</h1>
+<header class="page-head">
+    <h1>Tanks</h1>
+    <p class="page-sub muted">Level against the LL/L/H/HH alarm limits. The bar turns red only outside the L/H limits.</p>
+</header>
 
-<div class="table-scroll">
-    <table class="grid">
-        <thead>
-            <tr><th>Tank</th><th>Level</th><th>Volume / capacity</th><th>LL</th><th>L</th><th>H</th><th>HH</th><th>Overflow</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var tank in _tanks)
-            {
-                <tr @key="tank.Id">
-                    <th scope="row"><strong class="cell-title">@tank.Id</strong> @tank.Name</th>
-                    <td><LevelBar Percent="tank.LevelPercent" Label="@tank.Name" Low="tank.Thresholds.Low" High="tank.Thresholds.High" /></td>
-                    <td>@Number(tank.Volume) / @Number(tank.Capacity) m³</td>
-                    <td>@Number(tank.Thresholds.LowLow) %</td>
-                    <td>@Number(tank.Thresholds.Low) %</td>
-                    <td>@Number(tank.Thresholds.High) %</td>
-                    <td>@Number(tank.Thresholds.HighHigh) %</td>
-                    <td>
-                        <StatusPill Text="@(tank.IsOverflowing ? "Overflowing" : "Clear")" Kind="@(tank.IsOverflowing ? "alarm" : "ok")" />
-                        @if (tank.TotalOverflowVolume > 0)
-                        {
-                            <span class="cell-title muted">@Number(tank.TotalOverflowVolume) m³ cumulative</span>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-</div>
+@if (_tanks.Count == 0)
+{
+    <EmptyState Message="No tanks in the current plant snapshot." />
+}
+else
+{
+    <div class="table-scroll">
+        <table class="grid">
+            <thead>
+                <tr><th>Tank</th><th>Level</th><th>Volume / capacity</th><th>LL</th><th>L</th><th>H</th><th>HH</th><th>Overflow</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var tank in _tanks)
+                {
+                    <tr @key="tank.Id">
+                        <th scope="row"><strong class="cell-title">@tank.Id</strong> @tank.Name</th>
+                        <td><LevelBar Percent="tank.LevelPercent" Label="@tank.Name" Low="tank.Thresholds.Low" High="tank.Thresholds.High" /></td>
+                        <td>@Number(tank.Volume) / @Number(tank.Capacity) m³</td>
+                        <td>@Number(tank.Thresholds.LowLow) %</td>
+                        <td>@Number(tank.Thresholds.Low) %</td>
+                        <td>@Number(tank.Thresholds.High) %</td>
+                        <td>@Number(tank.Thresholds.HighHigh) %</td>
+                        <td>
+                            <StatusPill Text="@(tank.IsOverflowing ? "Overflowing" : "Clear")" Kind="@(tank.IsOverflowing ? "alarm" : "ok")" />
+                            @if (tank.TotalOverflowVolume > 0)
+                            {
+                                <span class="cell-title muted">@Number(tank.TotalOverflowVolume) m³ cumulative</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 @code {
     private IReadOnlyList<TankSnapshot> _tanks = [];
