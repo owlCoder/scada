@@ -18,7 +18,7 @@ public sealed class HmiFakeGridView : IGridView
         [new("PV1", "Solar farm", "B-END", GridGeneratorKind.Photovoltaic, .4, new(13, 7))],
         [new("C1", "Capacitor bank", "B-MV", .5, 4, 1, new(5, 10))],
         [new("P1", "Feeder protection", "Q1", GridProtectionFunction.Overcurrent51, GridCurveType.IecStandardInverse, 400, .1, true)],
-        [new("RTU1", "Station RTU", 1, null, ["B-MV", "L1", "Q1", "T1"]) ]);
+        [new("RTU1", "Station RTU", 1, null, ["B-MV", "L1", "Q1", "T1"])]);
     public GridStatus Status => new(false, State.SimulationTime, State.StepCount, .1, 1, Definition.Name, 1);
     public GridSnapshot State { get; set; } = new("Training grid", 1, TimeSpan.FromSeconds(25), 250, 50, true, 3,
         [new("B-HV", "HV bus", 110, true, 110, 1, 0), new("B-MV", "MV bus", 20, true, 20.2, 1.01, 0), new("B-END", "Feeder end", 20, false, 0, 0, 0)],

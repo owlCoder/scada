@@ -126,11 +126,16 @@ public sealed class GridEditorDocument
         var id = SelectedId;
         Replace(Definition with
         {
-            Buses = Definition.Buses.Where(x => x.Id != id).ToArray(), Sources = Definition.Sources.Where(x => x.Id != id).ToArray(),
-            Lines = Definition.Lines.Where(x => x.Id != id).ToArray(), Transformers = Definition.Transformers.Where(x => x.Id != id).ToArray(),
-            Switches = Definition.Switches.Where(x => x.Id != id).ToArray(), Loads = Definition.Loads.Where(x => x.Id != id).ToArray(),
-            Generators = Definition.Generators.Where(x => x.Id != id).ToArray(), Capacitors = Definition.Capacitors.Where(x => x.Id != id).ToArray(),
-            Protections = Definition.Protections.Where(x => x.Id != id).ToArray(), Rtus = Definition.Rtus.Where(x => x.Id != id).ToArray()
+            Buses = Definition.Buses.Where(x => x.Id != id).ToArray(),
+            Sources = Definition.Sources.Where(x => x.Id != id).ToArray(),
+            Lines = Definition.Lines.Where(x => x.Id != id).ToArray(),
+            Transformers = Definition.Transformers.Where(x => x.Id != id).ToArray(),
+            Switches = Definition.Switches.Where(x => x.Id != id).ToArray(),
+            Loads = Definition.Loads.Where(x => x.Id != id).ToArray(),
+            Generators = Definition.Generators.Where(x => x.Id != id).ToArray(),
+            Capacitors = Definition.Capacitors.Where(x => x.Id != id).ToArray(),
+            Protections = Definition.Protections.Where(x => x.Id != id).ToArray(),
+            Rtus = Definition.Rtus.Where(x => x.Id != id).ToArray()
         });
         SelectedId = null; CancelConnection(); Message = "Deleted. Review any dangling connections in validation."; return true;
     }

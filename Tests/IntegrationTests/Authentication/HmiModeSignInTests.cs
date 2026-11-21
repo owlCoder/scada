@@ -133,8 +133,11 @@ public sealed class HmiModeSignInTests
     private static async Task<HttpResponseMessage> SignInAsync(BrowserSession session, string mode, string? password = null) =>
         await session.Client.PostAsync("/account/login", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["__RequestVerificationToken"] = await session.FormTokenAsync(), ["username"] = "eva",
-            ["password"] = password ?? BrowserSession.EvaPassword, ["returnUrl"] = "/", ["mode"] = mode
+            ["__RequestVerificationToken"] = await session.FormTokenAsync(),
+            ["username"] = "eva",
+            ["password"] = password ?? BrowserSession.EvaPassword,
+            ["returnUrl"] = "/",
+            ["mode"] = mode
         }));
 
     private static AuthenticationTicket Ticket(IServiceProvider services, HttpResponseMessage response)
