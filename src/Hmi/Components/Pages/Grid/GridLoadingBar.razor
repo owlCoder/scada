@@ -1,0 +1,7 @@
+<svg class="loading-bar" viewBox="0 0 100 8" role="img" aria-label="@($"{Percent:0.0}% loading")">
+    <rect width="100" height="8" class="loading-track" />
+    <rect width="@Math.Clamp(Percent, 0, 100).ToString(CultureInfo.InvariantCulture)" height="8" class="@(Percent > 100 ? "loading-over" : "loading-fill")" />
+</svg>
+@code {
+    [Parameter] public double Percent { get; set; }
+}

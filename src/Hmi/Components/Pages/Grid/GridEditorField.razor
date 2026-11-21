@@ -1,0 +1,11 @@
+<label class="editor-field">@Label
+    <input type="@Type" value="@InputValue" step="any" @onchange="Change" />
+</label>
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Type { get; set; } = "text";
+    [Parameter] public object? Value { get; set; }
+    [Parameter] public EventCallback<string> Changed { get; set; }
+    private string InputValue => Value is IFormattable value ? value.ToString(null, CultureInfo.InvariantCulture) : Value?.ToString() ?? "";
+    private Task Change(ChangeEventArgs e) => Changed.InvokeAsync(e.Value?.ToString() ?? "");
+}

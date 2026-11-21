@@ -1,0 +1,21 @@
+@page "/grid/switches"
+@inherits GridPageBase
+<PageTitle>Grid switches · SCADA</PageTitle>
+<h1>Switches</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+@if (Snapshot is { } grid)
+{
+    <table class="grid"><thead><tr><th>Switch</th><th>Kind</th><th>State</th><th>Selected</th><th>Last operation</th><th>Details</th></tr></thead><tbody>
+    @foreach (var item in grid.Switches)
+    {
+        <tr><td>@item.Id · @item.Name</td><td>@item.Kind</td><td>@(item.Closed ? "Closed" : "Open")</td>
+            <td>@(item.Selected ? (item.SelectedToClose == true ? "Close" : "Open") : "—")</td><td>@item.LastOperatedBy · @item.LastCause</td>
+            <td><button class="btn" @onclick="() => Select(item.Id)">Open @item.Id</button></td></tr>
+    }
+    </tbody></table>
+    @if (_selected is not null) { <GridFaceplate @key="_selected" ElementId="@_selected" /> }
+}
+@code {
+    private string? _selected;
+    private bool Select(string id) { _selected = id; return true; }
+}

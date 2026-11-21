@@ -1,0 +1,62 @@
+@page "/grid/instructor"
+@attribute [Authorize(Policy = "Administrator")]
+@inherits GridPageBase
+<PageTitle>Grid instructor · SCADA</PageTitle>
+<h1>Grid instructor</h1>
+@if (!Session.IsInstructor)
+{
+    <AccessDenied />
+}
+else
+{
+    <GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+    <OutcomeBanner Outcome="Outcome" />
+    @if (Definition is { } definition && Snapshot is { } grid)
+    {
+        <section class="panel"><h2>Equipment faults</h2><div class="form-row">
+            <label>Element <select @bind="_element"><option value="">Choose element</option>
+                @foreach (var item in GridDiagramGeometry.Nodes(definition)) { <option value="@item.Id">@item.Id · @item.Name</option> }</select></label>
+            <label>Fault <select @bind="_fault">@foreach (var fault in Enum.GetValues<GridEquipmentFault>().Where(f => f != GridEquipmentFault.None)) { <option>@fault</option> }</select></label>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_element)" @onclick="() => Inject()">Inject fault</button>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_element)" @onclick="() => Clear()">Clear fault</button>
+        </div></section>
+        <section class="panel"><h2>Measurement manipulation</h2><div class="form-row">
+            <label>Measurement <select @bind="_measurement"><option value="">Choose measurement</option>
+                @foreach (var item in grid.Measurements) { <option value="@item.Id">@item.Id · true @Number(item.TrueValue)</option> }</select></label>
+            <label>Reported value <input type="number" step="any" @bind="_value" /></label>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_measurement)" @onclick="() => Spoof(false)">Spoof measurement</button>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_measurement)" @onclick="() => Spoof(true)">Clear spoof</button>
+        </div></section>
+        <section class="panel"><h2>RTU communication</h2><div class="form-row">
+            <label>RTU <select @bind="_rtu"><option value="">Choose RTU</option>
+                @foreach (var item in definition.Rtus) { <option value="@item.Id">@item.Id · @item.Name</option> }</select></label>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_rtu)" @onclick="() => Rtu(false)">Take offline</button>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_rtu)" @onclick="() => Rtu(true)">Bring online</button>
+        </div></section>
+        <section class="panel"><h2>Forced operation</h2><div class="form-row">
+            <label>Switch <select @bind="_switch"><option value="">Choose switch</option>
+                @foreach (var item in definition.Switches) { <option value="@item.Id">@item.Id · @item.Name</option> }</select></label>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_switch)" @onclick="() => ForceSwitch(false)">Force open</button>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_switch)" @onclick="() => ForceSwitch(true)">Force close</button>
+            <label>Transformer <select @bind="_transformer"><option value="">Choose transformer</option>
+                @foreach (var item in definition.Transformers) { <option value="@item.Id">@item.Id · tap @grid.Branch(item.Id)?.TapPosition</option> }</select></label>
+            <label>Tap <input type="number" @bind="_tap" /></label>
+            <button class="btn" disabled="@string.IsNullOrEmpty(_transformer)" @onclick="() => ForceTap()">Force tap</button>
+        </div></section>
+        <button class="btn" @onclick="() => Restore()">Restore training defaults</button>
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+}
+@code {
+    private string _element = "", _measurement = "", _rtu = "", _switch = "", _transformer = "";
+    private GridEquipmentFault _fault = GridEquipmentFault.ThreePhaseShortCircuit;
+    private double _value;
+    private int _tap;
+    private bool Inject() { var id = _element; var fault = _fault; return Training($"Inject {fault} on {id}?", s => s.InjectFaultAsync(id, fault, Session.Actor, StoppingToken)); }
+    private bool Clear() { var id = _element; return Training($"Clear fault on {id}?", s => s.ClearFaultAsync(id, Session.Actor, StoppingToken)); }
+    private bool Spoof(bool clear) { var id = _measurement; double? value = clear ? null : _value; return Training($"{(clear ? "Clear spoof" : "Spoof measurement")} {id}?", s => s.SpoofMeasurementAsync(id, value, Session.Actor, StoppingToken)); }
+    private bool Rtu(bool online) { var id = _rtu; return Training($"Set RTU {id} {(online ? "online" : "offline")}?", s => s.SetRtuOnlineAsync(id, online, Session.Actor, StoppingToken)); }
+    private bool ForceSwitch(bool closed) { var id = _switch; return Training($"Force {id} {(closed ? "closed" : "open")}?", s => s.ForceSwitchAsync(id, closed, Session.Actor, StoppingToken)); }
+    private bool ForceTap() { var id = _transformer; var tap = _tap; return Training($"Force tap {tap} on {id}?", s => s.ForceTapAsync(id, tap, Session.Actor, StoppingToken)); }
+    private bool Restore() => Training("Restore training defaults?", s => s.RestoreTrainingDefaultsAsync(Session.Actor, StoppingToken));
+}

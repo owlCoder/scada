@@ -1,0 +1,16 @@
+@page "/grid/feeders"
+@inherits GridPageBase
+<PageTitle>Grid feeders · SCADA</PageTitle>
+<h1>Feeders</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+@if (Snapshot is { } grid)
+{
+    <div class="table-scroll"><table class="grid"><thead><tr><th>Branch</th><th>From / to</th><th>Supply</th><th>Current</th><th>Power</th><th>Losses</th><th>Loading</th></tr></thead><tbody>
+    @foreach (var item in grid.Branches.Where(b => b.Kind == GridBranchKind.Line))
+    {
+        <tr><td>@item.Id · @item.Name</td><td>@item.FromBusId → @item.ToBusId</td><td>@(item.Energized ? "Energized" : "De-energized")</td>
+            <td>@Number(item.CurrentA) A</td><td>@Number(item.ActivePowerFromMw) MW</td><td>@Number(item.LossesMw) MW</td>
+            <td>@Number(item.LoadingPercent) %<GridLoadingBar Percent="item.LoadingPercent" /></td></tr>
+    }
+    </tbody></table></div>
+}

@@ -1,0 +1,21 @@
+@page "/grid/transformers"
+@inherits GridPageBase
+<PageTitle>Grid transformers · SCADA</PageTitle>
+<h1>Transformers</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+@if (Snapshot is { } grid)
+{
+    <table class="grid"><thead><tr><th>Transformer</th><th>Current</th><th>Loading</th><th>Tap</th><th>AVR</th><th>Details</th></tr></thead><tbody>
+    @foreach (var item in grid.Branches.Where(b => b.Kind == GridBranchKind.Transformer))
+    {
+        <tr><td>@item.Id · @item.Name</td><td>@Number(item.CurrentA) A</td><td>@Number(item.LoadingPercent) %<GridLoadingBar Percent="item.LoadingPercent" /></td>
+            <td>@item.TapPosition</td><td>@(item.TapAutomatic == true ? "Automatic" : "Manual")</td>
+            <td><button class="btn" @onclick="() => Select(item.Id)">Open @item.Id</button></td></tr>
+    }
+    </tbody></table>
+    @if (_selected is not null) { <GridFaceplate @key="_selected" ElementId="@_selected" /> }
+}
+@code {
+    private string? _selected;
+    private bool Select(string id) { _selected = id; return true; }
+}

@@ -19,6 +19,7 @@ public static class ServiceRegistrationExtensions
             .AddScadaAuthorization()
             .AddScadaRateLimiting()
             .AddScadaHmi()
+            .AddGridHmiServices()
             .AddProtocolServices()
             .AddHostedWorkers();
     }

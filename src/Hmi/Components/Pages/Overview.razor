@@ -1,5 +1,6 @@
 @page "/"
 @inherits RealtimeComponentBase
+@inject NavigationManager Navigation
 @inject Application.Simulation.SimulationEngine Engine
 @inject Application.Simulation.SimulationCoordinator Coordinator
 @inject Security.Scenarios.ScenarioEngine Scenarios
@@ -79,6 +80,8 @@
 
     protected override bool Refresh()
     {
+        if (Session.Mode == Application.Common.SimulationMode.Grid)
+            Navigation.NavigateTo("/grid", replace: true);
         _plant = Session.Plant();
         _status = Engine.Status;
         _scenario = Scenarios.Current is { State: Application.Scenarios.ScenarioRunState.Running or Application.Scenarios.ScenarioRunState.Paused } current

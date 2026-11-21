@@ -2,6 +2,8 @@ namespace Api.Authentication;
 
 public static class ScadaClaimTypes
 {
+    public const string Mode = "scada:mode";
+
     /// <summary>Identifies the credential (API key fingerprint, password account or OIDC subject) for per-credential rate limits.</summary>
     public const string Credential = "scada:credential";
 

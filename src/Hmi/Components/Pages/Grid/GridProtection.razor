@@ -1,0 +1,43 @@
+@page "/grid/protection"
+@inherits GridPageBase
+<PageTitle>Grid protection · SCADA</PageTitle>
+<h1>Protection</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+<OutcomeBanner Outcome="Outcome" />
+@if (Snapshot is { } grid)
+{
+    <table class="grid"><thead><tr><th>Relay</th><th>Breaker</th><th>Function / curve</th><th>Pickup</th><th>Time setting</th><th>Enabled</th><th>State</th><th></th></tr></thead><tbody>
+    @foreach (var item in grid.Protections)
+    {
+        <tr><td>@item.Id · @item.Name</td><td>@item.SwitchId</td><td>@item.Function · @item.Curve</td><td>@Number(item.PickupValue)</td><td>@Number(item.TimeSetting)</td>
+            <td>@item.Enabled</td><td>@(item.Tripped ? "Tripped" : item.PickedUp ? "Picked up" : "Normal")</td>
+            <td>@if (Session.IsInstructor) { <button class="btn" @onclick="() => Edit(item)">Edit @item.Id</button> }</td></tr>
+    }
+    </tbody></table>
+    @if (Session.IsInstructor && _editing is not null)
+    {
+        <section class="panel"><h2>Settings · @_editing</h2><div class="form-row">
+            <label>Pickup <input type="number" min="0" step="any" @bind="_pickup" /></label>
+            <label>Time setting <input type="number" min="0" step="any" @bind="_time" /></label>
+            <label class="check"><input type="checkbox" @bind="_enabled" />Enabled</label>
+            <button class="btn" @onclick="() => Save()">Apply settings</button>
+        </div></section>
+    }
+}
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+@code {
+    private string? _editing;
+    private double _pickup;
+    private double _time;
+    private bool _enabled;
+    private bool Edit(ProtectionSnapshot item)
+    {
+        _editing = item.Id; _pickup = item.PickupValue; _time = item.TimeSetting; _enabled = item.Enabled;
+        return true;
+    }
+    private bool Save()
+    {
+        var id = _editing!; var pickup = _pickup; var time = _time; var enabled = _enabled;
+        return Training($"Change protection {id}?", service => service.ChangeProtectionAsync(id, pickup, time, enabled, Session.Actor, StoppingToken));
+    }
+}
