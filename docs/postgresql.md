@@ -1,6 +1,6 @@
 # PostgreSQL and Docker
 
-By default all data is kept in memory. To use PostgreSQL, set `Storage__Provider=Postgres` and `ConnectionStrings__Scada`. Both modes implement the same store interfaces, so all behaviour is identical apart from durability.
+By default all data is kept in memory. To use PostgreSQL, set `Storage__Provider=Postgres` and `ConnectionStrings__Scada`. Both modes implement the same store interfaces; durable history and recovery are available with PostgreSQL, while live buffers remain in memory.
 
 ## What is stored
 
@@ -21,7 +21,7 @@ Notes on how the data is handled:
 
 - **Incident numbers** (`INC-00042`) come from the `scada.incident_number_seq` sequence.
 - **Concurrent edits:** each incident has a `version` column used as an optimistic concurrency token. A stale update is rejected even if several API instances share the database.
-- **Write path:** high-volume writes (events, telemetry, alarm history, plant state) go through the bounded write-behind queue, so database latency never stalls the simulation loop.
+- **Write path:** high-volume writes (events, telemetry, alarm history, plant state) go through the bounded write-behind queue, so those producers do not wait for database I/O. Detections, incidents, scenario records and account/rule operations use direct store calls and can still delay their callers or simulation observers.
 
 ## Migrations
 
@@ -52,7 +52,7 @@ Older builds created `public.security_events`, `public.telemetry_samples` and `p
 - **Pump state** is imported as tag `P-101.running`.
 - **Incidents** keep their id, time, description and status (Open, Acknowledged or Resolved). Each also gets a `Created` timeline entry. Numbering continues after the imported incidents.
 
-The legacy tables are never altered or dropped. They remain as a rollback path and can be removed by hand once the upgrade has been verified.
+The legacy tables are never altered or dropped. They preserve the pre-migration data and can be removed by hand once the upgrade has been verified. They do not receive subsequent writes; use a full backup for rollback of current activity.
 
 ## Retention
 
@@ -103,3 +103,11 @@ The tests cover:
 - every PostgreSQL store, including concurrent incident updates and literal `%` and `_` in search
 - retention
 - a full API restart against the same database
+
+## Recovery boundaries and operations
+
+Checkpoint recovery restores plant state, configured controller setpoints/state and pause state before the loop. It does not resume active scenario execution or reload the live historian/trend buffer. Periodic queued checkpoints and high-volume history can lag; abrupt termination can lose pending items. Graceful shutdown saves final state and attempts a five-second queue drain.
+
+Incidents, comments/timelines, runs, accounts and rule settings are not purged by the four-target retention worker. The latest plant-state row replaces earlier checkpoints. The `AddUserAccountVersion` migration adds account concurrency versioning after the initial schema.
+
+For image/Compose files, ports, secrets, Keycloak, backup/restore and upgrade procedures, see [deployment](deployment.md). For health failures, resets and rotation, see [operations](operations.md).

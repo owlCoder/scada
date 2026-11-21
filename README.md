@@ -1,117 +1,74 @@
-# SCADA — Industrial Control Simulation
+# SCADA cybersecurity training simulator
 
-A modular .NET 10 educational simulator for a water treatment plant, telemetry, process alarms, security events, incidents, Modbus TCP and OPC UA.
+A .NET 10 simulator for learning industrial process operation, cyberattack detection and incident response. It models a three-tank water treatment plant, PLCs/RTU, a segmented virtual network, safety interlocks and process alarms. **Simulation only: never connect it to physical industrial equipment.**
 
-**Simulation only. Do not connect to physical industrial equipment.**
+Features include 14 scripted scenarios, 17 detection rules, an incident workflow with evidence and timelines, a live Blazor HMI, REST and SignalR interfaces, optional Modbus TCP and OPC UA, cookie/API-key/optional OIDC authentication, and in-memory or EF Core/PostgreSQL storage.
 
-## Quick start
+```mermaid
+flowchart LR
+    Browser[Blazor HMI] --> Api[API host / composition root]
+    Clients[REST and SignalR clients] --> Api
+    Api --> App[Application services and simulation coordinator]
+    Protocols[Modbus TCP / OPC UA] --> App
+    Security[Scenarios / detection / identity] --> App
+    App --> Domain[Plant / controllers / virtual network]
+    App --> Queue[Bounded persistence queue]
+    Queue --> Stores[Memory or PostgreSQL]
+    App --> Realtime[Realtime feed]
+    Realtime --> Browser
+    Realtime --> Clients
+```
 
-Install the .NET 10 SDK. Configure unique credentials:
+## Quick start: in memory
+
+Install the .NET 10 SDK and run from the repository root:
 
 ```bash
-export Security__ViewerApiKey="replace-with-random-viewer-key"
-export Security__OperatorApiKey="replace-with-random-operator-key"
-export Security__AdminApiKey="replace-with-random-admin-key"
-
 dotnet restore scada.slnx
-dotnet build scada.slnx --configuration Release
-dotnet test scada.slnx --configuration Release
-dotnet run --project src/Api --urls http://127.0.0.1:5080
+DOTNET_ENVIRONMENT=Development dotnet run --project src/Api -- --urls http://127.0.0.1:5080
 ```
 
-Dashboard: http://127.0.0.1:5080/
+Open <http://127.0.0.1:5080/> and sign in. Development creates `dev-viewer`, `dev-operator` and `dev-admin` with random passwords and API keys in the gitignored, owner-readable `.scada/dev-credentials.txt`. Read it locally; do not commit or share it. Memory storage resets on process restart. Other environments do not generate these accounts.
 
-Set `Protocols__OpcUa__Enabled=true` to enable the local OPC UA server at `opc.tcp://localhost:4840`. Browse and subscribe as a Viewer, or sign in as an Operator on a secure endpoint to issue commands. [OPC UA configuration](docs/protocols.md#opc-ua)
+| Role | Access |
+| --- | --- |
+| Viewer | Observe the plant, alarms, trends, events, incidents and scenario results |
+| Operator | Viewer access plus device commands, alarm acknowledgement, simulation pause/step and incident handling |
+| Administrator (instructor) | Operator access plus scenarios, ground truth, simulation reset, controller/network controls, accounts and rule tuning |
 
-**GitHub Actions CI is enabled** for source and test changes, with cancellation of superseded runs and a 15-minute job timeout. Run `bash scripts/verify.sh` locally for restore, Release build, .NET tests, JavaScript syntax validation, and Node.js dashboard regression tests. This script requires the .NET 10 SDK.
+## Quick start: PostgreSQL with Compose
 
-## Project layout
+Generate separate local secrets and start the stack:
 
-```text
-src/
-  Domain/
-    Entities/
-    Models/
-  Application/
-    Abstractions/
-    Models/
-    Services/
-  Infrastructure/
-    Persistence/
-      InMemory/
-      Postgres/
-  Security/
-    Models/
-    Services/
-  Protocols/
-    Models/
-    Services/
-    Modbus/
-    OpcUa/
-  Simulation/
-    HostedServices/
-  Api/
-    Configuration/
-      Registration/
-    Contracts/
-    Endpoints/
-      Read/
-      Commands/
-      System/
-    wwwroot/
-Tests/
-  UnitTests/
-    Application/
-    Domain/
-    Persistence/
-    Protocols/
-    Security/
-  IntegrationTests/
-    Api/
-    Configuration/
-    Persistence/
-    Support/
-  ArchitectureTests/
-    Rules/
-  FrontendTests/
-docs/
-deploy/
+```bash
+mkdir -p .scada
+(umask 077; for key in POSTGRES_PASSWORD SCADA_VIEWER_KEY SCADA_OPERATOR_KEY SCADA_ADMIN_KEY; do
+  printf '%s=%s\n' "$key" "$(openssl rand -hex 32)"
+done > .scada/compose.env)
+docker compose --env-file .scada/compose.env -f deploy/compose.yaml up --build -d
+curl --fail http://127.0.0.1:5080/health/ready
 ```
 
-One public class, interface, record or enum per source file. The existing short project names and top-level namespaces are retained; no `ScadaSecurity` prefix is used.
+This stack exposes HTTP on loopback port 5080 and PostgreSQL on loopback port 5432; data uses a named volume. Shared role keys authenticate scripts through `X-Api-Key`; they do not supply browser passwords. For HMI sign-in, seed a named account or enable the optional Keycloak stack as described in [deployment](docs/deployment.md). No default production password exists.
 
-## API
+## HMI and protocols
 
-| Method | Endpoint | Role |
-| --- | --- | --- |
-| GET | `/health` | Public |
-| GET | `/api/me` | Viewer |
-| GET | `/api/plant` | Viewer |
-| GET | `/api/telemetry?count=100` | Viewer |
-| GET | `/api/events` | Viewer |
-| GET | `/api/incidents` | Viewer |
-| GET | `/api/scenarios` | Viewer |
-| GET | `/api/registers` | Viewer |
-| GET | `/api/registers/{address}` | Viewer |
-| POST | `/api/plant/tick` | Operator |
-| POST | `/api/plant/pump/P-101/command` | Operator |
-| POST | `/api/plant/valve/V-101/command` | Operator |
-| POST | `/api/registers/{address}` | Operator |
-| POST | `/api/incidents/{id}/status` | Administrator |
-| POST | `/api/scenarios/{id}` | Administrator |
+The HMI covers overview, plant diagram, tanks, pumps, valves, sensors, PLC/RTU, communications, registers, alarms, trends, events, incidents/detail, scenarios, accounts/rules, identity and system health. See [page permissions and live behavior](docs/hmi.md).
 
-Protected endpoints accept a browser session (`/account/login`), an `X-Api-Key` header or optional OIDC single sign-on; see [Security](docs/security.md).
+Both external protocols are disabled by default. Modbus binds to `127.0.0.1:1502`; OPC UA binds to `127.0.0.1:4840`. OPC UA anonymous access and automatic certificate acceptance both default to `false`. [Protocol details](docs/protocols.md)
+
+## Development checks
+
+```bash
+dotnet build scada.slnx -c Release --disable-build-servers
+dotnet test scada.slnx -c Release --no-build
+```
+
+The full test command includes PostgreSQL Testcontainers and requires Docker. [Testing](docs/testing.md) lists individual projects and the planned Step 7 suites. `bash scripts/verify.sh` restores, builds and tests the solution.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Security](docs/security.md)
-- [PostgreSQL and Docker](docs/postgresql.md)
-- [Observability](docs/observability.md)
-- [Incidents](docs/incidents.md)
-- [Protocols](docs/protocols.md)
-- [Security scenarios](docs/scenarios.md)
-
-## Limitations
-
-The simulator is not production SCADA software. PostgreSQL persistence (EF Core, with migrations and retention) is optional. With it, plant state, incidents, events, telemetry and accounts survive restarts.
+- [Architecture](docs/architecture.md), [REST and SignalR API](docs/api.md), [configuration reference](docs/configuration.md)
+- [User guide](docs/user-guide.md), [HMI pages](docs/hmi.md), [scenarios](docs/scenarios.md), [incidents](docs/incidents.md)
+- [Security](docs/security.md), [protocols](docs/protocols.md)
+- [Deployment](docs/deployment.md), [operations runbook](docs/operations.md), [PostgreSQL](docs/postgresql.md), [observability](docs/observability.md), [testing](docs/testing.md)
