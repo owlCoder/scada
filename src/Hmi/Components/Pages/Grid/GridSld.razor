@@ -1,0 +1,13 @@
+@* Single-line diagram canvas. Placeholder contract owned by the SLD agent; the workspace page hosts it. *@
+<div class="grid-sld" data-selected="@SelectedId"></div>
+@code {
+    /// <summary>Ground truth already redacted for the current session.</summary>
+    [Parameter, EditorRequired] public Domain.Grid.Snapshots.GridSnapshot Snapshot { get; set; } = default!;
+    [Parameter, EditorRequired] public Domain.Grid.Definition.GridDefinition Definition { get; set; } = default!;
+    [Parameter] public IReadOnlyList<Application.Grid.GridTag> Tags { get; set; } = [];
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string?> SelectedIdChanged { get; set; }
+    /// <summary>Context-menu / double-click / keyboard requests for the host (control window, trend, tag, SBO).</summary>
+    [Parameter] public EventCallback<Hmi.Services.Grid.GridSldAction> OnAction { get; set; }
+    [Parameter] public bool CanOperate { get; set; }
+}
