@@ -24,6 +24,8 @@ public static class AuthenticationRegistrationExtensions
         var session = configuration.Bind<SessionSettings>("Security:Session");
         if (session.AbsoluteLifetime <= TimeSpan.Zero)
             throw new InvalidOperationException("Security:Session:AbsoluteLifetime must be positive.");
+        if (session.RevalidationInterval <= TimeSpan.Zero)
+            throw new InvalidOperationException("Security:Session:RevalidationInterval must be positive.");
         services.AddSingleton(session);
 
         var lockout = configuration.Bind<PasswordLockoutOptions>(ConfigurationSections.Lockout);
