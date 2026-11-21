@@ -14,6 +14,9 @@ using Api.Endpoints.Scenarios;
 using Api.Endpoints.Simulation;
 using Api.Endpoints.System;
 using Api.Endpoints.Telemetry;
+using Api.Development;
+using Api.Endpoints.SignIn;
+using Api.Middleware;
 using Security.Accounts;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,11 +27,19 @@ var app = builder.Build();
 await app.InitializeStorageAsync(CancellationToken.None);
 // Accounts must exist before the first request is authenticated.
 await app.Services.GetRequiredService<AccountSeeder>().SeedAsync(CancellationToken.None);
+await app.Services.GetRequiredService<DevelopmentAccountGenerator>().EnsureAsync(CancellationToken.None);
+app.UseScadaObservability();
 app.UseScadaSecurityHeaders();
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseMiddleware<CookieAntiforgeryMiddleware>();
+app.UseAuthorization();
+app.UseRateLimiter();
+app.UseAntiforgery();
 
 HealthEndpoints.Map(app);
+SignInEndpoints.Map(app);
 IdentityEndpoints.Map(app);
 PlantEndpoints.Map(app);
 SimulationEndpoints.Map(app);

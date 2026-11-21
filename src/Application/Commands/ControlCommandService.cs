@@ -1,3 +1,4 @@
+using Application.Diagnostics;
 using Application.Events;
 using Application.Identity;
 using Application.Realtime;
@@ -68,16 +69,25 @@ public sealed class ControlCommandService(
 
         events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.Audit, EventSeverity.Information,
             command.Source.ToString(), $"{Describe(command)}: {result.Message}", actor.Name, deviceId));
+        Count(command, "accepted", "none");
         realtime.Publish(RealtimeTopics.Plant, engine.Read(world => world.Plant.CaptureSnapshot()));
         return result;
     }
 
     private CommandResult Reject(OperatorCommand command, Actor actor, CommandResult result, string category, EventSeverity severity)
     {
+        Count(command, "rejected", result.Reason.ToString());
         events.Publish(SecurityEvent.Create(time.GetUtcNow(), category, severity, command.Source.ToString(),
             $"{Describe(command)} rejected ({result.Reason}): {result.Message}",
             string.IsNullOrWhiteSpace(actor.Name) ? "anonymous" : actor.Name, result.DeviceId));
         return result;
+    }
+
+    private static bool Count(OperatorCommand command, string outcome, string reason)
+    {
+        ScadaInstrumentation.Commands.Add(1, new KeyValuePair<string, object?>("outcome", outcome),
+            new KeyValuePair<string, object?>("reason", reason), new KeyValuePair<string, object?>("source", command.Source.ToString()));
+        return true;
     }
 
     private static string Describe(OperatorCommand command) => command.Type switch

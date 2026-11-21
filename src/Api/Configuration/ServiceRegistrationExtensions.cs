@@ -9,10 +9,12 @@ public static class ServiceRegistrationExtensions
     {
         builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
         builder.Services.AddSingleton(TimeProvider.System);
-        return builder.AddStorageServices()
+        return builder.AddScadaObservability()
+            .AddStorageServices()
             .AddSimulationServices()
             .AddApplicationServices()
             .AddSecurityServices()
+            .AddScadaAuthentication()
             .AddProtocolServices()
             .AddHostedWorkers();
     }

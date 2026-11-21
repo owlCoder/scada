@@ -36,8 +36,8 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
 - [x] Retention policies
 
 ## Phase F — Authentication and observability
-- [ ] Cookie login, password hashing, policies, API key compatibility, OIDC option
-- [ ] Serilog, OpenTelemetry, health endpoints
+- [x] Cookie login, password hashing, policies, API key compatibility, OIDC option (Keycloak not run live)
+- [x] Serilog, OpenTelemetry, health endpoints
 
 ## Phase G/H — HMI and real-time
 - [ ] Blazor HMI pages
@@ -57,3 +57,6 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
 - 2026-11-21, Step 3 (EF Core + PostgreSQL): 284 .NET tests (12 architecture, 166 unit, 86 integration, 20 database on Testcontainers
   PostgreSQL) and 3 frontend tests pass. Live API on the compose PostgreSQL: 14/14 scenarios Detected; runs, incidents, events and
   telemetry survive a restart; a fresh database migrates without warnings.
+- 2026-11-21, Step 4 (auth and observability): 322 .NET tests (12 architecture, 172 unit, 118 integration, 20 database) and 3 frontend
+  tests pass. Live: dev-account form sign-in, CSRF enforcement, 403 for low roles, correlation ids, no secrets in logs, 14/14 scenarios
+  Detected. Keycloak and the Aspire dashboard were not started (low disk).

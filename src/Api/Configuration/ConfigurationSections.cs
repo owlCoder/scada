@@ -11,6 +11,12 @@ public static class ConfigurationSections
     public const string CommandRate = "Security:CommandRate";
     public const string Users = "Security:Users";
     public const string Modbus = "Protocols:Modbus";
+    public const string ApiKeys = "Security:ApiKeys";
+    public const string Lockout = "Security:Lockout";
+    public const string DevelopmentAccounts = "Security:DevelopmentAccounts";
+    public const string Oidc = "Authentication:Oidc";
+    public const string RateLimiting = "RateLimiting";
+    public const string Observability = "Observability";
 
     public static T Bind<T>(this IConfiguration configuration, string section) where T : new()
     {

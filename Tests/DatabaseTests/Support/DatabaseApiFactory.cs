@@ -17,6 +17,7 @@ public static class DatabaseApiFactory
             builder.UseSetting("Security:ViewerApiKey", "viewer-database-key");
             builder.UseSetting("Security:OperatorApiKey", OperatorKey);
             builder.UseSetting("Security:AdminApiKey", AdminKey);
+            builder.UseSetting("Security:DevelopmentAccounts:Enabled", "false");
             builder.UseSetting("Security:Users:0:Username", "ana");
             builder.UseSetting("Security:Users:0:Role", "Operator");
             builder.UseSetting("Security:Users:0:ApiKey", "ana-database-key");

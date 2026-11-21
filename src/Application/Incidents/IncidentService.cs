@@ -1,3 +1,4 @@
+using Application.Diagnostics;
 using Application.Common;
 using Application.Events;
 using Application.Identity;
@@ -69,6 +70,8 @@ public sealed class IncidentService(
                 $"Incident {created.DisplayId} opened: {created.Title}", draft.Source,
                 created.DeviceIds.FirstOrDefault(), created.ScenarioRunId));
             realtime.Publish(RealtimeTopics.Incidents, created);
+            ScadaInstrumentation.IncidentsCreated.Add(1, new KeyValuePair<string, object?>("category", created.Category.ToString()),
+                new KeyValuePair<string, object?>("severity", created.Severity.ToString()));
             return new IncidentChange(IncidentOperationStatus.Succeeded, created, [], "Incident created");
         }
         finally

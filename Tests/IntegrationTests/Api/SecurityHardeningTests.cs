@@ -39,7 +39,7 @@ public sealed class SecurityHardeningTests
 
         await admin.PostAsJsonAsync("/api/accounts/ana/role", new { role = "Viewer" });
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await ana.PostAsync("/api/plant/devices/V-301/mode/automatic", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ana.PostAsync("/api/plant/devices/V-301/mode/automatic", null)).StatusCode);
         Assert.Equal("Viewer", (await ana.GetJsonAsync("/api/me")).GetProperty("role").GetString());
     }
 

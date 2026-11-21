@@ -1,0 +1,54 @@
+{
+  "realm": "scada",
+  "enabled": true,
+  "displayName": "SCADA training plant",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "passwordPolicy": "length(12)",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      { "name": "scada-viewer", "description": "Read-only access to the plant" },
+      { "name": "scada-operator", "description": "Operate devices and handle incidents" },
+      { "name": "scada-administrator", "description": "Instructor: scenarios, accounts and training controls" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "scada-api",
+      "name": "SCADA API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${SCADA_OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://127.0.0.1:5080/signin-oidc"],
+      "webOrigins": ["http://127.0.0.1:5080"],
+      "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "http://127.0.0.1:5080/account/login" },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": []
+}

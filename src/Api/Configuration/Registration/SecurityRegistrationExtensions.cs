@@ -1,3 +1,4 @@
+using Api.Development;
 using Application.Commands;
 using Application.Identity;
 using Application.Simulation;
@@ -30,15 +31,17 @@ public static class SecurityRegistrationExtensions
             var username = section["Username"] ?? "";
             if (!Enum.TryParse<AccessRole>(section["Role"], true, out var role) || !Enum.IsDefined(role))
                 throw new InvalidOperationException($"Invalid role for user {username}.");
-            return new UserCredential(username, role, section["ApiKey"] ?? "");
+            return new UserCredential(username, role, section["ApiKey"] ?? "", section["Password"], section["PasswordHash"]);
         }).ToArray();
-        if (namedUsers.Any(user => legacyPolicy.Authenticate(user.ApiKey) is not null))
+        if (namedUsers.Any(user => user.HasApiKey && legacyPolicy.Authenticate(user.ApiKey) is not null))
             throw new InvalidOperationException("A named user cannot reuse a shared API key.");
 
         services.AddSingleton(legacyPolicy);
         services.AddSingleton(new UserAccessPolicy(namedUsers));
         services.AddSingleton<IReadOnlyList<UserCredential>>(namedUsers);
         services.AddSingleton<AccountSeeder>();
+        services.AddSingleton(configuration.Bind<DevelopmentAccountSettings>(ConfigurationSections.DevelopmentAccounts));
+        services.AddSingleton<DevelopmentAccountGenerator>();
         services.AddSingleton(sp => new AuthenticationThrottle(sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ApiKeyAuthenticator>();
 

@@ -1,3 +1,4 @@
+using Application.Diagnostics;
 using System.Globalization;
 using Application.Detection;
 using Application.Events;
@@ -284,6 +285,8 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         var restored = _services.Training.RestoreDefaults();
         _active = null;
         var record = run.ToRecord(_time.GetUtcNow(), observed, outcome);
+        ScadaInstrumentation.ScenarioRuns.Add(1, new KeyValuePair<string, object?>("scenario", run.Definition.Id),
+            new KeyValuePair<string, object?>("outcome", outcome.ToString()));
         UpdateCurrent(record, null);
         await SaveAsync(record, cancellationToken);
 

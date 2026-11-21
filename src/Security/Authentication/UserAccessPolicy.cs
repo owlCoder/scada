@@ -12,12 +12,12 @@ public sealed class UserAccessPolicy
     public UserAccessPolicy(IEnumerable<UserCredential> users)
     {
         _users = users.ToArray();
-        if (_users.Any(user => string.IsNullOrWhiteSpace(user.Username) ||
-            string.IsNullOrWhiteSpace(user.ApiKey) || !Enum.IsDefined(user.Role)))
-            throw new ArgumentException("Each user must have a name, key and valid role.", nameof(users));
+        if (_users.Any(user => string.IsNullOrWhiteSpace(user.Username) || !(user.HasApiKey || user.HasPassword) || !Enum.IsDefined(user.Role)))
+            throw new ArgumentException("Each user must have a name, a valid role and an API key or password.", nameof(users));
 
+        var keys = _users.Where(user => user.HasApiKey).Select(user => user.ApiKey).ToArray();
         if (_users.Select(user => user.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count() != _users.Length ||
-            _users.Select(user => user.ApiKey).Distinct(StringComparer.Ordinal).Count() != _users.Length)
+            keys.Distinct(StringComparer.Ordinal).Count() != keys.Length)
             throw new ArgumentException("Usernames and API keys must be unique.", nameof(users));
     }
 
@@ -26,7 +26,7 @@ public sealed class UserAccessPolicy
         if (string.IsNullOrWhiteSpace(supplied))
             return null;
 
-        foreach (var user in _users)
+        foreach (var user in _users.Where(u => u.HasApiKey))
         {
             if (ApiKeyValidator.Matches(user.ApiKey, supplied))
             {

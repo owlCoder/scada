@@ -1,3 +1,4 @@
+using Api.Authentication;
 using Application.Identity;
 using Security.Authentication;
 using Security.Commands;
@@ -5,46 +6,36 @@ using Security.Commands;
 namespace Api.Authorization;
 
 /// <summary>
-/// API key authorisation (X-Api-Key) and per-credential rate limiting for minimal API endpoints. A missing, unknown
-/// or insufficient key returns 401. The resolved caller is available through <see cref="Principal"/>.
+/// Endpoint conventions on top of ASP.NET authorization. <see cref="RequireRole{TBuilder}"/> applies the role policy:
+/// no or invalid credentials return 401, a role that is too low returns 403, a throttled client 429.
 /// </summary>
 public static class EndpointAuthorizationExtensions
 {
-    public const string ApiKeyHeader = "X-Api-Key";
-
     public static TBuilder RequireRole<TBuilder>(this TBuilder builder, AccessRole role) where TBuilder : IEndpointConventionBuilder =>
-        builder.AddEndpointFilter(async (context, next) =>
-        {
-            var http = context.HttpContext;
-            var authenticator = http.RequestServices.GetRequiredService<ApiKeyAuthenticator>();
-            var source = $"ip:{http.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
-            var result = await authenticator.AuthenticateAsync(http.Request.Headers[ApiKeyHeader].ToString(), source, http.RequestAborted);
-            if (result.Status == AuthenticationStatus.Throttled)
-                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
-            if (result.User is not { } user || user.Role < role)
-                return Results.Unauthorized();
-
-            http.Items[ScadaPrincipal.ItemKey] = new ScadaPrincipal(user);
-            return await next(context);
-        });
+        builder.RequireAuthorization(ScadaPolicies.For(role));
 
     /// <summary>Limits state-changing requests per credential so changing the claimed actor cannot bypass it.</summary>
     public static TBuilder RequireCredentialRateLimit<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
         builder.AddEndpointFilter(async (context, next) =>
         {
             var http = context.HttpContext;
-            if (http.Items[ScadaPrincipal.ItemKey] is not ScadaPrincipal principal)
+            if (http.User.FindFirst(ScadaClaimTypes.Credential)?.Value is not { Length: > 0 } credential)
                 return Results.Unauthorized();
 
             var monitor = http.RequestServices.GetRequiredService<CommandMonitor>();
-            return monitor.Check($"credential:{principal.User.CredentialId}")
+            return monitor.Check($"credential:{credential}")
                 ? await next(context)
                 : Results.StatusCode(StatusCodes.Status429TooManyRequests);
         });
 
-    public static ScadaPrincipal Principal(this HttpContext http) =>
-        http.Items[ScadaPrincipal.ItemKey] as ScadaPrincipal
-            ?? throw new InvalidOperationException("Endpoint is missing RequireRole.");
+    public static ScadaPrincipal Principal(this HttpContext http)
+    {
+        var role = MinimumRoleHandler.RoleOf(http.User)
+            ?? throw new InvalidOperationException("Endpoint is missing RequireRole or the caller has no role claim.");
+        var name = http.User.Identity?.Name ?? throw new InvalidOperationException("Authenticated caller has no name.");
+        var credential = http.User.FindFirst(ScadaClaimTypes.Credential)?.Value ?? name;
+        return new ScadaPrincipal(new AuthenticatedUser(name, role, credential));
+    }
 
     public static Actor Actor(this HttpContext http) => http.Principal().Actor;
 }

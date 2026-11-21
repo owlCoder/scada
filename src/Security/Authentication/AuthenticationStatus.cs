@@ -1,3 +1,3 @@
 namespace Security.Authentication;
 
-public enum AuthenticationStatus { Succeeded, Missing, Invalid, Disabled, Throttled }
+public enum AuthenticationStatus { Succeeded, Missing, Invalid, Disabled, Throttled, Locked }

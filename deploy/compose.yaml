@@ -10,6 +10,14 @@ services:
       Security__ViewerApiKey: ${SCADA_VIEWER_KEY:?Set SCADA_VIEWER_KEY}
       Security__OperatorApiKey: ${SCADA_OPERATOR_KEY:?Set SCADA_OPERATOR_KEY}
       Security__AdminApiKey: ${SCADA_ADMIN_KEY:?Set SCADA_ADMIN_KEY}
+      Observability__JsonLogs: "true"
+      Observability__OtlpEndpoint: ${SCADA_OTLP_ENDPOINT:-}
+      Authentication__Oidc__Enabled: ${SCADA_OIDC_ENABLED:-false}
+      Authentication__Oidc__Authority: http://127.0.0.1:8081/realms/scada
+      Authentication__Oidc__MetadataAddress: http://keycloak:8080/realms/scada/.well-known/openid-configuration
+      Authentication__Oidc__RequireHttpsMetadata: "false"
+      Authentication__Oidc__ClientId: scada-api
+      Authentication__Oidc__ClientSecret: ${SCADA_OIDC_CLIENT_SECRET:-}
     ports:
       - "127.0.0.1:5080:8080"
     depends_on:
@@ -32,6 +40,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Optional traces and metrics: docker compose --profile observability up -d with SCADA_OTLP_ENDPOINT=http://aspire-dashboard:18889.
+  # The dashboard prints its login token in its log (docker compose logs aspire-dashboard).
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:18888:18888"
 
 volumes:
   scada_pgdata:

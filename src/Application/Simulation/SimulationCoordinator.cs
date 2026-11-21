@@ -1,3 +1,4 @@
+using Application.Diagnostics;
 using Application.Alarms;
 using Application.Events;
 using Application.Persistence;
@@ -96,6 +97,7 @@ public sealed class SimulationCoordinator(
                 alarm.Key, alarm.SourceId, alarm.Type, alarm.Severity, transition.Kind, alarm.Message, alarm.AcknowledgedBy)));
         }
 
+        ScadaInstrumentation.SimulationSteps.Add(1);
         var stepCount = report.Plant.Snapshot.StepCount;
         if (stepCount % engine.Options.TelemetryIntervalSteps == 0)
         {

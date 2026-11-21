@@ -29,7 +29,7 @@ public sealed class ApiAccessTests
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
         Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
-        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        Assert.True(response.Headers.CacheControl is { NoStore: true, NoCache: true });
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class ApiAccessTests
         Assert.Equal(3, plant.GetProperty("tanks").GetArrayLength());
 
         var response = await client.PostAsJsonAsync("/api/plant/pump/P-101/command", new { running = true, actor = "test" });
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class ApiAccessTests
         Assert.Equal(0, valve.GetProperty("setpoint").GetDouble());
 
         var scenario = await client.PostAsJsonAsync("/api/scenarios/sensor-spoofing", new { actor = "test" });
-        Assert.Equal(HttpStatusCode.Unauthorized, scenario.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, scenario.StatusCode);
     }
 
     [Fact]

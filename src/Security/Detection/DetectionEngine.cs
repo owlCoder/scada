@@ -1,3 +1,4 @@
+using Application.Diagnostics;
 using System.Diagnostics;
 using Application.Detection;
 using Application.Events;
@@ -199,6 +200,8 @@ public sealed class DetectionEngine : ISimulationObserver
             $"{rule.Name}: {finding.Title}", "detection-engine", finding.DeviceId, detection.ScenarioRunId,
             detection.Id.ToString("N")));
         _realtime.Publish(RealtimeTopics.Detections, detection);
+        ScadaInstrumentation.Detections.Add(1, new KeyValuePair<string, object?>("rule", rule.Id),
+            new KeyValuePair<string, object?>("severity", severity.ToString()));
         return true;
     }
 

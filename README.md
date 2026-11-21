@@ -97,17 +97,18 @@ One public class, interface, record or enum per source file. The existing short 
 | POST | `/api/incidents/{id}/status` | Administrator |
 | POST | `/api/scenarios/{id}` | Administrator |
 
-All protected endpoints require `X-Api-Key`. Named user credentials are supported; see [Security](docs/security.md).
+Protected endpoints accept a browser session (`/account/login`), an `X-Api-Key` header or optional OIDC single sign-on; see [Security](docs/security.md).
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Security](docs/security.md)
 - [PostgreSQL and Docker](docs/postgresql.md)
+- [Observability](docs/observability.md)
 - [Incidents](docs/incidents.md)
 - [Protocols](docs/protocols.md)
 - [Security scenarios](docs/scenarios.md)
 
 ## Limitations
 
-The simulator is not production SCADA software. There is no OPC UA implementation, OIDC authentication or TLS termination yet. PostgreSQL persistence (EF Core, with migrations and retention) is optional; with it, plant state, incidents, events, telemetry and accounts survive restarts.
+The simulator is not production SCADA software. There is no OPC UA implementation or TLS termination yet. PostgreSQL persistence (EF Core, with migrations and retention) is optional; with it, plant state, incidents, events, telemetry and accounts survive restarts.

@@ -53,7 +53,7 @@ public sealed class EndpointAuthorizationTests
         using var factory = ApiTestFactory.Create();
         using var viewer = factory.Client(ApiTestFactory.ViewerKey);
         using var body = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
-        Assert.Equal(HttpStatusCode.Unauthorized, (await viewer.PostAsync(path, body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostAsync(path, body)).StatusCode);
     }
 
     [Theory]
@@ -66,8 +66,8 @@ public sealed class EndpointAuthorizationTests
     {
         using var factory = ApiTestFactory.Create();
         using var operatorClient = factory.Client(ApiTestFactory.OperatorKey);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await operatorClient.PostAsync(path, null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await operatorClient.GetAsync("/api/accounts")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await operatorClient.PostAsync(path, null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await operatorClient.GetAsync("/api/accounts")).StatusCode);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class EndpointAuthorizationTests
         using var operatorClient = factory.Client(ApiTestFactory.OperatorKey);
         using var administrator = factory.Client(ApiTestFactory.AdminKey);
         const string path = "/api/scenarios/sensor-spoofing";
-        Assert.Equal(HttpStatusCode.Unauthorized, (await operatorClient.PostAsJsonAsync(path, new { actor = "operator" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await operatorClient.PostAsJsonAsync(path, new { actor = "operator" })).StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, (await administrator.PostAsJsonAsync(path, new { actor = "admin" })).StatusCode);
     }
 }

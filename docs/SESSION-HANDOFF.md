@@ -185,7 +185,46 @@ Original plan:
 - Concurrency: incident version check. Retention worker over `IRetentionTarget`. Keep the in-memory mode.
 - `Tests/DatabaseTests` with Testcontainers.PostgreSql: real database, fail if Docker is missing, no silent skip. Include a migration test and a restart/recovery test.
 
-### Step 4: Auth and observability
+### Step 4: Auth and observability, DONE (2026-11-21)
+
+What was built:
+- Authentication (`src/Api/Authentication`):
+  - The default policy scheme `Scada` forwards to `ApiKey` when an `X-Api-Key` header is present, else to `Cookies`.
+  - `ApiKeyAuthenticationHandler` wraps `ApiKeyAuthenticator` and answers 429 when the client is throttled.
+  - Cookie `scada.session`: HttpOnly, SameSite=Strict, 30-minute sliding expiry. `CookieSessionValidator` rechecks the account store on every request (disable, lock or password change ends the session; a role change applies immediately).
+  - `/api` paths get 401/403 instead of redirects.
+  - Optional OIDC (code + PKCE). `OidcRoleMapper` maps `roles` to the highest SCADA role, and an identity with no SCADA role is rejected.
+- Authorization (`src/Api/Authorization`):
+  - Policies Viewer/Operator/Administrator are built from `MinimumRoleRequirement` (role hierarchy).
+  - `RequireRole` now means `RequireAuthorization`: insufficient role is **403** (was 401).
+  - `AuditingAuthorizationResultHandler` audits 403s as `AuthorizationDenied`.
+  - `http.Principal()` and `http.Actor()` are rebuilt from claims; endpoint code was unchanged.
+- Sign-in (`Endpoints/SignIn`):
+  - `GET/POST /account/login` (server-rendered, no script, antiforgery form, only local `returnUrl`).
+  - `POST /account/logout` (antiforgery checked explicitly; the middleware only flags failures).
+  - `/account/login/oidc` and `GET /account/antiforgery`.
+  - `CookieAntiforgeryMiddleware` requires `X-CSRF-TOKEN` for cookie-authenticated state-changing `/api` calls.
+- Security layer:
+  - `PasswordAuthenticator`: lockout (5 failures, 15 minutes; `Security:Lockout`), per-IP throttle, timing-safe handling of unknown users, audit without the password, and `ValidateSessionAsync`.
+  - `UserCredential` gains `Password`/`PasswordHash`; the API key is optional.
+  - `Development/DevelopmentAccountGenerator` (Development only, `appsettings.Development.json`) creates dev-viewer, dev-operator and dev-admin, and rewrites only the `SCADA_DEV_*` lines of `.scada/dev-credentials.txt` (mode 600).
+- Rate limiting: a global fixed window per credential or IP (1200/min), the `login` policy (10/min per IP), health endpoints exempt. `RateLimitAuditor` audits rejections at most once per minute per partition.
+- Observability:
+  - Serilog via `AddSerilog` (no frozen bootstrap logger, so the test hosts work), with JSON output optional.
+  - OpenTelemetry tracing (ASP.NET Core, Npgsql) and metrics (ASP.NET Core, runtime, Npgsql, `Scada`, `Scada.Runtime`). OTLP export runs only when `Observability:OtlpEndpoint` is set.
+  - `Application/Diagnostics/ScadaInstrumentation` is a static `Meter`, incremented at the source (commands, events, detections, incidents, scenario runs, steps).
+  - `CorrelationIdMiddleware` sets the response header, a log property, the trace tag and baggage; `EventPublisher` fills `SecurityEvent.CorrelationId` from that baggage.
+- `Cache-Control` is now `no-cache, no-store` plus `Pragma: no-cache` (the values antiforgery requires, so it no longer overrides them with a warning).
+- Compose: Keycloak lives in `deploy/compose.keycloak.yaml`, not a profile, because compose interpolates required variables of inactive profiles too. There is a realm JSON with no users, plus `scripts/keycloak-bootstrap.sh`. The Aspire dashboard is a profile (`observability`).
+- Tests: integration tests went from 86 to 118 (cookie sign-in, CSRF, lockout, session revocation, role change, logout, OIDC challenge with static metadata, role mapping, 403 auditing, rate limits, correlation id, command metrics, dev accounts). Unit tests went from 166 to 172 (PasswordAuthenticator). 17 existing assertions were changed from 401 to 403, for authenticated callers with too low a role only.
+- Live verification (Development environment, in-memory storage):
+  - Dev accounts were generated (file mode 600). Form sign-in as dev-operator returned 302, and `/api/me` showed Operator.
+  - A cookie API write without the CSRF token got 400; with the token, 200. A viewer key on an admin endpoint got 403.
+  - The correlation id was echoed. No password or key appeared in the log.
+  - The login page rendered in the browser with no CSP errors.
+  - All 14 scenarios were Detected back to back with no ERR lines in the log. The Keycloak and Aspire containers were not started (low disk); OIDC is covered by the challenge test and the role-mapping tests.
+
+Original plan:
 - Cookie login (`/account/login`, `/account/logout`, antiforgery, HttpOnly, SameSite=Strict, 30-minute sliding expiry), local accounts seeded from config.
 - Dev accounts are generated into a gitignored `.scada/dev-credentials.txt`. Never log secrets.
 - Centralised policies Viewer, Operator and Administrator (role hierarchy). Legacy `X-Api-Key` authentication handler when enabled. Optional OIDC (Keycloak in a compose profile, realm JSON without users plus a bootstrap script).
@@ -221,4 +260,4 @@ cd ~/Desktop/scada && git status && git branch --show-current
 dotnet build src/Security/Security.csproj -c Release
 ```
 
-Steps 1–3 are done; start with **Step 4** above. Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.
+Steps 1–4 are done; start with **Step 5** above. Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.

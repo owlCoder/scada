@@ -19,6 +19,7 @@ public static class ApiTestFactory
             builder.UseSetting("Security:ViewerApiKey", ViewerKey);
             builder.UseSetting("Security:OperatorApiKey", OperatorKey);
             builder.UseSetting("Security:AdminApiKey", AdminKey);
+            builder.UseSetting("Security:DevelopmentAccounts:Enabled", "false");
             builder.UseSetting("Security:Users:0:Username", "ana");
             builder.UseSetting("Security:Users:0:Role", "Operator");
             builder.UseSetting("Security:Users:0:ApiKey", AnaKey);

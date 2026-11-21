@@ -7,4 +7,12 @@
     <ProjectReference Include="../Security/Security.csproj" />
     <ProjectReference Include="../Protocols/Protocols.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.21.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.21.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.21.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.21.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="11.0.0" />
+  </ItemGroup>
 </Project>
