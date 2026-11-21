@@ -52,7 +52,7 @@ public sealed class HmiBrowserTests(ITestOutputHelper output)
         var page = await session.NewPageAsync();
         await BrowserTestSession.LoginAsync(page, "operator");
         // No navigation or reload between reads: only circuit messages can update these DOM values.
-        var overview = page.Locator(".metric strong").First;
+        var overview = page.Locator(".kpi-value").First;
         var first = await overview.InnerTextAsync();
         await Assertions.Expect(overview).Not.ToHaveTextAsync(first);
         await BrowserTestSession.NavigateAsync(page, "Plant diagram");
