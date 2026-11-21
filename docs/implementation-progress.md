@@ -59,6 +59,17 @@ Remaining:
 - [x] Documentation
 - [x] CI green, pushed
 
+## Phase K — Electrical grid mode
+- [x] Sign-in mode choice (Water / Grid) with a mode claim and switch
+- [x] Network model: 110/20/0.4 kV sources, transformers with OLTC/AVR, lines, cables, switches, loads, PV, capacitors, RTUs
+- [x] Newton–Raphson power flow (radial and meshed), short-circuit currents, 3I0 earth faults, IEC 60255 protection, breaker failure
+- [x] Select-before-operate control, training actions, redaction of ground truth, versioned definitions (memory + PostgreSQL)
+- [x] HMI: overview, live single-line diagram with faceplates, feeders, transformers, switches, loads, protection, alarms, measurements, instructor, scenarios, rules
+- [x] Network editor with catalog, validation, versions and templates (default, urban cable, rural overhead)
+- [x] IEC 60870-5-104 server (GI, spontaneous data, select/execute commands, live address map)
+- [x] 10 grid detection rules and 8 grid attack scenarios that work on any drawn network
+- [x] ISA-101 refresh of the water HMI
+
 ## Verification log
 - 2026-11-21, first commit (Phase B-D): `dotnet build scada.slnx -c Release` with 0 warnings; 246 .NET tests (12 architecture,
   155 unit, 79 integration) and 3 Node frontend tests pass. All 14 scenarios end as Detected, and 600 simulated seconds of
@@ -85,3 +96,7 @@ Remaining:
   --verify-no-changes` is clean; `scripts/smoke.sh` passes against the compose PostgreSQL stack (scenario Detected).
   Measured (Linux container): 2,000 simulation steps in 1.02 s, detection 45.8 µs/step, Modbus p95 0.72 ms for
   50 clients x 200 reads, REST reads about 7,000 requests/s.
+- 2026-11-22, grid mode: 963 .NET tests (13 architecture, 534 unit, 191 integration, 106 bUnit, 72 protocol, 6 performance,
+  32 database, 9 Playwright E2E) pass on macOS; `dotnet format --verify-no-changes` clean; `scripts/smoke.sh` passes; CI green on
+  all seven jobs. Live: grid sign-in, single-line diagram, select-before-operate opening and closing of a feeder breaker with
+  loss-of-supply alarms and recovery. A normal simulated day produces zero grid detections and all 8 grid scenarios end Detected.
