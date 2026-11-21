@@ -148,13 +148,74 @@ public sealed class GridSecurityApiTests
     }
 
     /// <summary>
-    /// Lead's TODO (Agent D): end-to-end coverage against Agent A's real grid engine — a full simulated day on the
-    /// default network must produce zero grid findings, and each catalog scenario must be Detected. Skipped until the
-    /// grid engine (real IGridView/IGridRuntime + IGridObserver step loop) is merged; until then the equivalent
-    /// coverage runs against the scripted fakes in UnitTests (GridNormalOperationTests, GridScenarioCatalogTests).
+    /// End-to-end on the REAL grid engine: the API host runs the actual <see cref="GridEngine"/>/
+    /// <see cref="GridCoordinator"/> with the real detection and scenario engines (only the hosted wall-clock loop is
+    /// disabled); the test drives <see cref="GridCoordinator.StepAsync"/> directly, so it is deterministic. A full
+    /// simulated day on the default network and default seed must produce zero grid findings.
     /// </summary>
-    [Fact(Skip = "Lead TODO: requires Agent A's grid engine (real IGridView/IGridRuntime + IGridObserver step loop) to be merged.")]
-    public Task NormalDayOnTheRealGridEngineProducesZeroFindings() => Task.CompletedTask;
+    [Fact]
+    public async Task NormalDayOnTheRealGridEngineProducesZeroFindings()
+    {
+        using var factory = ApiTestFactory.Create(("Grid:Enabled", "false"), ("Grid:StepSeconds", "60"));
+        var coordinator = factory.Services.GetRequiredService<GridCoordinator>();
+        var detection = factory.Services.GetRequiredService<GridDetectionEngine>();
+
+        // One simulated day at 60 s steps = 1440 steps from the default 08:00 start.
+        for (var i = 0; i < 1440; i++)
+            await coordinator.StepAsync(false, CancellationToken.None);
+
+        using var admin = factory.Client(ApiTestFactory.AdminKey);
+        var detections = await admin.GetJsonAsync("/api/grid/detections?limit=1000");
+        Assert.Equal(0, detections.GetArrayLength());
+        Assert.All(detection.Metrics, m => Assert.Equal(1440, m.Evaluations));
+        var incidents = await admin.GetJsonAsync("/api/incidents?activeOnly=false");
+        Assert.Equal(0, incidents.GetProperty("totalCount").GetInt32());
+    }
+
+    public static TheoryData<string> RealScenarioIds =>
+        [.. Security.Grid.Scenarios.Catalog.DefaultGridScenarios.Create().Select(s => s.Id)];
+
+    /// <summary>Each catalog grid scenario, started through the REST API on the real engine with the real training and
+    /// control services, ends Detected with its expected rule ids observed, and the network is sane again afterwards.</summary>
+    [Theory]
+    [MemberData(nameof(RealScenarioIds))]
+    public async Task CatalogScenarioOnTheRealGridEngineIsDetectedAndRestoresTheNetwork(string scenarioId)
+    {
+        using var factory = ApiTestFactory.Create(("Grid:Enabled", "false"), ("Grid:StepSeconds", "1"));
+        var coordinator = factory.Services.GetRequiredService<GridCoordinator>();
+        var scenarios = factory.Services.GetRequiredService<GridScenarioEngine>();
+        using var admin = factory.Client(ApiTestFactory.AdminKey);
+
+        // Prime the engine a few steps so targets resolve against a converged network.
+        for (var i = 0; i < 5; i++)
+            await coordinator.StepAsync(false, CancellationToken.None);
+
+        var start = await admin.PostAsync($"/api/grid/scenarios/{scenarioId}/start", null);
+        Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
+        var runPath = start.Headers.Location!.OriginalString;
+
+        for (var i = 0; i < 400 && scenarios.ActiveRunId is not null; i++)
+            await coordinator.StepAsync(false, CancellationToken.None);
+
+        var run = await admin.GetJsonAsync(runPath);
+        Assert.Equal("Completed", run.GetProperty("state").GetString());
+        Assert.Equal("Detected", run.GetProperty("outcome").GetString());
+        var expected = run.GetProperty("expectedDetections").EnumerateArray().Select(d => d.GetString()).ToArray();
+        var observed = run.GetProperty("observedDetections").EnumerateArray().Select(d => d.GetString()).ToArray();
+        Assert.All(expected, e => Assert.Contains(e, observed));
+
+        // Let the network settle after the run's cleanup/restore, then it must be back to a sane state (admin = truth).
+        for (var i = 0; i < 70; i++)
+            await coordinator.StepAsync(false, CancellationToken.None);
+        var grid = await admin.GetJsonAsync("/api/grid");
+        Assert.True(grid.GetProperty("converged").GetBoolean());
+        Assert.All(grid.GetProperty("switches").EnumerateArray(), s =>
+            Assert.True(s.GetProperty("closed").GetBoolean() == (s.GetProperty("id").GetString() != "TIE"), s.GetProperty("id").GetString()));
+        Assert.All(grid.GetProperty("branches").EnumerateArray(), b =>
+            Assert.Equal("None", b.GetProperty("fault").GetString()));
+        Assert.DoesNotContain(grid.GetProperty("measurements").EnumerateArray(), m => m.GetProperty("isSpoofed").GetBoolean());
+        Assert.DoesNotContain(grid.GetProperty("alarms").EnumerateArray(), a => a.GetProperty("active").GetBoolean());
+    }
 
     [Fact]
     public async Task RuleSettingsCanBeTunedByAdministratorOnly()

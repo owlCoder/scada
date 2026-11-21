@@ -9,6 +9,9 @@ namespace Security.Grid.Control;
 public sealed class GridControlService(GridCoordinator coordinator, GridOptions options, TimeProvider time,
     ICommandRateLimiter rateLimiter, CommandReplayGuard replayGuard) : IGridControl
 {
+    /// <summary>The replay-guard key for a grid actor (grid commands share one guard with a grid-namespaced key).</summary>
+    public static string ReplayKey(string actor) => $"grid:{actor}";
+
     public Task<GridCommandResult> ExecuteAsync(GridCommand command, Actor actor, string source, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -21,7 +24,7 @@ public sealed class GridControlService(GridCoordinator coordinator, GridOptions 
             rejection = GridCommandResult.Reject(GridCommandRejection.InvalidValue, "Invalid command.");
         else if (!rateLimiter.TryAcquire($"grid:{actor.Name}"))
             rejection = GridCommandResult.Reject(GridCommandRejection.RateLimited, "Command rate exceeded.");
-        else if (command.SequenceNumber is { } sequence && !replayGuard.TryAccept($"grid:{actor.Name}", sequence))
+        else if (command.SequenceNumber is { } sequence && !replayGuard.TryAccept(ReplayKey(actor.Name), sequence))
             rejection = GridCommandResult.Reject(GridCommandRejection.Replay, "Sequence is replayed or out of order.");
         if (rejection is not null)
             return Task.FromResult(coordinator.Audit(rejection, actor, source, $"{command.Type} {command.TargetId}"));

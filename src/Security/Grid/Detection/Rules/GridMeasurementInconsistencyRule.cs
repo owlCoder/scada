@@ -58,15 +58,29 @@ public sealed class GridMeasurementInconsistencyRule(IGridView view) : GridDetec
                 load += ReportedPower(context, busLoad.Id, busLoad.ActivePowerMw);
 
             var outflow = 0.0;
+            var gross = generation + load;
             foreach (var branch in context.Current.Branches)
             {
                 if (branch.FromBusId == bus.Id)
-                    outflow += branch.Energized ? ReportedBranchPower(context, branch, true) : 0;
+                {
+                    var flow = branch.Energized ? ReportedBranchPower(context, branch, true) : 0;
+                    outflow += flow;
+                    gross += Math.Abs(flow);
+                }
                 else if (branch.ToBusId == bus.Id)
-                    outflow -= branch.Energized ? ReportedBranchPower(context, branch, false) : 0;
+                {
+                    // Only the from-end power is telemetered; at the to-end the same reported flow leaves with the
+                    // opposite sign (branch losses are what remains of the balance).
+                    var flow = branch.Energized ? ReportedBranchPower(context, branch, false) : 0;
+                    outflow -= flow;
+                    gross += Math.Abs(flow);
+                }
             }
 
-            var scale = Math.Max(0.1, generation + load + Math.Abs(outflow));
+            // Scale by the gross flow through the bus (generation + load + all incident branch flows): at a pure
+            // transit bus the net outflow is ~0, so a net-based scale would turn the physical branch losses into a
+            // large spurious residual. Normal operation then stays at the loss fraction of the throughput (< 1 %).
+            var scale = Math.Max(0.01, gross);
             var residual = Math.Abs(generation - load - outflow) / scale * 100.0;
             if (residual <= tolerance)
                 continue;

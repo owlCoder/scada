@@ -38,8 +38,9 @@ public sealed class HmiSession(AuthenticationStateProvider authentication, IPlan
 
     public GridSnapshot GridSnapshot()
     {
-        var snapshot = (grid ?? throw new InvalidOperationException("Grid services are not available.")).Snapshot();
-        return IsInstructor ? snapshot : GridViewRedactor.ForOperators(snapshot);
+        var view = grid ?? throw new InvalidOperationException("Grid services are not available.");
+        var snapshot = view.Snapshot();
+        return IsInstructor ? snapshot : GridViewRedactor.ForOperators(snapshot, view.Definition);
     }
 
     private async Task<bool> UpdateAsync(Task<AuthenticationState> state)

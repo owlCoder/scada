@@ -63,21 +63,24 @@ public static class DefaultGridScenarios
         ],
         [At(0, new GridScenarioActionSpec(GridScenarioActionKind.RestoreTap, Target(GridScenarioTargetKind.TransformerWithOltc), Actor: Instructor))]);
 
-    /// <summary>Industroyer-style protection tampering followed by a fault: the relay is disabled, then a short circuit trips backup protection.</summary>
+    /// <summary>Industroyer-style protection tampering followed by faults: the feeder relays are disabled, then short circuits on all feeder heads trip several breakers via the instantaneous elements and backup protection.</summary>
     private static GridScenarioDefinition ProtectionTamperingThenFault() => new(
         "grid-protection-tampering-fault", "Protection tampering then fault", nameof(IncidentCategory.Cybersecurity),
-        "A feeder relay is disabled and its pickup raised (Industroyer's protection tampering), then a three-phase short " +
-        "circuit on the feeder makes backup protection trip several breakers — more customers lost than the fault alone.",
+        "The relays of one feeder breaker are disabled and their pickup raised (Industroyer's protection tampering), then " +
+        "three-phase short circuits on every feeder head trip several breakers — the tampered feeder only falls to the " +
+        "incomer backup protection, so more customers are lost than the faults alone would cause.",
         60, ["grid-protection-tampering", "grid-mass-switching"],
         [
-            At(2, new GridScenarioActionSpec(GridScenarioActionKind.ChangeProtection, Target(GridScenarioTargetKind.FeederProtection),
+            At(2, new GridScenarioActionSpec(GridScenarioActionKind.ChangeProtection, Target(GridScenarioTargetKind.FeederProtection, 3), -1,
                 Value: 99999, SecondaryValue: 99, Flag: false, Actor: Attacker)),
-            At(10, new GridScenarioActionSpec(GridScenarioActionKind.InjectFault, Target(GridScenarioTargetKind.MostLoadedFeeder),
+            At(10, new GridScenarioActionSpec(GridScenarioActionKind.InjectFault, Target(GridScenarioTargetKind.FeederLines, 3), -1,
                 Fault: GridEquipmentFault.ThreePhaseShortCircuit, Actor: Attacker))
         ],
         [
-            At(0, new GridScenarioActionSpec(GridScenarioActionKind.ClearFault, Target(GridScenarioTargetKind.MostLoadedFeeder), Actor: Instructor)),
-            At(0, new GridScenarioActionSpec(GridScenarioActionKind.RestoreProtection, Target(GridScenarioTargetKind.FeederProtection), Actor: Instructor))
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.ClearFault, Target(GridScenarioTargetKind.FeederLines, 3), -1, Actor: Instructor)),
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.RestoreProtection, Target(GridScenarioTargetKind.FeederProtection, 3), -1, Actor: Instructor)),
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.ForceSwitch, Target(GridScenarioTargetKind.FeederBreakers, 3), -1, Flag: true, Actor: Instructor)),
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.ForceSwitch, Target(GridScenarioTargetKind.AnyBreaker), Flag: true, Actor: Instructor))
         ]);
 
     /// <summary>False data injection: feeder current and bus voltage measurements are spoofed to hide an overload while load rises.</summary>
@@ -145,20 +148,27 @@ public static class DefaultGridScenarios
         [At(0, new GridScenarioActionSpec(GridScenarioActionKind.Command, Target(GridScenarioTargetKind.AnyBreaker),
             Command: GridCommandType.Cancel, Actor: Instructor, Source: "hmi"))]);
 
-    /// <summary>All capacitor steps switched in at once, causing overvoltage (no voltage regulation reacts).</summary>
+    /// <summary>Coordinated reactive-power attack: the AVR is switched to manual, all capacitor steps are switched in one burst from the iec104 channel, and the tap changer is then stepped to its limit by protocol commands — driving the voltage above the limits.</summary>
     private static GridScenarioDefinition CapacitorManipulation() => new(
         "grid-capacitor-manipulation", "Capacitor bank manipulation", nameof(IncidentCategory.Cybersecurity),
-        "All capacitor banks are switched to all steps in one burst from the iec104 channel, raising the voltage above " +
-        "limits at light load.",
-        120, ["grid-voltage-violation"],
+        "The voltage regulator is switched to manual and all capacitor steps are switched in one burst from the iec104 " +
+        "channel, then the tap changer is stepped up to its limit by further iec104 commands — a coordinated reactive-power " +
+        "attack that raises the voltage above the bus limits while the command burst itself betrays the protocol client.",
+        120, ["grid-voltage-violation", "grid-unauthorized-command"],
         [
             At(1, new GridScenarioActionSpec(GridScenarioActionKind.Command, Target(GridScenarioTargetKind.TransformerWithOltc),
                 Command: GridCommandType.SetTapManual, Actor: RogueIec104, Source: "iec104")),
             At(2, new GridScenarioActionSpec(GridScenarioActionKind.Command, Target(GridScenarioTargetKind.AllCapacitors), -1,
-                Value: -1, Command: GridCommandType.SetCapacitorSteps, Actor: RogueIec104, Source: "iec104"))
+                Value: -1, Command: GridCommandType.SetCapacitorSteps, Actor: RogueIec104, Source: "iec104")),
+            .. Enumerable.Range(0, 8).Select(i => At(3 + i, new GridScenarioActionSpec(GridScenarioActionKind.Command,
+                Target(GridScenarioTargetKind.TransformerWithOltc), Command: GridCommandType.TapRaise,
+                Actor: RogueIec104, Source: "iec104")))
         ],
         [
             At(0, new GridScenarioActionSpec(GridScenarioActionKind.Command, Target(GridScenarioTargetKind.AllCapacitors), -1,
-                Value: -2, Command: GridCommandType.SetCapacitorSteps, Actor: Instructor, Source: "hmi"))
+                Value: -2, Command: GridCommandType.SetCapacitorSteps, Actor: Instructor, Source: "hmi")),
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.RestoreTap, Target(GridScenarioTargetKind.TransformerWithOltc), Actor: Instructor)),
+            At(0, new GridScenarioActionSpec(GridScenarioActionKind.Command, Target(GridScenarioTargetKind.TransformerWithOltc),
+                Command: GridCommandType.SetTapAutomatic, Actor: Instructor, Source: "hmi"))
         ]);
 }

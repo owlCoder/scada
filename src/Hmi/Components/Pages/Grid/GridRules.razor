@@ -1,0 +1,146 @@
+@page "/grid/rules"
+@attribute [Authorize(Policy = "Administrator")]
+@inherits GridPageBase
+@using Application.Detection
+@using Security.Grid.Detection
+@using Security.Detection
+@inject GridDetectionEngine Detection
+@inject GridDetectionRuleAdministrationService RuleAdmin
+
+<PageTitle>Grid detection rules · SCADA</PageTitle>
+<h1>Grid detection rules</h1>
+@if (!Session.IsInstructor)
+{
+    <AccessDenied />
+}
+else
+{
+    <GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+    <OutcomeBanner Outcome="Outcome" />
+
+    <section class="panel">
+        <h2>Rules and metrics</h2>
+        <div class="table-scroll">
+            <table class="grid">
+                <thead><tr><th>Rule</th><th>Category</th><th>Enabled</th><th>Severity</th><th>Threshold</th><th>Window (s)</th><th>Cooldown (s)</th>
+                    <th>Evaluations</th><th>Findings</th><th>Suppressed</th><th>Time (ms)</th><th>Last finding (UTC)</th></tr></thead>
+                <tbody>
+                    @foreach (var rule in _rules)
+                    {
+                        var metrics = _metrics.FirstOrDefault(m => m.RuleId == rule.Id);
+                        <tr @key="rule.Id">
+                            <th scope="row"><strong class="cell-title">@rule.Name</strong> <span class="break-text">@rule.Id</span><br />@rule.Description</th>
+                            <td>@rule.Category</td>
+                            <td>@(rule.Settings.Enabled ? "Yes" : "No")</td>
+                            <td>@rule.Settings.Severity</td>
+                            <td>@rule.Settings.Threshold.ToString("0.###", CultureInfo.InvariantCulture)</td>
+                            <td>@rule.Settings.WindowSeconds</td>
+                            <td>@rule.Settings.CooldownSeconds</td>
+                            <td>@(metrics?.Evaluations.ToString(CultureInfo.InvariantCulture) ?? "—")</td>
+                            <td>@(metrics?.Findings.ToString(CultureInfo.InvariantCulture) ?? "—")</td>
+                            <td>@(metrics?.Suppressed.ToString(CultureInfo.InvariantCulture) ?? "—")</td>
+                            <td>@(metrics?.TotalMilliseconds.ToString("0.###", CultureInfo.InvariantCulture) ?? "—")</td>
+                            <td>@(metrics?.LastFindingAt?.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture) ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Edit rule settings</h2>
+        <div class="form-row">
+            <label>Rule
+                <select @bind="_ruleId" @bind:after="LoadRule">
+                    @foreach (var rule in _rules)
+                    {
+                        <option value="@rule.Id">@rule.Name · @rule.Id</option>
+                    }
+                </select>
+            </label>
+        </div>
+        @if (_rules.FirstOrDefault(rule => rule.Id == _ruleId) is { } selected)
+        {
+            <p class="muted">@selected.Description</p>
+            <div class="form-row">
+                <label class="check"><input type="checkbox" @bind="_enabled" /> Enabled</label>
+                <label>Severity
+                    <select @bind="_severity">
+                        @foreach (var severity in Enum.GetValues<DetectionSeverity>())
+                        {
+                            <option value="@severity">@severity</option>
+                        }
+                    </select>
+                </label>
+                <label>Threshold<input type="number" step="any" min="0" @bind="_threshold" /></label>
+                <label>Window (s)<input type="number" min="1" max="86400" @bind="_window" /></label>
+                <label>Cooldown (s)<input type="number" min="0" max="86400" @bind="_cooldown" /></label>
+                <button class="btn btn-primary" @onclick="() => AskRule()">Save rule settings</button>
+            </div>
+            <OutcomeBanner Outcome="_ruleInputError" />
+        }
+    </section>
+
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+}
+
+@code {
+    private IReadOnlyList<RuleDescriptor> _rules = [];
+    private IReadOnlyList<RuleExecutionMetrics> _metrics = [];
+    private string? _ruleId;
+    private bool _enabled;
+    private DetectionSeverity _severity;
+    private double? _threshold;
+    private int? _window;
+    private int? _cooldown;
+    private ActionOutcome? _ruleInputError;
+
+    protected override bool Refresh()
+    {
+        if (!Session.IsInstructor)
+            return false;
+
+        _rules = Detection.Rules;
+        _metrics = Detection.Metrics;
+        if (_ruleId is null && _rules.Count > 0)
+        {
+            _ruleId = _rules[0].Id;
+            LoadRule();
+        }
+        return base.Refresh();
+    }
+
+    private Task LoadRule()
+    {
+        if (_rules.FirstOrDefault(rule => rule.Id == _ruleId)?.Settings is { } settings)
+        {
+            _enabled = settings.Enabled;
+            _severity = settings.Severity;
+            _threshold = settings.Threshold;
+            _window = settings.WindowSeconds;
+            _cooldown = settings.CooldownSeconds;
+        }
+        _ruleInputError = null;
+        return Task.CompletedTask;
+    }
+
+    private bool AskRule()
+    {
+        if (_ruleId is not { } id || _threshold is not { } threshold || _window is not { } window || _cooldown is not { } cooldown)
+        {
+            _ruleInputError = ActionOutcome.Failed("Enter a threshold, window and cooldown.");
+            return false;
+        }
+        if (!double.IsFinite(threshold) || threshold < 0 || window < 1 || window > 86_400 || cooldown < 0 || cooldown > 86_400)
+        {
+            _ruleInputError = ActionOutcome.Failed("Threshold must be finite and non-negative, window must be 1–86,400 seconds and cooldown 0–86,400 seconds.");
+            return false;
+        }
+
+        _ruleInputError = null;
+        var settings = new DetectionRuleSettings(id, _enabled, _severity, threshold, window, cooldown);
+        return Ask($"Save settings for {id}?", "Apply these grid detection settings to the simulation.",
+            async () => ActionOutcome.From(await RuleAdmin.UpdateAsync(settings, Session.Actor, StoppingToken)), dangerous: false);
+    }
+}

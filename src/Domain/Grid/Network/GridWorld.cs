@@ -232,8 +232,20 @@ public sealed class GridWorld
     public GridCommandResult RestoreTrainingDefaults(string actor)
     {
         Faults.Clear(); Spoofs.Clear();
-        foreach (var p in Definition.Protections) { Relays[p.Id].Settings = p; Relays[p.Id].Progress = 0; }
+        foreach (var p in Definition.Protections)
+        {
+            Relays[p.Id].Settings = p; Relays[p.Id].Progress = 0;
+            Relays[p.Id].PickedUp = false; Relays[p.Id].Tripped = false;
+            SetAlarm(p.Id, GridAlarmType.ProtectionTrip, false, AlarmSeverity.High, "Protection reset", 0, 0);
+        }
         foreach (var id in RtuOnline.Keys) RtuOnline[id] = true;
+        foreach (var t in Definition.Transformers)
+        {
+            Taps[t.Id] = t.InitialTap;
+            TapAutomatic[t.Id] = t.HasOnLoadTapChanger && t.AvrTargetLvKv.HasValue;
+            _avrTime[t.Id] = 0;
+        }
+        foreach (var c in Definition.Capacitors) CapacitorSteps[c.Id] = c.InitialSteps;
         _transitions.Add(new("FaultCleared", "grid", "Training defaults restored", actor));
         Revision++; Solve(); RefreshMeasurements(); return GridCommandResult.Ok("Training defaults restored.");
     }

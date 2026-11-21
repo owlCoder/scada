@@ -28,24 +28,28 @@ public static class GridViewRedactor
                 CustomersSupplied = on ? l.Customers : 0
             };
         }).ToArray();
+        var branches = snapshot.Branches.Select(b => b with
+        {
+            Fault = GridEquipmentFault.None,
+            CurrentA = Reported(b.Id, GridMeasurementKind.Current),
+            ActivePowerFromMw = Reported(b.Id, GridMeasurementKind.ActivePower),
+            ReactivePowerFromMvar = Reported(b.Id, GridMeasurementKind.ReactivePower),
+            ActivePowerToMw = -Reported(b.Id, GridMeasurementKind.ActivePower),
+            ReactivePowerToMvar = -Reported(b.Id, GridMeasurementKind.ReactivePower),
+            LossesMw = 0,
+            Energized = buses.First(x => x.Id == b.FromBusId).Energized && buses.First(x => x.Id == b.ToBusId).Energized,
+            LoadingPercent = Loading(b),
+            TapPosition = b.TapPosition.HasValue ? (int)Reported(b.Id, GridMeasurementKind.TapPosition) : null
+        }).ToArray();
+        var loadMw = loads.Sum(l => l.ActivePowerMw);
+        var generationMw = snapshot.Generators.Sum(g => Reported(g.Id, GridMeasurementKind.ActivePower));
+        var sourceImportMw = ReportedSourceImport(branches, snapshot.Buses, definition);
         return snapshot with
         {
             Buses = buses,
             Converged = true,
             SolverIterations = 0,
-            Branches = snapshot.Branches.Select(b => b with
-            {
-                Fault = GridEquipmentFault.None,
-                CurrentA = Reported(b.Id, GridMeasurementKind.Current),
-                ActivePowerFromMw = Reported(b.Id, GridMeasurementKind.ActivePower),
-                ReactivePowerFromMvar = Reported(b.Id, GridMeasurementKind.ReactivePower),
-                ActivePowerToMw = -Reported(b.Id, GridMeasurementKind.ActivePower),
-                ReactivePowerToMvar = -Reported(b.Id, GridMeasurementKind.ReactivePower),
-                LossesMw = 0,
-                Energized = buses.First(x => x.Id == b.FromBusId).Energized && buses.First(x => x.Id == b.ToBusId).Energized,
-                LoadingPercent = Loading(b),
-                TapPosition = b.TapPosition.HasValue ? (int)Reported(b.Id, GridMeasurementKind.TapPosition) : null
-            }).ToArray(),
+            Branches = branches,
             Switches = snapshot.Switches.Select(s => s with
             {
                 Fault = GridEquipmentFault.None,
@@ -72,10 +76,12 @@ public static class GridViewRedactor
             Measurements = snapshot.Measurements.Select(m => m with { TrueValue = m.ReportedValue, IsSpoofed = false, SpoofedValue = null }).ToArray(),
             Totals = snapshot.Totals with
             {
-                LoadMw = loads.Sum(l => l.ActivePowerMw),
-                GenerationMw = snapshot.Generators.Sum(g => Reported(g.Id, GridMeasurementKind.ActivePower)),
-                SourceImportMw = 0,
-                LossesMw = 0,
+                LoadMw = loadMw,
+                GenerationMw = generationMw,
+                SourceImportMw = sourceImportMw,
+                // Energy balance of the reported values: import + generation - load are the losses, clamped at zero
+                // so telemetry noise around a balanced island cannot produce negative losses.
+                LossesMw = Math.Max(0, sourceImportMw + generationMw - loadMw),
                 CustomersSupplied = loads.Sum(l => l.CustomersSupplied)
             }
         };
@@ -88,6 +94,22 @@ public static class GridViewRedactor
             if (transformer is not null) return Math.Sqrt(Math.Pow(Reported(branch.Id, GridMeasurementKind.ActivePower), 2)
                 + Math.Pow(Reported(branch.Id, GridMeasurementKind.ReactivePower), 2)) / transformer.RatedPowerMva * 100;
             return 0;
+        }
+
+        // Import at the source buses from the reported branch (source/transformer) active power flowing out of them.
+        // Without a definition, source-side buses are the ones no branch feeds into.
+        static double ReportedSourceImport(IReadOnlyList<BranchSnapshot> branches, IReadOnlyList<BusSnapshot> buses, GridDefinition? definition)
+        {
+            if (definition is not null)
+            {
+                var import = 0.0;
+                foreach (var source in definition.Sources)
+                    foreach (var branch in branches.Where(b => b.FromBusId == source.BusId || b.ToBusId == source.BusId))
+                        import += branch.FromBusId == source.BusId ? branch.ActivePowerFromMw : -branch.ActivePowerFromMw;
+                return import;
+            }
+            var fed = buses.Select(b => b.Id).Where(id => branches.Any(b => b.ToBusId == id)).ToHashSet(StringComparer.Ordinal);
+            return branches.Where(b => !fed.Contains(b.FromBusId)).Sum(b => b.ActivePowerFromMw);
         }
     }
 }

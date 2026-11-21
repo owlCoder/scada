@@ -6,11 +6,13 @@ namespace Protocols.Iec104;
 /// <summary>
 /// Forwards grid steps to all started IEC 104 connections as spontaneous (COT 3) transmissions. Changed values are
 /// detected against the previous step with a deadband of 0.5 % of the measurement range; the first observed step only
-/// primes the baseline. Measurement values are the reported (operator-visible) ones.
+/// primes the baseline. Points are evaluated on the operator view (<see cref="GridViewRedactor.ForOperators"/> of the
+/// step's snapshot): a master sees the reported telemetry, never true values, spoofing state or injected faults.
 /// </summary>
 public sealed class Iec104GridMonitor(
     Iec104Server server,
     Iec104AddressMap map,
+    IGridView view,
     IEventPublisher events,
     TimeProvider time) : IGridObserver
 {
@@ -24,13 +26,14 @@ public sealed class Iec104GridMonitor(
         var frames = new List<Asdu>();
         lock (_sync)
         {
+            var snapshot = GridViewRedactor.ForOperators(report.Snapshot, view.Definition);
             var changed = new List<(Iec104Point Point, Iec104Sample Sample)>();
             foreach (var rtu in map.Rtus)
             {
                 foreach (var point in rtu.Points)
                 {
                     var key = (rtu.CommonAddress, point.InformationObjectAddress);
-                    var sample = Iec104PointEvaluator.Evaluate(point, report.Snapshot);
+                    var sample = Iec104PointEvaluator.Evaluate(point, snapshot);
                     if (sample is null)
                     {
                         _last.Remove(key);

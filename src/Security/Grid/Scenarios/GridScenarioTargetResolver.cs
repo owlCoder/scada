@@ -45,6 +45,17 @@ public static class GridScenarioTargetResolver
                         .ToArray();
                     return Take(target, ids, "feeder breakers", errors);
                 }
+            case GridScenarioTargetKind.FeederLines:
+                {
+                    var feederBreakers = FeederBreakerIds(definition, snapshot);
+                    var ids = definition.Lines
+                        .Where(l => definition.Switches.Any(s => s.Kind == GridSwitchKind.Breaker && s.ElementId == l.Id && feederBreakers.Contains(s.Id)))
+                        .Select(l => l.Id)
+                        .OrderByDescending(id => snapshot.Branch(id)?.LoadingPercent ?? 0)
+                        .ThenBy(id => id, StringComparer.Ordinal)
+                        .ToArray();
+                    return Take(target, ids, "feeder lines", errors);
+                }
             case GridScenarioTargetKind.MostLoadedFeeder:
                 {
                     var branch = snapshot.Branches.Where(b => b.Kind == GridBranchKind.Line)
@@ -55,11 +66,12 @@ public static class GridScenarioTargetResolver
             case GridScenarioTargetKind.FeederProtection:
                 {
                     var feederBreakers = FeederBreakerIds(definition, snapshot);
-                    var protection = definition.Protections
+                    var ids = definition.Protections
                         .Where(p => feederBreakers.Contains(p.SwitchId))
                         .OrderBy(p => p.Id, StringComparer.Ordinal)
-                        .FirstOrDefault();
-                    return protection is null ? Fail(target, "no protection relay on a feeder breaker exists", errors) : [protection.Id];
+                        .Select(p => p.Id)
+                        .ToArray();
+                    return Take(target, ids, "protection relays on feeder breakers", errors);
                 }
             case GridScenarioTargetKind.TransformerWithOltc:
                 {

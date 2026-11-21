@@ -1,3 +1,4 @@
+using Application.Commands;
 using Application.Diagnostics;
 using System.Globalization;
 using Application.Detection;
@@ -35,9 +36,15 @@ public sealed class GridScenarioEngine : IGridObserver, IGridActiveScenarioProvi
     private readonly IEventPublisher _events;
     private readonly IRealtimePublisher _realtime;
     private readonly TimeProvider _time;
+    private readonly CommandReplayGuard _replayGuard;
     private readonly ILogger<GridScenarioEngine> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _snapshotSync = new();
+    // Actions act through IGridTraining/IGridControl, whose coordinator distributes the resulting report back to
+    // every IGridObserver — including this engine. Re-entering OnGridStepAsync from that nested notification would
+    // deadlock on the non-reentrant _gate, so nested calls return immediately; the outer step keeps running and the
+    // next step reports the action's effects.
+    private readonly AsyncLocal<bool> _inStep = new();
     private GridScenarioRun? _active;
     private Guid? _activeRunId;
     private ScenarioRunRecord? _current;
@@ -52,6 +59,7 @@ public sealed class GridScenarioEngine : IGridObserver, IGridActiveScenarioProvi
         IEventPublisher events,
         IRealtimePublisher realtime,
         TimeProvider time,
+        CommandReplayGuard replayGuard,
         ILogger<GridScenarioEngine> logger)
     {
         var list = definitions.ToArray();
@@ -70,6 +78,7 @@ public sealed class GridScenarioEngine : IGridObserver, IGridActiveScenarioProvi
         _events = events;
         _realtime = realtime;
         _time = time;
+        _replayGuard = replayGuard;
         _logger = logger;
     }
 
@@ -177,6 +186,21 @@ public sealed class GridScenarioEngine : IGridObserver, IGridActiveScenarioProvi
     public async ValueTask<int> OnGridStepAsync(GridStepReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(report);
+        if (_inStep.Value)
+            return 0;
+        _inStep.Value = true;
+        try
+        {
+            return await OnGridStepCoreAsync(report, cancellationToken);
+        }
+        finally
+        {
+            _inStep.Value = false;
+        }
+    }
+
+    private async ValueTask<int> OnGridStepCoreAsync(GridStepReport report, CancellationToken cancellationToken)
+    {
         await _gate.WaitAsync(cancellationToken);
         try
         {
@@ -242,7 +266,7 @@ public sealed class GridScenarioEngine : IGridObserver, IGridActiveScenarioProvi
             var runId = Guid.NewGuid();
             var snapshot = _view.Snapshot();
             var run = new GridScenarioRun(definition,
-                new GridScenarioExecutionContext(_view, _training, _control, resolution.Targets!, runId),
+                new GridScenarioExecutionContext(_view, _training, _control, resolution.Targets!, runId, _replayGuard),
                 new GridScenarioMeasurements(snapshot), actor.Name, _time.GetUtcNow(), snapshot.SimulationTime, replayOf);
             var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
             if (!await PersistCurrentAsync(record, runId, cancellationToken))

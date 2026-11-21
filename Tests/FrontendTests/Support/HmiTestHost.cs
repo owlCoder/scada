@@ -1,3 +1,4 @@
+using Application.Commands;
 using Application.Detection;
 using Application.Common;
 using Application.Grid;
@@ -13,7 +14,12 @@ using Hmi.Services;
 using Infrastructure.Persistence.InMemory;
 using Infrastructure.Realtime;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Security.Detection;
+using Security.Grid.Detection;
+using Security.Grid.Detection.Rules;
+using Security.Grid.Scenarios;
+using Security.Grid.Scenarios.Catalog;
 using UnitTests.Support;
 
 namespace FrontendTests.Support;
@@ -53,7 +59,8 @@ public sealed class HmiTestHost : IAsyncDisposable
         services.AddSingleton(Rig.Training);
         services.AddSingleton<IPlantView>(Rig.Training);
         services.AddSingleton<IStorageProbe, InMemoryStorageProbe>();
-        services.AddSingleton<IDetectionRuleSettingsStore, InMemoryDetectionRuleSettingsStore>();
+        var gridRuleSettings = new InMemoryDetectionRuleSettingsStore();
+        services.AddSingleton<IDetectionRuleSettingsStore>(gridRuleSettings);
         services.AddSingleton<DetectionRuleAdministrationService>();
         services.AddSingleton<InstructorTrainingService>();
         services.AddSingleton<Application.Events.IEventPublisher>(Rig.Events);
@@ -69,6 +76,16 @@ public sealed class HmiTestHost : IAsyncDisposable
         services.AddSingleton<IGridDefinitionStore>(GridStore);
         services.AddSingleton<IGridDefinitionAdministration>(GridAdministration);
         services.AddSingleton<GridEquipmentCatalog>();
+        // The real grid security stack over the fake grid services, so the grid scenarios/rules pages can be tested.
+        GridScenarios = new GridScenarioEngine(DefaultGridScenarios.Create(), Grid, GridTraining, GridControl,
+            Rig.DetectionStore, Rig.RunStore, Rig.Events, Broadcaster, Rig.Time, new CommandReplayGuard(),
+            NullLogger<GridScenarioEngine>.Instance);
+        GridDetection = new GridDetectionEngine(DefaultGridDetectionRules.Create(Grid), Rig.Buffer, Rig.DetectionStore,
+            Rig.Incidents, Rig.Events, Broadcaster, GridScenarios, Grid, NullLogger<GridDetectionEngine>.Instance);
+        services.AddSingleton(GridScenarios);
+        services.AddSingleton(GridDetection);
+        services.AddSingleton(new GridDetectionRuleAdministrationService(GridDetection, gridRuleSettings, Rig.Events, Rig.Time,
+            NullLogger<GridDetectionRuleAdministrationService>.Instance));
         services.AddScoped<HmiSession>();
     }
 
@@ -78,6 +95,8 @@ public sealed class HmiTestHost : IAsyncDisposable
     public HmiFakeGridRuntime GridRuntime { get; } = new();
     public HmiFakeGridDefinitionStore GridStore { get; }
     public HmiFakeGridDefinitionAdministration GridAdministration { get; }
+    public GridScenarioEngine GridScenarios { get; }
+    public GridDetectionEngine GridDetection { get; }
     public BunitContext Context { get; } = new();
     public TestRig Rig { get; }
     public RealtimeBroadcaster Broadcaster { get; }

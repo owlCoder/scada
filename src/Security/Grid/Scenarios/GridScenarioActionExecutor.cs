@@ -54,12 +54,17 @@ public static class GridScenarioActionExecutor
             ? [context.Targets.ResolveOne(spec.Target, spec.TargetIndex)]
             : context.Targets.Resolve(spec.Target).ToArray();
 
+    // A forced switch that is already in the requested state has reached its goal (e.g. cleanup re-closing a breaker
+    // that never opened); only real refusals count as failures.
+    private static bool IsSettled(GridCommandResult result) =>
+        result.Accepted || result.Reason == GridCommandRejection.AlreadyInState;
+
     private static async Task<string> ExecuteOneAsync(GridScenarioActionSpec spec, GridScenarioExecutionContext context, string id,
         CancellationToken cancellationToken) =>
         spec.Kind switch
         {
-            GridScenarioActionKind.ForceSwitch => (await context.Training.ForceSwitchAsync(id, spec.Flag == true,
-                context.AttackerActor(spec.Actor), cancellationToken)).Accepted ? "ok" : "failed",
+            GridScenarioActionKind.ForceSwitch => IsSettled(await context.Training.ForceSwitchAsync(id, spec.Flag == true,
+                context.AttackerActor(spec.Actor), cancellationToken)) ? "ok" : "failed",
             GridScenarioActionKind.ForceTap => (await context.Training.ForceTapAsync(id, (int)(spec.Value ?? 0),
                 context.AttackerActor(spec.Actor), cancellationToken)).Accepted ? "ok" : "failed",
             GridScenarioActionKind.ForceTapLimit => (await context.Training.ForceTapAsync(id, TapLimit(context, id, spec),

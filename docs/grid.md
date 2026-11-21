@@ -80,7 +80,13 @@ alarms; at the 19:00 evening peak it stays below 100 % loading.
 - `GridTrainingService` (`IGridTraining`, Administrator, audited, `Scenario` events): inject/clear faults, spoof
   measurements, change protection settings, force switches/taps, toggle RTUs, restore training defaults.
 - `GridViewRedactor.ForOperators` hides injected faults, true values, spoofing, protection setting changes and the
-  attribution of unattributed changes; operators still see reported switch states and real protection trips.
+  attribution of unattributed changes; operators still see reported switch states and real protection trips. The totals
+  are recomputed from the **reported** measurements: import is the reported active power flowing out of the source buses
+  (the source/transformer branch measurements), and losses are the reported energy balance
+  `import + generation − load`, clamped at ≥ 0 — so a spoofed transformer power also spoofs the operator's import/losses.
+- The IEC 60870-5-104 slave evaluates every point (general interrogation and spontaneous monitor data) on
+  `GridViewRedactor.ForOperators` of the step's snapshot: a master sees the operator view — reported values and reported
+  switch/tap states — never true values, spoofing state or injected faults.
 - `GridCoordinator` publishes `SecurityEvent`s (audit, authorization-denied, communication, process-alarm, scenario,
   device-change) and the realtime topics `grid`, `grid-alarms`, `grid-status`; `IGridObserver`s are notified after the
   engine lock is released and observer exceptions are logged, not propagated.
@@ -139,4 +145,8 @@ Rejections map to 403 (not authorized), 429 (rate limited) and 400 (everything e
 - Stores and migration: `src/Infrastructure/Persistence/{InMemory,Postgres}/`, `Migrations/`
 - Hosted loop: `src/Simulation/HostedServices/GridSimulationService.cs`
 - REST and registration: `src/Api/Endpoints/Grid/`, `src/Api/Configuration/Registration/GridRegistrationExtensions.cs`
-- Tests: `Tests/UnitTests/Grid/`, `Tests/IntegrationTests/Grid/`, `Tests/DatabaseTests/Stores/GridEngineDefinitionStoreTests.cs`
+- Tests: `Tests/UnitTests/Grid/` (engine physics/control/training/telemetry/redaction incl.
+  `GridRealEngineSecurityTests` driving the real coordinator + detection + scenarios deterministically),
+  `Tests/IntegrationTests/Grid/` and `Tests/IntegrationTests/Api/GridSecurityApiTests.cs` (REST incl. real-engine
+  day/scenario runs), `Tests/ProtocolTests/Iec104` (wire tests, operator view), `Tests/FrontendTests` (grid HMI pages),
+  `Tests/EndToEndTests/Hmi/GridHmiBrowserTests.cs` (Playwright grid mode), `Tests/DatabaseTests/Stores/GridEngineDefinitionStoreTests.cs`
