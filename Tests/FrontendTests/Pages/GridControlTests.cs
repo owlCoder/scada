@@ -22,7 +22,7 @@ public sealed class GridControlTests
         page.WaitForAssertion(() => Assert.Single(host.GridControl.Calls));
         Assert.True(host.Grid.State.Switch("Q1")!.Closed);
         Assert.Equal(GridCommandType.SelectOpen, host.GridControl.Calls[0].Command.Type);
-        Assert.Contains("10 s remaining", page.Markup);
+        Assert.Contains("28 s remaining", page.Markup);
         Button(page, "Execute").Click();
         Assert.Single(host.GridControl.Calls);
         Button(page, "Confirm").Click();
@@ -58,7 +58,7 @@ public sealed class GridControlTests
         var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, "Q1"));
         Button(page, "Select open").Click(); Button(page, "Confirm").Click();
         page.WaitForAssertion(() => Assert.Single(host.GridControl.Calls));
-        host.Rig.Time.Advance(TimeSpan.FromSeconds(11));
+        host.Rig.Time.Advance(TimeSpan.FromSeconds(29));
         page.WaitForAssertion(() => Assert.True(Button(page, "Execute").HasAttribute("disabled")));
         Assert.Single(host.GridControl.Calls);
     }

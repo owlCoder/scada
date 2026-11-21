@@ -64,6 +64,7 @@ public sealed class HmiTestHost : IAsyncDisposable
         GridAdministration = new HmiFakeGridDefinitionAdministration(GridStore);
         services.AddSingleton<IGridView>(Grid);
         services.AddSingleton<IGridControl>(GridControl);
+        services.AddSingleton(new Application.Grid.GridOptions());
         services.AddSingleton<IGridTraining>(GridTraining);
         services.AddSingleton<IGridRuntime>(GridRuntime);
         services.AddSingleton<IGridDefinitionStore>(GridStore);

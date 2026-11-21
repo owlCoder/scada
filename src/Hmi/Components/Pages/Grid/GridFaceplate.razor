@@ -1,6 +1,7 @@
 @inherits GridPageBase
 @inject TimeProvider Clock
 @inject IGridControl Control
+@inject GridOptions Options
 
 <aside class="panel detail grid-faceplate" aria-label="Element faceplate">
     <h2>@ElementId</h2>
@@ -97,6 +98,8 @@
     private DateTimeOffset? _selectionUntil;
     private int _steps;
     private int SecondsRemaining => _selectionUntil is { } until ? Math.Max(0, (int)Math.Ceiling((until - Clock.GetUtcNow()).TotalSeconds)) : 0;
+    // Two seconds less than the service timeout so an Execute confirmed at the last moment still reaches the service in time.
+    private int WindowSeconds => Math.Max(5, (int)Options.SelectTimeoutSeconds - 2);
     private bool CanExecute => SecondsRemaining > 0 && Snapshot?.Switch(ElementId)?.Selected == true;
 
     protected override async Task OnInitializedAsync()
@@ -117,10 +120,10 @@
         catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { }
     }
 
-    private bool Select(GridCommandType type) => Ask($"{type}: {ElementId}?", "Reserve this switch for your operation. Execute within 10 seconds after selection.", async () =>
+    private bool Select(GridCommandType type) => Ask($"{type}: {ElementId}?", $"Reserve this switch for your operation. Execute within {WindowSeconds} seconds after selection.", async () =>
     {
         var result = await Control.ExecuteAsync(new GridCommand(type, ElementId), Session.Actor, "hmi", StoppingToken);
-        _selectionUntil = result.Accepted ? Clock.GetUtcNow().AddSeconds(10) : null;
+        _selectionUntil = result.Accepted ? Clock.GetUtcNow().AddSeconds(WindowSeconds) : null;
         return ActionOutcome.From(result);
     });
 
