@@ -62,7 +62,7 @@ public static class SignInEndpoints
     /// <summary>Only local paths are allowed, so the login form cannot be used as an open redirect.</summary>
     public static string SafeReturnUrl(string? returnUrl) =>
         !string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal)
-        && !returnUrl.StartsWith("/\\", StringComparison.Ordinal) && returnUrl.Length <= 512
+        && returnUrl.Length <= 512 && !returnUrl.Any(c => c is <= ' ' or '\u007f' or '\\')
             ? returnUrl
             : "/";
 

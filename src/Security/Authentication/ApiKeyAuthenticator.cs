@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Application.Events;
 using Application.Identity;
 
@@ -25,11 +23,8 @@ public sealed class ApiKeyAuthenticator(
             return new AuthenticationResult(AuthenticationStatus.Throttled, null);
 
         var fingerprint = ApiKeyValidator.Fingerprint(key);
-        foreach (var account in await accounts.ListAsync(cancellationToken))
+        if (await accounts.FindByApiKeyHashAsync(fingerprint, cancellationToken) is { } account)
         {
-            if (account.ApiKeyHash is null || !FixedTimeEquals(account.ApiKeyHash, fingerprint))
-                continue;
-
             if (!account.IsEnabled || account.LockedUntil > time.GetUtcNow())
                 return Fail(AuthenticationStatus.Disabled, source, $"API key of disabled or locked account {account.Username} used");
             return new AuthenticationResult(AuthenticationStatus.Succeeded, new AuthenticatedUser(account.Username, account.Role, fingerprint));
@@ -48,6 +43,4 @@ public sealed class ApiKeyAuthenticator(
         return new AuthenticationResult(status, null);
     }
 
-    private static bool FixedTimeEquals(string left, string right) =>
-        CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(left), Encoding.ASCII.GetBytes(right));
 }

@@ -35,7 +35,7 @@ public sealed class TestRig
         Historian = new TelemetryHistorian();
         Buffer = new RecentEventBuffer();
         QueueOptions = new PersistenceQueueOptions { RetryDelay = TimeSpan.Zero };
-        Queue = new ChannelPersistenceQueue(QueueOptions, Time);
+        Queue = new ChannelPersistenceQueue(QueueOptions, Time, NullLogger<ChannelPersistenceQueue>.Instance);
         var realtime = new NullRealtimePublisher();
         Events = new EventPublisher(Buffer, Queue, realtime);
         ReplayGuard = new CommandReplayGuard();
@@ -55,7 +55,7 @@ public sealed class TestRig
         Coordinator = new SimulationCoordinator(Engine, Events, Historian, Queue, realtime, [Scenarios, Detection], Time,
             NullLogger<SimulationCoordinator>.Instance);
         Worker = new PersistenceWorker(Queue, new PersistenceDispatcher(EventStore, TelemetryStore, AlarmStore, PlantStateStore),
-            QueueOptions, NullLogger<PersistenceWorker>.Instance);
+            QueueOptions, Time, NullLogger<PersistenceWorker>.Instance);
     }
 
     public FakeTimeProvider Time { get; }

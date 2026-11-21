@@ -23,6 +23,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddScadaServices();
 
 var app = builder.Build();
+app.WarnIfOidcMetadataAllowsHttp();
+app.UseScadaForwardedHeaders();
 // The schema must be current before accounts are seeded or any store is read.
 await app.InitializeStorageAsync(CancellationToken.None);
 // Accounts must exist before the first request is authenticated.

@@ -15,9 +15,6 @@ public sealed class PasswordAuthenticator(
     IEventPublisher events,
     TimeProvider time)
 {
-    // Verifying against a real hash for unknown users keeps the response time independent of whether the user exists.
-    private static readonly Lazy<string> TimingHash = new(() => PasswordHasher.Hash(PasswordHasher.GeneratePassword()));
-
     public static string CredentialIdFor(string username) => $"password:{username.Trim().ToLowerInvariant()}";
 
     public async Task<AuthenticationResult> AuthenticateAsync(string? username, string? password, string source,
@@ -29,37 +26,39 @@ public sealed class PasswordAuthenticator(
             return new AuthenticationResult(AuthenticationStatus.Throttled, null);
 
         var name = username.Trim();
-        var now = time.GetUtcNow();
-        if (await accounts.FindAsync(name, cancellationToken) is not { } account)
+        while (true)
         {
-            PasswordHasher.Verify(password, TimingHash.Value);
-            return Fail(AuthenticationStatus.Invalid, source, $"Failed sign-in for unknown user {Truncate(name)}");
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            var account = await accounts.FindAsync(name, cancellationToken);
+            var verified = PasswordHasher.Verify(password, account?.PasswordHash);
+            var now = time.GetUtcNow();
 
-        if (!account.IsEnabled)
-            return Fail(AuthenticationStatus.Disabled, source, $"Sign-in attempt for disabled account {account.Username}");
-        if (account.LockedUntil > now)
-            return Fail(AuthenticationStatus.Locked, source, $"Sign-in attempt for locked account {account.Username}");
+            if (account is null)
+                return Fail(AuthenticationStatus.Invalid, source, $"Failed sign-in for unknown user {Truncate(name)}");
+            if (!account.IsEnabled)
+                return Fail(AuthenticationStatus.Disabled, source, $"Sign-in attempt for disabled account {account.Username}");
+            if (account.LockedUntil > now)
+                return Fail(AuthenticationStatus.Locked, source, $"Sign-in attempt for locked account {account.Username}");
 
-        if (!PasswordHasher.Verify(password, account.PasswordHash))
-        {
-            var failures = account.FailedLoginCount + 1;
-            var locked = failures >= lockout.MaxFailedAttempts;
-            await accounts.UpsertAsync(account with
+            if (!verified)
             {
-                FailedLoginCount = locked ? 0 : failures,
-                LockedUntil = locked ? now + lockout.LockoutDuration : account.LockedUntil
-            }, cancellationToken);
-            return locked
-                ? Fail(AuthenticationStatus.Locked, source, $"Account {account.Username} locked after {failures} failed sign-ins")
-                : Fail(AuthenticationStatus.Invalid, source, $"Failed sign-in for {account.Username} ({failures} consecutive)");
-        }
+                var state = await accounts.RecordFailedSignInAsync(name, account.PasswordHash, lockout.MaxFailedAttempts,
+                    now + lockout.LockoutDuration, now, cancellationToken);
+                if (state is null)
+                    continue;
+                return state.LockedUntil > now
+                    ? Fail(AuthenticationStatus.Locked, source, $"Account {state.Username} locked after {lockout.MaxFailedAttempts} failed sign-ins")
+                    : Fail(AuthenticationStatus.Invalid, source, $"Failed sign-in for {state.Username} ({state.FailedLoginCount} consecutive)");
+            }
 
-        await accounts.UpsertAsync(account with { FailedLoginCount = 0, LockedUntil = null, LastLoginAt = now }, cancellationToken);
-        events.Publish(SecurityEvent.Create(now, EventCategories.Authentication, EventSeverity.Information, "account",
-            $"{account.Username} signed in", account.Username));
-        return new AuthenticationResult(AuthenticationStatus.Succeeded,
-            new AuthenticatedUser(account.Username, account.Role, CredentialIdFor(account.Username)));
+            if (await accounts.RecordSuccessfulSignInAsync(name, account.PasswordHash, now, cancellationToken) is not { } signedIn)
+                continue;
+
+            events.Publish(SecurityEvent.Create(now, EventCategories.Authentication, EventSeverity.Information, "account",
+                $"{signedIn.Username} signed in", signedIn.Username));
+            return new AuthenticationResult(AuthenticationStatus.Succeeded,
+                new AuthenticatedUser(signedIn.Username, signedIn.Role, CredentialIdFor(signedIn.Username)));
+        }
     }
 
     /// <summary>

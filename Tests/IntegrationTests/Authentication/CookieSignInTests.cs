@@ -46,6 +46,11 @@ public sealed class CookieSignInTests
     [InlineData("//evil.example/phish")]
     [InlineData("https://evil.example/")]
     [InlineData("/\\evil.example")]
+    [InlineData("/\t//evil.example")]
+    [InlineData("/local\r\npath")]
+    [InlineData("/local path")]
+    [InlineData("/local\u007fpath")]
+    [InlineData("/local\\path")]
     public async Task ReturnUrlsOutsideTheSiteAreIgnored(string returnUrl)
     {
         using var factory = ApiTestFactory.Create(BrowserSession.EvaSettings());
@@ -54,6 +59,17 @@ public sealed class CookieSignInTests
         var response = await session.SignInAsync("eva", BrowserSession.EvaPassword, returnUrl);
 
         Assert.Equal("/", response.Headers.Location?.OriginalString);
+    }
+
+    [Fact]
+    public async Task PercentEncodedControlCharactersRemainALocalPath()
+    {
+        using var factory = ApiTestFactory.Create(BrowserSession.EvaSettings());
+        await using var session = BrowserSession.Open(factory);
+
+        var response = await session.SignInAsync("eva", BrowserSession.EvaPassword, "/%09/evil");
+
+        Assert.Equal("/%09/evil", response.Headers.Location?.OriginalString);
     }
 
     [Fact]

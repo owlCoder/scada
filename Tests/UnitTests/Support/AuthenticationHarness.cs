@@ -4,6 +4,7 @@ using Application.Persistence;
 using Infrastructure.Persistence.InMemory;
 using Infrastructure.Persistence.Queue;
 using Infrastructure.Realtime;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Security.Accounts;
 using Security.Authentication;
@@ -18,7 +19,7 @@ public sealed class AuthenticationHarness
     private AuthenticationHarness(IReadOnlyDictionary<AccessRole, string> legacyKeys, IReadOnlyList<UserCredential> users)
     {
         Time = new FakeTimeProvider(DateTimeOffset.UnixEpoch);
-        var publisher = new EventPublisher(Events, new ChannelPersistenceQueue(new PersistenceQueueOptions(), Time), new NullRealtimePublisher());
+        var publisher = new EventPublisher(Events, new ChannelPersistenceQueue(new PersistenceQueueOptions(), Time, NullLogger<ChannelPersistenceQueue>.Instance), new NullRealtimePublisher());
         Authenticator = new ApiKeyAuthenticator(new AccessPolicy(legacyKeys), Store, new AuthenticationThrottle(Time), publisher, Time);
         Accounts = new UserAdministrationService(Store, publisher, Time);
         Seeder = new AccountSeeder(users, Store, Time);

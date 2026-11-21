@@ -5,13 +5,14 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Persistence.Queue;
 
 /// <summary>
-/// Drains the write-behind queue in batches. A failing batch is retried with linear backoff up to
+/// Drains the write-behind queue in batches. Each failing kind is retried with linear backoff up to
 /// <see cref="PersistenceQueueOptions.MaxAttempts"/> times and then counted as failed so the queue keeps moving.
 /// </summary>
 public sealed class PersistenceWorker(
     ChannelPersistenceQueue queue,
     PersistenceDispatcher dispatcher,
     PersistenceQueueOptions options,
+    TimeProvider time,
     ILogger<PersistenceWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan ShutdownDrainTimeout = TimeSpan.FromSeconds(5);
@@ -25,7 +26,7 @@ public sealed class PersistenceWorker(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            using var drain = new CancellationTokenSource(ShutdownDrainTimeout);
+            using var drain = new CancellationTokenSource(ShutdownDrainTimeout, time);
             try
             {
                 await DrainAsync(drain.Token);
@@ -50,7 +51,8 @@ public sealed class PersistenceWorker(
             if (batch.Count == 0)
                 return processed;
 
-            await PersistAsync(batch, cancellationToken);
+            await Task.WhenAll(batch.GroupBy(item => item.GetType())
+                .Select(group => PersistAsync(group.ToArray(), cancellationToken)));
             processed += batch.Count;
         }
     }
@@ -65,17 +67,18 @@ public sealed class PersistenceWorker(
                 queue.MarkPersisted(batch.Count);
                 return true;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 if (attempt >= options.MaxAttempts)
                 {
-                    logger.LogError(exception, "Persisting {Count} item(s) failed after {Attempts} attempts", batch.Count, attempt);
+                    logger.LogError(exception, "Persisting {Count} {Kind} item(s) failed after {Attempts} attempts",
+                        batch.Count, batch[0].Kind, attempt);
                     queue.MarkFailed(batch.Count, exception.Message);
                     return false;
                 }
 
-                logger.LogWarning(exception, "Persistence attempt {Attempt} failed; retrying", attempt);
-                await Task.Delay(options.RetryDelay * attempt, cancellationToken);
+                logger.LogWarning(exception, "Persistence attempt {Attempt} for {Kind} failed; retrying", attempt, batch[0].Kind);
+                await Task.Delay(options.RetryDelay * attempt, time, cancellationToken);
             }
         }
     }

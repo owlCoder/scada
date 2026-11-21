@@ -13,8 +13,15 @@ public sealed class PostgresDetectionStore(IDbContextFactory<ScadaDbContext> fac
     {
         ArgumentNullException.ThrowIfNull(detection);
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        db.Detections.Add(DetectionEntity.From(detection));
-        return await db.SaveChangesAsync(cancellationToken) > 0;
+        var row = DetectionEntity.From(detection);
+        return await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO scada.detections (id, timestamp, rule_id, rule_name, severity, category, title, description,
+                device_id, scenario_run_id, fingerprint, evidence, incident_id)
+            VALUES ({row.Id}, {row.Timestamp}, {row.RuleId}, {row.RuleName}, {row.Severity.ToString()},
+                {row.Category.ToString()}, {row.Title}, {row.Description}, {row.DeviceId}, {row.ScenarioRunId},
+                {row.Fingerprint}, CAST({row.Evidence} AS jsonb), {row.IncidentId})
+            ON CONFLICT (id) DO NOTHING
+            """, cancellationToken) > 0;
     }
 
     /// <summary>Newest first.</summary>

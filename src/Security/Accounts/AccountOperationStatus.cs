@@ -1,3 +1,3 @@
 namespace Security.Accounts;
 
-public enum AccountOperationStatus { Succeeded, NotFound, Denied, InvalidInput }
+public enum AccountOperationStatus { Succeeded, NotFound, Denied, InvalidInput, Conflict }

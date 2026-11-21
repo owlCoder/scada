@@ -17,9 +17,20 @@ public sealed class PostgresEventStore(IDbContextFactory<ScadaDbContext> factory
             return 0;
 
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        db.Events.AddRange(events.Select(EventEntity.From));
-        await db.SaveChangesAsync(cancellationToken);
-        return events.Count;
+        var rows = events.Select(EventEntity.From).ToArray();
+        return await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO scada.events (id, timestamp, category, severity, source, message, actor, device_id, scenario_run_id, correlation_id)
+            SELECT id, timestamp, category, severity, source, message, actor, device_id, scenario_run_id, correlation_id
+            FROM unnest({rows.Select(e => e.Id).ToArray()}, {rows.Select(e => e.Timestamp).ToArray()},
+                {rows.Select(e => e.Category).ToArray()}, {rows.Select(e => e.Severity.ToString()).ToArray()},
+                {rows.Select(e => e.Source).ToArray()}, {rows.Select(e => e.Message).ToArray()},
+                {rows.Select(e => e.Actor).ToArray()}, {rows.Select(e => e.DeviceId).ToArray()},
+                {rows.Select(e => e.ScenarioRunId).ToArray()}, {rows.Select(e => e.CorrelationId).ToArray()})
+                WITH ORDINALITY AS input(id, timestamp, category, severity, source, message, actor, device_id,
+                    scenario_run_id, correlation_id, input_position)
+            ORDER BY input_position
+            ON CONFLICT (id) DO NOTHING
+            """, cancellationToken);
     }
 
     public async Task<PagedResult<SecurityEvent>> QueryAsync(EventQuery query, CancellationToken cancellationToken)

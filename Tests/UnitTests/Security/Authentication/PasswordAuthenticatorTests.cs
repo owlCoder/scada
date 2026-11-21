@@ -54,7 +54,27 @@ public sealed class PasswordAuthenticatorTests
 
         var messages = rig.Buffer.GetRecent().Select(e => e.Message).ToArray();
         Assert.Contains(messages, m => m.Contains("unknown user ghost"));
+        Assert.Contains(messages, m => m.Contains("disabled account eva"));
         Assert.DoesNotContain(messages, m => m.Contains("secret-guess-1") || m.Contains(Password));
+    }
+
+    [Fact]
+    public async Task ConcurrentFailuresLockTheAccountWithoutLosingIncrements()
+    {
+        var (rig, authenticator) = await CreateAsync(new PasswordLockoutOptions { MaxFailedAttempts = 5 });
+        var attempts = Enumerable.Range(0, 12).Select(i => Task.Run(() =>
+            authenticator.AuthenticateAsync("Eva", "wrong-password", $"ip:{i}", None))).ToArray();
+
+        var results = await Task.WhenAll(attempts);
+
+        Assert.Equal(4, results.Count(r => r.Status == AuthenticationStatus.Invalid));
+        Assert.Equal(8, results.Count(r => r.Status == AuthenticationStatus.Locked));
+        var account = (await rig.AccountStore.FindAsync("eva", None))!;
+        Assert.Equal(0, account.FailedLoginCount);
+        Assert.Equal(5, account.Version);
+        Assert.True(account.LockedUntil > rig.Time.GetUtcNow());
+        Assert.Single(rig.Buffer.GetRecent(), e => e.Message.Contains("locked after 5 failed sign-ins"));
+        Assert.Equal(AuthenticationStatus.Locked, (await authenticator.AuthenticateAsync("eva", Password, "ip:correct", None)).Status);
     }
 
     [Fact]
@@ -97,6 +117,16 @@ public sealed class PasswordAuthenticatorTests
         Assert.Null(account!.ApiKeyHash);
         Assert.DoesNotContain(Password, account.PasswordHash);
         Assert.True(PasswordHasher.Verify(Password, account.PasswordHash));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("pbkdf2-sha256$210000$AA==$")]
+    [InlineData("pbkdf2-sha256$210000$!invalid!$AA==")]
+    public Task MissingOrMalformedHashesNeverAuthenticate(string? hash)
+    {
+        Assert.False(PasswordHasher.Verify(Password, hash));
+        return Task.CompletedTask;
     }
 
     private static async Task<(TestRig Rig, PasswordAuthenticator Authenticator)> CreateAsync(PasswordLockoutOptions? lockout = null)

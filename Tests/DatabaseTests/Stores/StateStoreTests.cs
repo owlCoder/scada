@@ -6,6 +6,7 @@ using DatabaseTests.Support;
 using Infrastructure.Persistence.Postgres;
 using Infrastructure.Persistence.Postgres.Stores;
 using Microsoft.Extensions.Time.Testing;
+using Npgsql;
 using Xunit;
 
 namespace DatabaseTests.Stores;
@@ -55,22 +56,64 @@ public sealed class StateStoreTests(PostgresContainerFixture postgres)
     }
 
     [Fact]
+    public async Task OlderPlantStateWaitingOnAConcurrentWriterIsRejected()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+        var store = new PostgresPlantStateStore(await database.MigratedAsync());
+        var state = new SimulationEngine(SimulationTopology.Default(), new SimulationOptions(), new FakeTimeProvider(Samples.Start)).CaptureState();
+        Assert.True(await store.SaveAsync(state, None));
+
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        var newer = state.SavedAt.AddMinutes(2);
+        await using var command = new NpgsqlCommand("UPDATE scada.plant_state SET saved_at = $1, is_paused = true", connection, transaction);
+        command.Parameters.AddWithValue(newer);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var older = store.SaveAsync(state with { SavedAt = state.SavedAt.AddMinutes(1) }, timeout.Token);
+        while (await database.ScalarAsync<int>("""
+            SELECT count(*) FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%plant_state%'
+            """) == 0)
+            await Task.Delay(10, timeout.Token);
+
+        await transaction.CommitAsync(timeout.Token);
+        Assert.False(await older);
+        var latest = (await store.LoadLatestAsync(None))!;
+        Assert.Equal(newer, latest.SavedAt);
+        Assert.True(latest.IsPaused);
+    }
+
+    [Fact]
     public async Task AccountsAreCaseInsensitiveAndUpserted()
     {
         var store = new PostgresUserAccountStore(await (await postgres.CreateDatabaseAsync()).MigratedAsync());
         var ana = new UserAccount("Ana", "Ana Operator", AccessRole.Operator, "hash", "key-hash", true, Samples.Start, null, null, 0, null);
 
-        Assert.True(await store.UpsertAsync(ana, None));
-        Assert.True(await store.UpsertAsync(ana with { Role = AccessRole.Viewer, LockedUntil = Samples.Start.AddMinutes(5) }, None));
-        Assert.False(await store.UpsertAsync(ana with { Username = "  " }, None));
+        Assert.True(await store.TryCreateAsync(ana, None));
+        Assert.True(await store.TryUpdateAsync(ana with { Role = AccessRole.Viewer, LockedUntil = Samples.Start.AddMinutes(5) }, None));
+        Assert.False(await store.TryCreateAsync(ana with { Username = "  " }, None));
 
         var found = await store.FindAsync(" ANA ", None);
-        Assert.Equal(ana with { Role = AccessRole.Viewer, LockedUntil = Samples.Start.AddMinutes(5) }, found);
+        Assert.Equal(ana with { Role = AccessRole.Viewer, LockedUntil = Samples.Start.AddMinutes(5), Version = 1 }, found);
         Assert.Single(await store.ListAsync(None));
         Assert.Null(await store.FindAsync("", None));
 
-        var concurrent = await Task.WhenAll(Enumerable.Range(0, 6).Select(i =>
-            store.UpsertAsync(ana with { Username = "carl", DisplayName = $"Carl {i}" }, None)));
+        var concurrent = await Task.WhenAll(Enumerable.Range(0, 6).Select(async i =>
+        {
+            var carl = ana with { Username = "carl", DisplayName = $"Carl {i}" };
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                var current = await store.FindAsync(carl.Username, None);
+                if (current is null ? await store.TryCreateAsync(carl, None)
+                    : await store.TryUpdateAsync(current with { DisplayName = carl.DisplayName }, None))
+                    return true;
+            }
+
+            return false;
+        }));
         Assert.All(concurrent, Assert.True);
         Assert.Equal(2, (await store.ListAsync(None)).Count);
     }

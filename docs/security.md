@@ -24,7 +24,7 @@ Every 403 is audited as an `AuthorizationDenied` event. These events feed the un
 
 There are three ways to authenticate.
 
-1. **Browser session (cookie).** Sign in at `GET /account/login`, which posts the form to `POST /account/login`. The session cookie `scada.session` is HttpOnly, SameSite=Strict and Secure over HTTPS, and lasts 30 minutes with sliding expiry. `POST /account/logout` ends the session. Both forms are protected by an antiforgery token.
+1. **Browser session (cookie).** Sign in at `GET /account/login`, which posts the form to `POST /account/login`. The session cookie `scada.session` is HttpOnly and SameSite=Strict. Sessions have a 30-minute sliding expiry and an absolute lifetime of 8 hours from sign-in, including for OIDC. Set `Security__Session__AbsoluteLifetime` to change the absolute lifetime, for example `04:00:00`. `POST /account/logout` ends the session. Both forms are protected by an antiforgery token.
    - **Every request rechecks the account.** A disabled or locked account, or a password changed after sign-in, ends the session. A role change applies to the next request.
    - **State-changing `/api` requests** made with a session must send an antiforgery token in the `X-CSRF-TOKEN` header. Get the token from `GET /account/antiforgery`.
    - **Failed sign-ins** all show the same message. They are throttled per IP: 10 failures per minute, plus the sign-in rate limit below. An account locks for 15 minutes after 5 consecutive failures; change this with `Security__Lockout__MaxFailedAttempts` and `Security__Lockout__LockoutDuration`. Passwords are never logged.
@@ -32,6 +32,13 @@ There are three ways to authenticate.
 3. **Single sign-on (OIDC, optional).** Set `Authentication__Oidc__Enabled=true`, plus `Authority`, `ClientId` and `ClientSecret`. Set `MetadataAddress` too if the API reaches the identity provider at a different address than browsers do.
    - **Roles** come from the `roles` claim (configurable). `scada-viewer`, `scada-operator` and `scada-administrator` map to the three SCADA roles, and the highest role wins. An identity without one of these roles cannot sign in.
    - **Login flow:** the login page shows a single sign-on link, `/account/login/oidc`. It uses the authorization code flow with PKCE.
+   - The API logs a startup warning when `Authentication__Oidc__RequireHttpsMetadata=false` allows metadata to be fetched over HTTP.
+
+## Reverse proxies
+
+Set `ForwardedHeaders:KnownProxies` to the IP addresses of the reverse proxies that connect directly to the API. For example, set `ForwardedHeaders__KnownProxies__0=192.0.2.10`. With a configured list, the API uses one hop of `X-Forwarded-For` for client IPs and `X-Forwarded-Proto` for the request scheme, only from those addresses. Leave the list empty for direct connections.
+
+Both the session and antiforgery cookies use `SameAsRequest` by default, which marks them Secure on HTTPS requests, including HTTPS reported by a trusted proxy. Set `Security__Cookies__RequireSecure=true` to always mark both cookies Secure. Serve browser sign-in over HTTPS when enabling this setting.
 
 ## Accounts
 

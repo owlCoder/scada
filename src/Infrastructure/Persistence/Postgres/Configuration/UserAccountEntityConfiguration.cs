@@ -18,6 +18,7 @@ public static class UserAccountEntityConfiguration
             e.Property(x => x.PasswordHash).HasMaxLength(256);
             e.Property(x => x.ApiKeyHash).HasMaxLength(256);
             e.HasIndex(x => x.ApiKeyHash);
+            e.Property(x => x.Version).IsConcurrencyToken();
         });
         return model;
     }

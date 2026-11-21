@@ -1,6 +1,8 @@
 using Application.Alarms;
+using Application.Common;
 using Application.Detection;
 using Application.Events;
+using Application.Incidents;
 using Application.Telemetry;
 using DatabaseTests.Support;
 using Domain.Incidents;
@@ -80,5 +82,50 @@ public sealed class EventAndTelemetryStoreTests(PostgresContainerFixture postgre
         Assert.Equal(detection.Evidence, stored.Evidence);
         Assert.Equal(detection with { Evidence = stored.Evidence }, stored);
         Assert.Single(await detections.QueryAsync(new DetectionQuery(RuleId: "mass-balance"), None));
+    }
+
+    [Fact]
+    public async Task IdKeyedAppendsIgnoreDuplicatesWithinAndAcrossConcurrentBatches()
+    {
+        var factory = await (await postgres.CreateDatabaseAsync()).MigratedAsync();
+        var events = new PostgresEventStore(factory);
+        var alarms = new PostgresAlarmHistoryStore(factory);
+        var detections = new PostgresDetectionStore(factory);
+        var securityEvent = Samples.Event("first message");
+        var duplicate = securityEvent with { Message = "duplicate message" };
+        var other = Samples.Event("another message");
+        var alarm = new AlarmHistoryRecord(Guid.NewGuid(), Samples.Start, "T-101:High", "T-101", AlarmType.High, AlarmSeverity.High,
+            AlarmTransitionKind.Raised, "Level high", null);
+        var detection = new DetectionRecord(Guid.NewGuid(), Samples.Start, "command-replay", "Command replay", DetectionSeverity.High,
+            IncidentCategory.Cybersecurity, "Replay", "Replayed command", null, null, "command-replay", [], null);
+
+        Assert.Equal(1, await events.AppendAsync([securityEvent, duplicate], None));
+        Assert.Equal(1, (await Task.WhenAll(events.AppendAsync([duplicate, other], None), events.AppendAsync([other], None))).Sum());
+        Assert.Equal(1, (await Task.WhenAll(alarms.AppendAsync([alarm, alarm], None), alarms.AppendAsync([alarm], None))).Sum());
+        Assert.Single(await Task.WhenAll(detections.AppendAsync(detection, None), detections.AppendAsync(detection, None)), written => written);
+
+        Assert.Equal([other, securityEvent], (await events.QueryAsync(new EventQuery(), None)).Items);
+        Assert.Equal(alarm, Assert.Single(await alarms.GetRecentAsync(10, None)));
+        Assert.Single(await detections.QueryAsync(new DetectionQuery(), None));
+    }
+
+    [Fact]
+    public async Task OversizedPageIsClampedForEventsAndIncidents()
+    {
+        var factory = await (await postgres.CreateDatabaseAsync()).MigratedAsync();
+        var events = new PostgresEventStore(factory);
+        var incidents = new PostgresIncidentStore(factory);
+        await events.AppendAsync([Samples.Event("first message")], None);
+        await incidents.AddAsync(Samples.Incident(), [], None);
+
+        var eventPage = await events.QueryAsync(new EventQuery(Page: int.MaxValue, PageSize: int.MaxValue), None);
+        var incidentPage = await incidents.QueryAsync(new IncidentQuery(Page: int.MaxValue, PageSize: int.MaxValue), None);
+
+        Assert.Equal(Paging.MaxPage, eventPage.Page);
+        Assert.Equal(Paging.MaxPage, incidentPage.Page);
+        Assert.Equal(1, eventPage.TotalCount);
+        Assert.Equal(1, incidentPage.TotalCount);
+        Assert.Empty(eventPage.Items);
+        Assert.Empty(incidentPage.Items);
     }
 }
