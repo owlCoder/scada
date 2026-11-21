@@ -13,7 +13,7 @@ public static class SecurityHeadersExtensions
             context.Response.Headers["Cache-Control"] = "no-cache, no-store";
             context.Response.Headers["Pragma"] = "no-cache";
             context.Response.Headers["Content-Security-Policy"] =
-                "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+                "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
             await next();
         });
         return app;

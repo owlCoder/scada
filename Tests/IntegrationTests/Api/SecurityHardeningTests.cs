@@ -90,6 +90,21 @@ public sealed class SecurityHardeningTests
     }
 
     [Fact]
+    public async Task HmiShellCanLoadTheBlazorScriptUnderTheCsp()
+    {
+        using var factory = ApiTestFactory.Create();
+        using var anonymous = factory.Client(null);
+
+        var script = await anonymous.GetAsync("/_framework/blazor.web.js");
+        var csp = (await anonymous.GetAsync("/health/live")).Headers.GetValues("Content-Security-Policy").Single();
+
+        // Without the framework asset and base-uri 'self', the HMI renders an empty page in a real browser.
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
+        Assert.Equal("text/javascript", script.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("base-uri 'self'", csp);
+    }
+
+    [Fact]
     public async Task ReadinessFailsWithoutLeakingErrorsWhenStorageIsUnreachable()
     {
         using var factory = ApiTestFactory.Create().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
