@@ -8,54 +8,112 @@ using Application.Scenarios;
 using Application.Simulation;
 using Application.Telemetry;
 using Infrastructure.Persistence.InMemory;
+using Infrastructure.Persistence.Postgres;
+using Infrastructure.Persistence.Postgres.Stores;
 using Infrastructure.Persistence.Queue;
+using Infrastructure.Persistence.Retention;
+using Microsoft.EntityFrameworkCore;
 
 namespace Api.Configuration.Registration;
 
+/// <summary>
+/// <c>Storage:Provider</c> selects <c>Memory</c> (default) or <c>Postgres</c> (EF Core, needs <c>ConnectionStrings:Scada</c>).
+/// With Postgres, pending migrations are applied at startup unless <c>Storage:ApplyMigrations</c> is false.
+/// </summary>
 public static class StorageRegistrationExtensions
 {
     public static WebApplicationBuilder AddStorageServices(this WebApplicationBuilder builder)
     {
         var provider = builder.Configuration[$"{ConfigurationSections.Storage}:Provider"] ?? "Memory";
         if (provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Scada")))
-                throw new InvalidOperationException("Missing ConnectionStrings:Scada.");
-            throw new InvalidOperationException(
-                "PostgreSQL storage is provided by the EF Core persistence layer, which is not available in this build. Use Storage:Provider=Memory.");
-        }
-
-        if (!provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
+            AddPostgres(builder);
+        else if (provider.Equals("Memory", StringComparison.OrdinalIgnoreCase))
+            AddInMemory(builder.Services);
+        else
             throw new InvalidOperationException($"Unknown Storage:Provider '{provider}'.");
 
+        AddPersistenceQueue(builder);
+        AddRetention(builder);
+        return builder;
+    }
+
+    /// <summary>Applies database migrations when PostgreSQL storage is configured. Call before anything reads the stores.</summary>
+    public static async Task<IReadOnlyList<string>> InitializeStorageAsync(this WebApplication app, CancellationToken cancellationToken)
+    {
+        var migrator = app.Services.GetService<ScadaDatabaseMigrator>();
+        var apply = app.Configuration.GetValue($"{ConfigurationSections.Storage}:ApplyMigrations", true);
+        return migrator is not null && apply ? await migrator.MigrateAsync(cancellationToken) : [];
+    }
+
+    private static IServiceCollection AddPostgres(WebApplicationBuilder builder)
+    {
+        var connectionString = builder.Configuration.GetConnectionString("Scada");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("Storage:Provider=Postgres requires ConnectionStrings:Scada.");
+
         var services = builder.Services;
-        services.AddSingleton<InMemoryEventStore>();
-        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InMemoryEventStore>());
-        services.AddSingleton<IRetentionTarget>(sp => sp.GetRequiredService<InMemoryEventStore>());
-        services.AddSingleton<InMemoryTelemetryStore>();
-        services.AddSingleton<ITelemetryStore>(sp => sp.GetRequiredService<InMemoryTelemetryStore>());
-        services.AddSingleton<IRetentionTarget>(sp => sp.GetRequiredService<InMemoryTelemetryStore>());
-        services.AddSingleton<InMemoryAlarmHistoryStore>();
-        services.AddSingleton<IAlarmHistoryStore>(sp => sp.GetRequiredService<InMemoryAlarmHistoryStore>());
-        services.AddSingleton<IRetentionTarget>(sp => sp.GetRequiredService<InMemoryAlarmHistoryStore>());
-        services.AddSingleton<InMemoryDetectionStore>();
-        services.AddSingleton<IDetectionStore>(sp => sp.GetRequiredService<InMemoryDetectionStore>());
-        services.AddSingleton<IRetentionTarget>(sp => sp.GetRequiredService<InMemoryDetectionStore>());
+        services.AddPooledDbContextFactory<ScadaDbContext>(options => ScadaDbContext.Configure(options, connectionString));
+        services.AddSingleton<ScadaDatabaseMigrator>();
+        services.AddSingleton<IStorageProbe, PostgresStorageProbe>();
+        AddRetainedStore<IEventStore, PostgresEventStore>(services);
+        AddRetainedStore<ITelemetryStore, PostgresTelemetryStore>(services);
+        AddRetainedStore<IAlarmHistoryStore, PostgresAlarmHistoryStore>(services);
+        AddRetainedStore<IDetectionStore, PostgresDetectionStore>(services);
+        services.AddSingleton<IPlantStateStore, PostgresPlantStateStore>();
+        services.AddSingleton<IIncidentStore, PostgresIncidentStore>();
+        services.AddSingleton<IDetectionRuleSettingsStore, PostgresDetectionRuleSettingsStore>();
+        services.AddSingleton<IScenarioRunStore, PostgresScenarioRunStore>();
+        services.AddSingleton<IUserAccountStore, PostgresUserAccountStore>();
+        return services;
+    }
+
+    private static IServiceCollection AddInMemory(IServiceCollection services)
+    {
+        services.AddSingleton<IStorageProbe, InMemoryStorageProbe>();
+        AddRetainedStore<IEventStore, InMemoryEventStore>(services);
+        AddRetainedStore<ITelemetryStore, InMemoryTelemetryStore>(services);
+        AddRetainedStore<IAlarmHistoryStore, InMemoryAlarmHistoryStore>(services);
+        AddRetainedStore<IDetectionStore, InMemoryDetectionStore>(services);
         services.AddSingleton<IPlantStateStore, InMemoryPlantStateStore>();
         services.AddSingleton<IIncidentStore, InMemoryIncidentStore>();
         services.AddSingleton<IDetectionRuleSettingsStore, InMemoryDetectionRuleSettingsStore>();
         services.AddSingleton<IScenarioRunStore, InMemoryScenarioRunStore>();
         services.AddSingleton<IUserAccountStore, InMemoryUserAccountStore>();
+        return services;
+    }
 
-        var queueOptions = builder.Configuration.Bind<PersistenceQueueOptions>(ConfigurationSections.Persistence);
-        var errors = queueOptions.Validate();
-        if (errors.Count > 0)
-            throw new InvalidOperationException(string.Join(" ", errors));
-        services.AddSingleton(queueOptions);
+    private static IServiceCollection AddRetainedStore<TService, TImplementation>(IServiceCollection services)
+        where TService : class
+        where TImplementation : class, TService, IRetentionTarget
+    {
+        services.AddSingleton<TImplementation>();
+        services.AddSingleton<TService>(sp => sp.GetRequiredService<TImplementation>());
+        services.AddSingleton<IRetentionTarget>(sp => sp.GetRequiredService<TImplementation>());
+        return services;
+    }
+
+    private static IServiceCollection AddPersistenceQueue(WebApplicationBuilder builder)
+    {
+        var options = builder.Configuration.Bind<PersistenceQueueOptions>(ConfigurationSections.Persistence);
+        ThrowIfInvalid(options.Validate());
+        var services = builder.Services;
+        services.AddSingleton(options);
         services.AddSingleton<ChannelPersistenceQueue>();
         services.AddSingleton<IPersistenceQueue>(sp => sp.GetRequiredService<ChannelPersistenceQueue>());
         services.AddSingleton<PersistenceDispatcher>();
         services.AddSingleton<PersistenceWorker>();
-        return builder;
+        return services;
     }
+
+    private static IServiceCollection AddRetention(WebApplicationBuilder builder)
+    {
+        var options = builder.Configuration.Bind<RetentionOptions>(ConfigurationSections.Retention);
+        ThrowIfInvalid(options.Validate());
+        builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton<RetentionWorker>();
+        return builder.Services;
+    }
+
+    private static bool ThrowIfInvalid(IReadOnlyList<string> errors) =>
+        errors.Count == 0 ? true : throw new InvalidOperationException(string.Join(" ", errors));
 }

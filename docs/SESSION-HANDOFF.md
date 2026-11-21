@@ -150,7 +150,36 @@ Original plan:
 - Run `dotnet build -c Release` and `dotnet test`. Then **commit** (author and committer `owlCoder`, no trailers) and verify with `git log --format='%an <%ae> | %cn <%ce>'`.
 - Run a Mistral review: `cd ~/Desktop/scada && vibe -p "Review the diff of branch feature/full-scada-platform vs main for bugs, SOLID violations, thread-safety and security issues. Report findings only." --model mistral-large-4 --thinking high --max-turns 30 --output text`. Fix real findings.
 
-### Step 3: Persistence (EF Core + PostgreSQL)
+### Step 3: Persistence (EF Core + PostgreSQL), DONE (2026-11-21)
+
+What was built:
+- `src/Infrastructure/Persistence/Postgres`:
+  - `ScadaDbContext` (schema `scada`, snake_case columns) with one static `*EntityConfiguration.Apply` per entity, entities that map to and from the application records, and a Postgres store for every store interface.
+  - Incident numbers come from the `incident_number_seq` sequence. `version` is the concurrency token; a stale update returns false.
+  - Search uses `ILIKE` with an explicit escape character. Npgsql otherwise sends `ESCAPE ''`, and `%` or `_` would act as wildcards.
+- Migration `InitialSchema` (generated with the local `dotnet-ef` 10.0.12 from `.config/dotnet-tools.json`):
+  - It runs `LegacyDataImport.Sql`, which copies `public.security_events`, `public.telemetry_samples` (as tags `LT-101` and `P-101.running`) and `public.incidents` when they exist. Status 2 maps to Resolved. A `Created` timeline entry is added and numbering continues. The legacy tables are never altered or dropped.
+  - `ScadaDatabaseMigrator` runs from `Program.cs` before `AccountSeeder`. `Storage:ApplyMigrations=false` disables it.
+- Retention:
+  - `Persistence/Retention/RetentionWorker` covers every `IRetentionTarget` in both storage modes.
+  - Configured through `Retention:Interval|DefaultMaxAge|MaxAge:<target>`.
+- Health:
+  - `IStorageProbe` has memory and Postgres implementations.
+  - `/health/ready` returns 503 when storage is unreachable and reports no error text; `/health` reports the provider.
+- Architecture rules:
+  - Generated EF migrations are excluded from the source-structure rules.
+  - `override void` is allowed (OnModelCreating, Up, Down).
+- Compose and logging:
+  - Compose no longer mounts `init.sql`. The image is pinned to `postgres:17.7-alpine`; the floating `17-alpine` snapshot was corrupted in the local Docker cache after the disk filled up.
+  - The host port is configurable with `POSTGRES_PORT`.
+  - `.dockerignore` excludes `.scada`.
+  - EF logging is at Warning.
+- `Tests/DatabaseTests` (20 tests, Testcontainers): migrations and model drift, the legacy import, all stores including concurrent incident updates, retention, a full API restart on the same database, and the storage probe. They fail if Docker is unavailable.
+- Dev secrets for the compose stack are in `.scada/dev-credentials.txt` (POSTGRES_PORT=55432 locally, because 5432 is taken by another project's container).
+- Live verification (API on the compose PostgreSQL, TimeScale 20, fresh database): all 14 scenarios Detected back to back over HTTP. After a restart on the same database, 14/14 runs, 21/21 incidents, 312 events and the durable telemetry (3190 LT-101 samples) were all still there. A first start on an empty database logs no warnings or errors. Note: `/api/trends` is the live in-memory historian window; `/api/telemetry` reads the durable history.
+- The Docker image build was not run, because only about 4 GB of disk was free; it belongs to Step 7's smoke test.
+
+Original plan:
 - `ScadaDbContext`, entity configurations, and a migration via a local `dotnet-ef` tool manifest.
 - The migration must copy legacy tables (`telemetry_samples`, `security_events`, `incidents` from `deploy/postgres/init.sql`) when they exist, and never drop them.
 - Concurrency: incident version check. Retention worker over `IRetentionTarget`. Keep the in-memory mode.
@@ -192,4 +221,4 @@ cd ~/Desktop/scada && git status && git branch --show-current
 dotnet build src/Security/Security.csproj -c Release
 ```
 
-Steps 1 and 2 are done; start with **Step 3** above. The `docs/implementation-progress.md` checklist exists but has no Phase B+ items ticked yet. Tick them only after the solution builds and tests pass.
+Steps 1–3 are done; start with **Step 4** above. Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.

@@ -1,4 +1,5 @@
 using Infrastructure.Persistence.Queue;
+using Infrastructure.Persistence.Retention;
 using Protocols.Modbus;
 using Simulation.HostedServices;
 
@@ -11,6 +12,7 @@ public static class HostedWorkerRegistrationExtensions
     {
         var services = builder.Services;
         services.AddHostedService(sp => sp.GetRequiredService<PersistenceWorker>());
+        services.AddHostedService(sp => sp.GetRequiredService<RetentionWorker>());
         services.AddHostedService<DetectionSettingsRecoveryService>();
         services.AddHostedService<SimulationRecoveryService>();
         services.AddHostedService<SimulationService>();

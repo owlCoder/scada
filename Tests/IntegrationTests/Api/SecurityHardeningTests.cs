@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Persistence;
 using IntegrationTests.Support;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace IntegrationTests.Api;
@@ -83,6 +87,26 @@ public sealed class SecurityHardeningTests
 
         Assert.DoesNotContain("lastError", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("default-src 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+    }
+
+    [Fact]
+    public async Task ReadinessFailsWithoutLeakingErrorsWhenStorageIsUnreachable()
+    {
+        using var factory = ApiTestFactory.Create().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IStorageProbe>();
+            services.AddSingleton<IStorageProbe, UnavailableStorageProbe>();
+        }));
+        using var anonymous = factory.Client(null);
+
+        var response = await anonymous.GetAsync("/health/ready");
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("degraded", body.GetProperty("status").GetString());
+        Assert.False(body.GetProperty("storage").GetProperty("available").GetBoolean());
+        Assert.DoesNotContain("secret", body.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync("/health/live")).StatusCode);
     }
 
     [Fact]

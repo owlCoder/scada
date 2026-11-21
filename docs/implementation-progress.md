@@ -30,10 +30,10 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
 - [x] Incident management workflow, comments, timeline
 
 ## Phase E — Persistence
-- [ ] EF Core DbContext, configurations, migrations
+- [x] EF Core DbContext, configurations, migrations (legacy tables copied, never dropped)
 - [x] Bounded asynchronous persistence queue
-- [ ] Plant state recovery after restart (hosted recovery service done and unit-tested; durable across process restarts only with the database in Phase E)
-- [ ] Retention policies
+- [x] Plant state recovery after restart (PostgreSQL; covered by an API restart test)
+- [x] Retention policies
 
 ## Phase F — Authentication and observability
 - [ ] Cookie login, password hashing, policies, API key compatibility, OIDC option
@@ -54,3 +54,6 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
   normal operation produce no detections.
 - 2026-11-21, second commit (review and live-run fixes): 263 .NET tests (12 architecture, 166 unit, 85 integration) and 3 frontend tests
   pass. Live API: 14/14 scenarios Detected back to back over HTTP, Modbus TCP read verified, dashboard verified in a browser.
+- 2026-11-21, Step 3 (EF Core + PostgreSQL): 284 .NET tests (12 architecture, 166 unit, 86 integration, 20 database on Testcontainers
+  PostgreSQL) and 3 frontend tests pass. Live API on the compose PostgreSQL: 14/14 scenarios Detected; runs, incidents, events and
+  telemetry survive a restart; a fresh database migrates without warnings.

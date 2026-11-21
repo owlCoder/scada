@@ -110,4 +110,4 @@ All protected endpoints require `X-Api-Key`. Named user credentials are supporte
 
 ## Limitations
 
-The simulator is not production SCADA software. There is no OPC UA implementation, OIDC authentication, TLS termination or production-ready telemetry queue. PostgreSQL persistence is optional; plant state remains in memory.
+The simulator is not production SCADA software. There is no OPC UA implementation, OIDC authentication or TLS termination yet. PostgreSQL persistence (EF Core, with migrations and retention) is optional; with it, plant state, incidents, events, telemetry and accounts survive restarts.
