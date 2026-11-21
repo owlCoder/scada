@@ -51,8 +51,14 @@ public sealed class GridEnginePhysicsTests
     public Task TransformerVoltageRatioAndTapPiModelMatchNoLoadCalculation()
     {
         var d = Tests.TwoBus();
-        d = d with { Buses = [d.Buses[0], d.Buses[1] with { NominalVoltageKv = 0.4 }], Lines = [], Loads = [], Switches = [],
-            Transformers = [new("TR", "Transformer", "A", "B", 1, 20, 0.4, 6, 10, 0, true, -10, 10, 0, 2, 1.5, 0.4, 1.5, 30, null, new(1, 0))] };
+        d = d with
+        {
+            Buses = [d.Buses[0], d.Buses[1] with { NominalVoltageKv = 0.4 }],
+            Lines = [],
+            Loads = [],
+            Switches = [],
+            Transformers = [new("TR", "Transformer", "A", "B", 1, 20, 0.4, 6, 10, 0, true, -10, 10, 0, 2, 1.5, 0.4, 1.5, 30, null, new(1, 0))]
+        };
         var world = new GridWorld(d, 42, TimeSpan.FromHours(8));
         Assert.True(world.Snapshot().Converged);
         Assert.Equal(0.412, world.Snapshot().Bus("B")!.VoltageKv, 5);
@@ -75,6 +81,21 @@ public sealed class GridEnginePhysicsTests
         Assert.Equal(0, island.Bus("F2-4-LV")!.VoltageKv);
         Assert.False(island.Load("L24")!.Energized);
         Assert.True(island.Totals.CustomersSupplied < island.Totals.Customers);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task MeshedNetworkWithTieClosedConvergesAndBalancesPowerWithinTolerance()
+    {
+        var engine = new GridEngine(new(), TimeProvider.System);
+        engine.Mutate(w => w.OperateSwitch("TIE", true, "instructor", GridChangeCause.Operator));
+        var s = engine.Step()!.Snapshot;
+        Assert.True(s.Converged);
+        Assert.Equal(24, s.Buses.Count);
+        Assert.All(s.Buses, b => Assert.True(b.Energized));
+        var balance = s.Totals.SourceImportMw + s.Totals.GenerationMw - s.Totals.LoadMw - s.Totals.LossesMw;
+        Assert.InRange(Math.Abs(balance) / Math.Max(s.Totals.LoadMw, 1e-9), 0, 0.001);
+        Assert.True(s.Totals.LossesMw > 0);
         return Task.CompletedTask;
     }
 

@@ -2,6 +2,7 @@ using Application.Commands;
 using Application.Events;
 using Application.Grid;
 using Application.Identity;
+using Application.Realtime;
 using Domain.Grid.Commands;
 using Infrastructure.Persistence.InMemory;
 using Infrastructure.Realtime;
@@ -14,12 +15,13 @@ namespace UnitTests.Support;
 
 public sealed class GridEngineTestRig
 {
-    public GridEngineTestRig(GridOptions? options = null, IEnumerable<IGridObserver>? observers = null, CommandRateOptions? rate = null)
+    public GridEngineTestRig(GridOptions? options = null, IEnumerable<IGridObserver>? observers = null, CommandRateOptions? rate = null,
+        IRealtimePublisher? realtime = null)
     {
         Options = options ?? new();
         Engine = new(Options, Time);
         Store = new(Time);
-        Coordinator = new(Engine, Store, Events, new NullRealtimePublisher(), observers ?? [], Time, NullLogger<GridCoordinator>.Instance);
+        Coordinator = new(Engine, Store, Events, realtime ?? new NullRealtimePublisher(), observers ?? [], Time, NullLogger<GridCoordinator>.Instance);
         Control = new(Coordinator, Options, Time, new CommandMonitor(Events, Time, rate ?? new() { Limit = 1000 }), new());
         Training = new(Coordinator);
     }
