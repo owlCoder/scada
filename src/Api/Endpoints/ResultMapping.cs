@@ -33,6 +33,7 @@ public static class ResultMapping
         AccountOperationStatus.Succeeded => Results.Ok(result),
         AccountOperationStatus.NotFound => Results.NotFound(result),
         AccountOperationStatus.Denied => Results.Json(result, statusCode: StatusCodes.Status403Forbidden),
+        AccountOperationStatus.Conflict => Results.Conflict(result),
         _ => Results.BadRequest(result)
     };
 

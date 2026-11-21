@@ -4,8 +4,11 @@ using Api.Authentication;
 using Application.Identity;
 using IntegrationTests.Support;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Xunit;
@@ -14,6 +17,29 @@ namespace IntegrationTests.Authentication;
 
 public sealed class OidcSignInTests
 {
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public Task StartupWarnsOnlyWhenEnabledOidcAllowsHttpMetadata(bool enabled, bool requireHttps, bool expected)
+    {
+        var collector = new FakeLogCollector();
+        using var logging = new LoggerFactory([new FakeLoggerProvider(collector)]);
+        using var baseline = ApiTestFactory.Create(
+            ("Authentication:Oidc:Enabled", enabled.ToString()),
+            ("Authentication:Oidc:Authority", "https://identity.example"),
+            ("Authentication:Oidc:ClientId", "scada-api"),
+            ("Authentication:Oidc:RequireHttpsMetadata", requireHttps.ToString()));
+        using var factory = baseline.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton<ILoggerFactory>(logging)));
+        using var client = factory.CreateClient();
+
+        var warnings = collector.GetSnapshot().Where(record => record.Level == LogLevel.Warning
+            && record.Message.Contains("RequireHttpsMetadata=false", StringComparison.Ordinal));
+        Assert.Equal(expected ? 1 : 0, warnings.Count());
+        return Task.CompletedTask;
+    }
+
     private const string Authority = "https://idp.example.test/realms/scada";
 
     [Fact]

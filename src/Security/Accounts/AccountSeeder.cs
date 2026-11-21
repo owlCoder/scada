@@ -21,10 +21,10 @@ public sealed class AccountSeeder(IReadOnlyList<UserCredential> users, IUserAcco
             var now = time.GetUtcNow();
             var passwordHash = !string.IsNullOrWhiteSpace(user.PasswordHash) ? user.PasswordHash
                 : PasswordHasher.Hash(string.IsNullOrEmpty(user.Password) ? PasswordHasher.GeneratePassword() : user.Password);
-            await store.UpsertAsync(new UserAccount(user.Username, user.Username, user.Role, passwordHash,
+            if (await store.TryCreateAsync(new UserAccount(user.Username, user.Username, user.Role, passwordHash,
                 user.HasApiKey ? ApiKeyValidator.Fingerprint(user.ApiKey) : null, true, now,
-                user.HasPassword ? now : null, null, 0, null), cancellationToken);
-            created++;
+                user.HasPassword ? now : null, null, 0, null), cancellationToken))
+                created++;
         }
 
         return created;

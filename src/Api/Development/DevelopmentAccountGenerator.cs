@@ -29,8 +29,9 @@ public sealed class DevelopmentAccountGenerator(
             var password = PasswordHasher.GeneratePassword();
             var apiKey = PasswordHasher.GenerateApiKey();
             var now = time.GetUtcNow();
-            await accounts.UpsertAsync(new UserAccount(username, username, role, PasswordHasher.Hash(password),
-                ApiKeyValidator.Fingerprint(apiKey), true, now, now, null, 0, null), cancellationToken);
+            if (!await accounts.TryCreateAsync(new UserAccount(username, username, role, PasswordHasher.Hash(password),
+                ApiKeyValidator.Fingerprint(apiKey), true, now, now, null, 0, null), cancellationToken))
+                continue;
             var prefix = $"{Marker}{role.ToString().ToUpperInvariant()}";
             lines.AddRange([$"{prefix}_USERNAME={username}", $"{prefix}_PASSWORD={password}", $"{prefix}_API_KEY={apiKey}"]);
         }

@@ -18,9 +18,20 @@ public sealed class PostgresAlarmHistoryStore(IDbContextFactory<ScadaDbContext> 
             return 0;
 
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
-        db.AlarmHistory.AddRange(records.Select(AlarmHistoryEntity.From));
-        await db.SaveChangesAsync(cancellationToken);
-        return records.Count;
+        var rows = records.Select(AlarmHistoryEntity.From).ToArray();
+        return await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO scada.alarm_history (id, timestamp, alarm_key, source_id, type, severity, transition, message, actor)
+            SELECT id, timestamp, alarm_key, source_id, type, severity, transition, message, actor
+            FROM unnest({rows.Select(a => a.Id).ToArray()}, {rows.Select(a => a.Timestamp).ToArray()},
+                {rows.Select(a => a.AlarmKey).ToArray()}, {rows.Select(a => a.SourceId).ToArray()},
+                {rows.Select(a => a.Type.ToString()).ToArray()}, {rows.Select(a => a.Severity.ToString()).ToArray()},
+                {rows.Select(a => a.Transition.ToString()).ToArray()}, {rows.Select(a => a.Message).ToArray()},
+                {rows.Select(a => a.Actor).ToArray()})
+                WITH ORDINALITY AS input(id, timestamp, alarm_key, source_id, type, severity, transition, message,
+                    actor, input_position)
+            ORDER BY input_position
+            ON CONFLICT (id) DO NOTHING
+            """, cancellationToken);
     }
 
     /// <summary>Newest first.</summary>

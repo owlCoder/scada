@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Application.Persistence;
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Persistence.Queue;
 
@@ -11,6 +12,7 @@ public sealed class ChannelPersistenceQueue : IPersistenceQueue
 {
     private readonly Channel<PersistenceWorkItem> _channel;
     private readonly TimeProvider _time;
+    private readonly ILogger<ChannelPersistenceQueue> _logger;
     private readonly Lock _sync = new();
     private long _enqueued;
     private long _persisted;
@@ -18,8 +20,9 @@ public sealed class ChannelPersistenceQueue : IPersistenceQueue
     private long _failed;
     private DateTimeOffset? _lastFailureAt;
     private string? _lastError;
+    private long? _lastDropWarning;
 
-    public ChannelPersistenceQueue(PersistenceQueueOptions options, TimeProvider time)
+    public ChannelPersistenceQueue(PersistenceQueueOptions options, TimeProvider time, ILogger<ChannelPersistenceQueue> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         var errors = options.Validate();
@@ -28,6 +31,7 @@ public sealed class ChannelPersistenceQueue : IPersistenceQueue
 
         Capacity = options.Capacity;
         _time = time;
+        _logger = logger;
         _channel = Channel.CreateBounded<PersistenceWorkItem>(new BoundedChannelOptions(options.Capacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -52,14 +56,26 @@ public sealed class ChannelPersistenceQueue : IPersistenceQueue
     {
         ArgumentNullException.ThrowIfNull(item);
         var written = _channel.Writer.TryWrite(item);
+        long? dropped = null;
         lock (_sync)
         {
             if (written)
                 _enqueued++;
             else
-                _dropped++;
+            {
+                ++_dropped;
+                var timestamp = _time.GetTimestamp();
+                if (_lastDropWarning is not { } last || _time.GetElapsedTime(last, timestamp) >= TimeSpan.FromMinutes(1))
+                {
+                    _lastDropWarning = timestamp;
+                    dropped = _dropped;
+                }
+            }
         }
 
+        if (dropped is { } count)
+            _logger.LogWarning("Persistence queue rejected a {Kind} item ({Dropped} total dropped, capacity {Capacity})",
+                item.Kind, count, Capacity);
         return written;
     }
 

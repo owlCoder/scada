@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Security.Authentication;
@@ -6,33 +7,55 @@ namespace Api.Authentication;
 
 /// <summary>
 /// Re-validates password sessions against the account store on every request: a disabled or locked account, or a password
-/// changed after sign-in, ends the session; a role change is applied immediately. OIDC sessions are owned by the identity
-/// provider and expire with the cookie.
+/// changed after sign-in, ends the session; a role change is applied immediately. Every session has an absolute
+/// lifetime measured from its original sign-in.
 /// </summary>
 public static class CookieSessionValidator
 {
+    private const string StartedAt = "scada.session-started-at";
+
+    public static Task StartSessionAsync(CookieSigningInContext context)
+    {
+        var now = context.Options.TimeProvider!.GetUtcNow();
+        context.Properties.SetString(StartedAt, now.ToString("O", CultureInfo.InvariantCulture));
+        return Task.CompletedTask;
+    }
+
     public static async Task<bool> ValidateAsync(CookieValidatePrincipalContext context)
     {
-        if (context.Principal?.FindFirst(ScadaClaimTypes.Source)?.Value != ScadaSignInSources.Password)
+        var settings = context.HttpContext.RequestServices.GetRequiredService<SessionSettings>();
+        var now = context.Options.TimeProvider!.GetUtcNow();
+        if (!DateTimeOffset.TryParseExact(context.Properties.GetString(StartedAt), "O", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var startedAt)
+            || startedAt > now || now - startedAt >= settings.AbsoluteLifetime)
+            return await RejectAsync(context);
+
+        if (context.Principal is not { } principal)
+            return await RejectAsync(context);
+        if (principal.FindFirst(ScadaClaimTypes.Source)?.Value != ScadaSignInSources.Password)
             return true;
 
-        var username = context.Principal.Identity?.Name;
-        var issued = context.Properties.IssuedUtc ?? DateTimeOffset.MinValue;
+        var username = principal.Identity?.Name;
         var authenticator = context.HttpContext.RequestServices.GetRequiredService<PasswordAuthenticator>();
-        var user = string.IsNullOrEmpty(username) ? null : await authenticator.ValidateSessionAsync(username, issued, context.HttpContext.RequestAborted);
+        var user = string.IsNullOrEmpty(username)
+            ? null
+            : await authenticator.ValidateSessionAsync(username, startedAt, context.HttpContext.RequestAborted);
         if (user is null)
-        {
-            context.RejectPrincipal();
-            await context.HttpContext.SignOutAsync(ScadaAuthenticationSchemes.Cookie);
-            return false;
-        }
+            return await RejectAsync(context);
 
-        if (!context.Principal.IsInRole(user.Role.ToString()))
+        if (!principal.IsInRole(user.Role.ToString()))
         {
             context.ReplacePrincipal(ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, issued));
             context.ShouldRenew = true;
         }
 
         return true;
+    }
+
+    private static async Task<bool> RejectAsync(CookieValidatePrincipalContext context)
+    {
+        context.RejectPrincipal();
+        await context.HttpContext.SignOutAsync(ScadaAuthenticationSchemes.Cookie);
+        return false;
     }
 }

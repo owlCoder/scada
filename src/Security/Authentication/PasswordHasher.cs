@@ -11,6 +11,8 @@ public static class PasswordHasher
     private const int KeySize = 32;
     private const string Prefix = "pbkdf2-sha256";
 
+    private static readonly byte[] TimingSalt = new byte[SaltSize];
+
     public static string Hash(string password)
     {
         if (string.IsNullOrEmpty(password) || password.Length < MinimumLength)
@@ -23,24 +25,31 @@ public static class PasswordHasher
 
     public static bool Verify(string password, string? encoded)
     {
-        if (string.IsNullOrEmpty(password) || string.IsNullOrWhiteSpace(encoded))
+        if (string.IsNullOrEmpty(password))
             return false;
 
-        var parts = encoded.Split('$');
-        if (parts.Length != 4 || parts[0] != Prefix || !int.TryParse(parts[1], out var iterations) || iterations < 10_000)
-            return false;
+        if (encoded?.Split('$') is [Prefix, var workFactor, var saltText, var hashText]
+            && int.TryParse(workFactor, out var iterations) && iterations >= 10_000)
+        {
+            try
+            {
+                var salt = Convert.FromBase64String(saltText);
+                var expected = Convert.FromBase64String(hashText);
+                if (expected.Length > 0)
+                {
+                    var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
+                    return CryptographicOperations.FixedTimeEquals(actual, expected);
+                }
+            }
+            catch (FormatException)
+            {
+                // Use the same fallback work as for an absent hash.
+            }
+        }
 
-        try
-        {
-            var salt = Convert.FromBase64String(parts[2]);
-            var expected = Convert.FromBase64String(parts[3]);
-            var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
-            return CryptographicOperations.FixedTimeEquals(actual, expected);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
+        // Unknown accounts and missing or malformed hashes still do one standard derivation.
+        _ = Rfc2898DeriveBytes.Pbkdf2(password, TimingSalt, Iterations, HashAlgorithmName.SHA256, KeySize);
+        return false;
     }
 
     public static string GeneratePassword(int length = 20)

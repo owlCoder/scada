@@ -2,6 +2,7 @@ using Application.Events;
 using Application.Persistence;
 using Infrastructure.Persistence.Queue;
 using Infrastructure.Realtime;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Security.Commands;
 using Xunit;
@@ -14,7 +15,7 @@ public sealed class CommandMonitorTests
     {
         var time = new FakeTimeProvider(DateTimeOffset.UnixEpoch);
         var buffer = new RecentEventBuffer();
-        var publisher = new EventPublisher(buffer, new ChannelPersistenceQueue(new PersistenceQueueOptions(), time), new NullRealtimePublisher());
+        var publisher = new EventPublisher(buffer, new ChannelPersistenceQueue(new PersistenceQueueOptions(), time, NullLogger<ChannelPersistenceQueue>.Instance), new NullRealtimePublisher());
         return (new CommandMonitor(publisher, time, new CommandRateOptions()), buffer, time);
     }
 

@@ -17,6 +17,7 @@ public sealed class UserAccountEntity
     public DateTimeOffset? LastLoginAt { get; set; }
     public int FailedLoginCount { get; set; }
     public DateTimeOffset? LockedUntil { get; set; }
+    public long Version { get; set; }
 
     public static string KeyOf(string username) => username.Trim().ToLowerInvariant();
 
@@ -38,5 +39,5 @@ public sealed class UserAccountEntity
     }
 
     public UserAccount ToRecord() => new(Username, DisplayName, Role, PasswordHash, ApiKeyHash, IsEnabled, CreatedAt,
-        PasswordChangedAt, LastLoginAt, FailedLoginCount, LockedUntil);
+        PasswordChangedAt, LastLoginAt, FailedLoginCount, LockedUntil) { Version = Version };
 }

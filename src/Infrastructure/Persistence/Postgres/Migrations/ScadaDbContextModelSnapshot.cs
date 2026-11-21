@@ -740,6 +740,11 @@ namespace Infrastructure.Persistence.Postgres.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("username");
 
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
                     b.HasKey("UsernameKey");
 
                     b.HasIndex("ApiKeyHash");

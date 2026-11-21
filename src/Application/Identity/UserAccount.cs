@@ -11,4 +11,7 @@ public sealed record UserAccount(
     DateTimeOffset? PasswordChangedAt,
     DateTimeOffset? LastLoginAt,
     int FailedLoginCount,
-    DateTimeOffset? LockedUntil);
+    DateTimeOffset? LockedUntil)
+{
+    public long Version { get; init; }
+}

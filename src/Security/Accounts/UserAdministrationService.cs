@@ -7,6 +7,8 @@ namespace Security.Accounts;
 /// <summary>Administrator-only account management. Every denied attempt is audited as a privilege-escalation indicator.</summary>
 public sealed class UserAdministrationService(IUserAccountStore store, IEventPublisher events, TimeProvider time)
 {
+    private const int MaxUpdateAttempts = 5;
+
     public async Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
@@ -32,8 +34,9 @@ public sealed class UserAdministrationService(IUserAccountStore store, IEventPub
     public Task<AccountOperationResult> RotatePasswordAsync(string username, Actor actor, CancellationToken cancellationToken)
     {
         var password = PasswordHasher.GeneratePassword();
+        var hash = new Lazy<string>(() => PasswordHasher.Hash(password));
         return ModifyAsync(username, actor, $"rotate password of {username}", account =>
-            (account with { PasswordHash = PasswordHasher.Hash(password), PasswordChangedAt = time.GetUtcNow(), FailedLoginCount = 0, LockedUntil = null },
+            (account with { PasswordHash = hash.Value, PasswordChangedAt = time.GetUtcNow(), FailedLoginCount = 0, LockedUntil = null },
                 new AccountOperationResult(AccountOperationStatus.Succeeded, "Password rotated", password)), cancellationToken);
     }
 
@@ -62,16 +65,23 @@ public sealed class UserAdministrationService(IUserAccountStore store, IEventPub
             return new AccountOperationResult(AccountOperationStatus.Denied, "Administrator role required.");
         }
 
-        if (string.IsNullOrWhiteSpace(username) || await store.FindAsync(username, cancellationToken) is not { } account)
-            return new AccountOperationResult(AccountOperationStatus.NotFound, "Account not found.");
+        for (var attempt = 0; attempt < MaxUpdateAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(username) || await store.FindAsync(username, cancellationToken) is not { } account)
+                return new AccountOperationResult(AccountOperationStatus.NotFound, "Account not found.");
 
-        var (updated, result) = change(account);
-        if (updated is null || !result.Succeeded)
+            var (updated, result) = change(account);
+            if (updated is null || !result.Succeeded)
+                return result;
+            if (!await store.TryUpdateAsync(updated, cancellationToken))
+                continue;
+
+            events.Publish(SecurityEvent.Create(time.GetUtcNow(), EventCategories.Audit, EventSeverity.Medium, "accounts",
+                $"Account change: {description}", actor.Name));
             return result;
+        }
 
-        await store.UpsertAsync(updated, cancellationToken);
-        events.Publish(SecurityEvent.Create(now, EventCategories.Audit, EventSeverity.Medium, "accounts",
-            $"Account change: {description}", actor.Name));
-        return result;
+        return new AccountOperationResult(AccountOperationStatus.Conflict, "The account changed concurrently. Try again.");
     }
 }

@@ -1,9 +1,12 @@
+using Application.Identity;
 using Application.Incidents;
 using Application.Telemetry;
 using DatabaseTests.Support;
 using Domain.Incidents;
 using Infrastructure.Persistence.Postgres.Stores;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace DatabaseTests.Migrations;
@@ -34,6 +37,45 @@ public sealed class MigrationTests(PostgresContainerFixture postgres)
         await database.MigrateAsync();
 
         Assert.Empty(await database.MigrateAsync());
+    }
+
+    [Fact]
+    public async Task ConcurrentMigratorsApplyTheSchemaOnlyOnce()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+
+        var applied = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => database.MigrateAsync()));
+
+        var migrations = Assert.Single(applied, result => result.Count > 0);
+        Assert.Contains(migrations, id => id.EndsWith("_InitialSchema", StringComparison.Ordinal));
+        Assert.Contains(migrations, id => id.EndsWith("_AddUserAccountVersion", StringComparison.Ordinal));
+        Assert.Equal(migrations.Count, await database.ScalarAsync<int>("SELECT count(*) FROM scada.__ef_migrations_history"));
+    }
+
+    [Fact]
+    public async Task ExistingAccountsCanBeUpdatedAfterAddingTheVersionColumn()
+    {
+        var database = await postgres.CreateDatabaseAsync();
+        var factory = database.ContextFactory();
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var initial = db.Database.GetMigrations().Single(id => id.EndsWith("_InitialSchema", StringComparison.Ordinal));
+            await db.GetService<IMigrator>().MigrateAsync(initial);
+        }
+        await database.ExecuteAsync("""
+            INSERT INTO scada.user_accounts
+                (username_key, username, display_name, role, password_hash, api_key_hash, is_enabled, created_at, failed_login_count)
+            VALUES ('ana', 'Ana', 'Ana', 'Operator', 'password-hash', 'key-hash', true, '2025-03-01T10:00:00Z', 2)
+            """);
+
+        Assert.Single(await database.MigrateAsync());
+
+        var store = new PostgresUserAccountStore(factory);
+        var account = await store.FindByApiKeyHashAsync("key-hash", CancellationToken.None);
+        Assert.NotNull(account);
+        Assert.Equal(0, account.Version);
+        Assert.True(await store.TryUpdateAsync(account with { Role = AccessRole.Viewer }, CancellationToken.None));
+        Assert.Equal(2, (await store.FindAsync("Ana", CancellationToken.None))!.FailedLoginCount);
     }
 
     [Fact]
