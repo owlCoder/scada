@@ -12,6 +12,13 @@ public static class GridDefinitionValidator
             || definition.Transformers.Any(x => x is null) || definition.Switches.Any(x => x is null) || definition.Loads.Any(x => x is null)
             || definition.Generators.Any(x => x is null) || definition.Capacitors.Any(x => x is null) || definition.Protections.Any(x => x is null)
             || definition.Rtus.Any(x => x is null)) return ["Definition elements must not be null."];
+        // Dense numerical Jacobian: bound both electrical nodes and collection traversal cost before allocating.
+        if (definition.Buses.Count + 3L * definition.Lines.Count + 2L * definition.Transformers.Count + definition.Sources.Count > 256)
+            return ["Network exceeds the 256 solver-node budget (buses + three nodes per line + two per transformer + sources)."];
+        if ((long)definition.Buses.Count + definition.Sources.Count + definition.Lines.Count + definition.Transformers.Count
+            + definition.Switches.Count + definition.Loads.Count + definition.Generators.Count + definition.Capacitors.Count
+            + definition.Protections.Count + definition.Rtus.Count > 2000)
+            return ["Network exceeds the 2000 element limit."];
         var errors = new List<string>();
         var d = definition;
         var allIds = d.Buses.Select(x => x.Id).Concat(d.Sources.Select(x => x.Id)).Concat(d.Lines.Select(x => x.Id))

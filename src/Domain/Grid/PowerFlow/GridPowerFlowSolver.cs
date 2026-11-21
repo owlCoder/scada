@@ -9,6 +9,8 @@ namespace Domain.Grid.PowerFlow;
 /// <summary>Polar Newton-Raphson on a 100 MVA base, with one ideal slack behind each source impedance.</summary>
 public sealed class GridPowerFlowSolver
 {
+    private Complex[] _warmStart = [];
+
     public const double BaseMva = 100;
     public const double Tolerance = 1e-6;
     public const int MaxIterations = 30;
@@ -20,8 +22,10 @@ public sealed class GridPowerFlowSolver
         var branches = new List<GridBranchModel>();
         var faults = new List<(string Id, int Node, bool Earth)>();
         var next = indices.Count;
-        foreach (var l in d.Lines.Where(l => world.Connected(l.Id)))
+        foreach (var l in d.Lines)
         {
+            var from = world.TerminalConnected(l.Id, l.FromBusId) ? indices[l.FromBusId] : next++;
+            var to = world.TerminalConnected(l.Id, l.ToBusId) ? indices[l.ToBusId] : next++;
             var zb = Math.Pow(d.Buses[indices[l.FromBusId]].NominalVoltageKv, 2) / BaseMva;
             var z = new Complex(l.ResistanceOhmPerKm, l.ReactanceOhmPerKm) * l.LengthKm / zb;
             var shunt = new Complex(0, l.SusceptanceMicroSiemensPerKm * 1e-6 * l.LengthKm * zb / 2);
@@ -29,13 +33,15 @@ public sealed class GridPowerFlowSolver
             {
                 var node = next++;
                 faults.Add((l.Id, node, world.Faults[l.Id] == GridEquipmentFault.EarthFault));
-                branches.Add(new(l.Id, indices[l.FromBusId], node, z / 2, 1, shunt / 2, shunt / 2, GridBranchKind.Line, l.RatedCurrentA));
-                branches.Add(new(l.Id, node, indices[l.ToBusId], z / 2, 1, shunt / 2, shunt / 2, GridBranchKind.Line, l.RatedCurrentA));
+                branches.Add(new(l.Id, from, node, z / 2, 1, shunt / 2, shunt / 2, GridBranchKind.Line, l.RatedCurrentA));
+                branches.Add(new(l.Id, node, to, z / 2, 1, shunt / 2, shunt / 2, GridBranchKind.Line, l.RatedCurrentA));
             }
-            else branches.Add(new(l.Id, indices[l.FromBusId], indices[l.ToBusId], z, 1, shunt, shunt, GridBranchKind.Line, l.RatedCurrentA));
+            else branches.Add(new(l.Id, from, to, z, 1, shunt, shunt, GridBranchKind.Line, l.RatedCurrentA));
         }
-        foreach (var t in d.Transformers.Where(t => world.Connected(t.Id)))
+        foreach (var t in d.Transformers)
         {
+            var from = world.TerminalConnected(t.Id, t.HvBusId) ? indices[t.HvBusId] : next++;
+            var to = world.TerminalConnected(t.Id, t.LvBusId) ? indices[t.LvBusId] : next++;
             var r = t.LoadLossKw / (1000 * t.RatedPowerMva);
             var z = t.ShortCircuitVoltagePercent / 100;
             var factor = BaseMva / t.RatedPowerMva * Math.Pow(t.LvRatedKv / d.Buses[indices[t.LvBusId]].NominalVoltageKv, 2);
@@ -43,8 +49,12 @@ public sealed class GridPowerFlowSolver
             var nominal = (t.HvRatedKv / t.LvRatedKv) /
                 (d.Buses[indices[t.HvBusId]].NominalVoltageKv / d.Buses[indices[t.LvBusId]].NominalVoltageKv);
             var tap = nominal / (1 + (world.Taps[t.Id] - t.TapNeutral) * t.TapStepPercent / 100);
-            branches.Add(new(t.Id, indices[t.HvBusId], indices[t.LvBusId], impedance, tap,
-                new(t.NoLoadLossKw / (1000 * BaseMva), 0), Complex.Zero, GridBranchKind.Transformer, t.RatedPowerMva));
+            // Declared training assumption: I0 = 0.2% of rated current, at least the iron-loss component.
+            var iron = t.NoLoadLossKw / 1000;
+            var excitation = t.NoLoadLossKw == 0 ? 0 : Math.Max(0.002 * t.RatedPowerMva, iron);
+            var magnetising = Math.Sqrt(excitation * excitation - iron * iron);
+            branches.Add(new(t.Id, from, to, impedance, tap,
+                new(iron / BaseMva, -magnetising / BaseMva), Complex.Zero, GridBranchKind.Transformer, t.RatedPowerMva));
         }
         var slack = new Dictionary<int, Complex>();
         var sources = new List<GridBranchModel>();
@@ -76,7 +86,7 @@ public sealed class GridPowerFlowSolver
         }
         foreach (var c in d.Capacitors.Where(c => world.Connected(c.Id)))
             y[indices[c.BusId], indices[c.BusId]] += new Complex(0, c.RatedPowerMvar * world.CapacitorSteps[c.Id] / c.Steps / BaseMva);
-        var voltage = Enumerable.Range(0, next).Select(i => energized.Contains(i) ? Complex.One : Complex.Zero).ToArray();
+        var voltage = Enumerable.Range(0, next).Select(i => energized.Contains(i) ? (_warmStart.Length == next && _warmStart[i].Magnitude > 0.05 ? _warmStart[i] : Complex.One) : Complex.Zero).ToArray();
         foreach (var (id, value) in slack) voltage[id] = value;
         var powers = new Complex[next];
         foreach (var l in d.Loads.Where(l => world.Connected(l.Id) && !world.ShedLoads.Contains(l.Id)))
@@ -118,6 +128,11 @@ public sealed class GridPowerFlowSolver
             }
         }
         var earthCurrents = new Dictionary<string, double>();
+        var faultActive = converged && faults.Any(f => energized.Contains(f.Node));
+        var prefaultVoltage = voltage.ToArray();
+        if (converged) _warmStart = prefaultVoltage;
+        var residual = GridResidualNetwork.Create(world, branches.Except(sources).ToArray(), indices, next);
+        var faultValid = true;
         if (converged && faults.Any(f => energized.Contains(f.Node)))
         {
             var active = faults.Where(f => energized.Contains(f.Node)).ToArray();
@@ -127,41 +142,51 @@ public sealed class GridPowerFlowSolver
             foreach (var fault in active)
             {
                 var rhs = new Complex[m]; rhs[Array.IndexOf(unknown, fault.Node)] = 1;
-                columns.Add(GridLinearAlgebra.Solve(reduced, rhs) ?? new Complex[m]);
+                var column = GridLinearAlgebra.Solve(reduced, rhs);
+                if (column is null) faultValid = false;
+                columns.Add(column ?? new Complex[m]);
             }
             var zFault = new Complex[active.Length, active.Length];
             for (var i = 0; i < active.Length; i++)
                 for (var j = 0; j < active.Length; j++)
                 {
                     zFault[i, j] = columns[j][Array.IndexOf(unknown, active[i].Node)];
-                    // Without sequence data, approximate an earth fault with Z0=Z1=Z2 (residual equivalent).
-                    if (i == j && active[i].Earth) zFault[i, j] *= 3;
+                    // Ia = 3E / (Z1 + Z2 + Z0), with Z2 = Z1; Z0 includes 3Rn.
+                    if (active[j].Earth) zFault[i, j] /= 3;
+                    if (active[i].Earth && active[j].Earth)
+                        zFault[i, j] += (columns[j][Array.IndexOf(unknown, active[i].Node)]
+                            + residual.Transfer(active[i].Node, active[j].Node)) / 3;
                 }
             var currents = GridLinearAlgebra.Solve(zFault, active.Select(f => voltage[f.Node]).ToArray());
             if (currents is not null)
             {
-                var earthDrop = new Complex[next];
+                var residualInjection = new Complex[next];
                 for (var i = 0; i < m; i++)
                     for (var f = 0; f < active.Length; f++)
                     {
-                        var drop = columns[f][i] * currents[f];
+                        var drop = columns[f][i] * currents[f] / (active[f].Earth ? 3 : 1);
                         voltage[unknown[i]] -= drop;
-                        if (active[f].Earth) earthDrop[unknown[i]] += drop;
                     }
-                foreach (var b in branches.Where(b => !sources.Contains(b)))
-                {
-                    var bus = d.Lines.FirstOrDefault(l => l.Id == b.Id)?.FromBusId ?? d.Transformers.First(t => t.Id == b.Id).HvBusId;
-                    var kv = d.Buses[indices[bus]].NominalVoltageKv;
-                    var current = b.FromCurrent(earthDrop).Magnitude * BaseMva * 1000 / (Math.Sqrt(3) * kv);
-                    earthCurrents[b.Id] = Math.Max(earthCurrents.GetValueOrDefault(b.Id), current);
-                }
+                for (var f = 0; f < active.Length; f++)
+                    if (active[f].Earth) residualInjection[active[f].Node] += currents[f];
+                earthCurrents = residual.TerminalCurrents(residualInjection);
             }
+            else faultValid = false;
         }
-        var import = sources.Sum(b => (voltage[b.From] * Complex.Conjugate(b.FromCurrent(voltage))).Real) * BaseMva;
-        var sourceLoss = sources.Sum(b => (voltage[b.From] * Complex.Conjugate(b.FromCurrent(voltage))
-            + voltage[b.To] * Complex.Conjugate(b.ToCurrent(voltage))).Real) * BaseMva;
-        return new(converged, iterations, indices.ToDictionary(x => x.Key, x => voltage[x.Value]),
-            branches.Except(sources).ToArray(), voltage, indices, import, sourceLoss, earthCurrents);
+        var import = sources.Sum(b => (prefaultVoltage[b.From] * Complex.Conjugate(b.FromCurrent(prefaultVoltage))).Real) * BaseMva;
+        var sourceLoss = sources.Sum(b => (prefaultVoltage[b.From] * Complex.Conjugate(b.FromCurrent(prefaultVoltage))
+            + prefaultVoltage[b.To] * Complex.Conjugate(b.ToCurrent(prefaultVoltage))).Real) * BaseMva;
+        return new(converged && faultValid, Math.Max(1, iterations), indices.ToDictionary(x => x.Key, x => voltage[x.Value]),
+            branches.Except(sources).ToArray(), voltage, indices, import, sourceLoss, earthCurrents)
+        {
+            LoadPowersMw = d.Loads.ToDictionary(l => l.Id, l => world.Connected(l.Id) && !world.ShedLoads.Contains(l.Id)
+                && energized.Contains(indices[l.BusId]) ? world.Demand[l.Id] * GridProfiles.VoltageFactor(prefaultVoltage[indices[l.BusId]].Magnitude) : 0),
+            GeneratorPowersMw = d.Generators.ToDictionary(g => g.Id, g => world.Connected(g.Id)
+                && energized.Contains(indices[g.BusId]) ? world.Generation[g.Id] : 0),
+            FaultActive = faultActive,
+            EnergizedBuses = indices.Where(x => energized.Contains(x.Value)).Select(x => x.Key).ToHashSet(),
+            PrefaultVoltages = prefaultVoltage
+        };
 
         double[] Residual(Complex[] v)
         {

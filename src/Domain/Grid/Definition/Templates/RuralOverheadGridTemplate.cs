@@ -123,8 +123,8 @@ public static class RuralOverheadGridTemplate
         rtus.Add(new("RTU3", "Feeder B RTU", 3, null, feederRtuIds[1]));
         rtus.Add(new("RTU4", "Feeder C RTU", 4, null, feederRtuIds[2]));
 
-        return new("Rural 20 kV overhead grid (20 MVA, PV parks)", 50, buses,
+        return GridProtectionDefaults.Add(new("Rural 20 kV overhead grid (20 MVA, PV parks)", 50, buses,
             [new("GRID", "110 kV upstream grid", "HV", 1, 1500, new(0, 8))], lines, transformers,
-            switches, loads, generators, capacitors, protections, rtus);
+            switches, loads, generators, capacitors, protections, rtus));
     }
 }

@@ -152,8 +152,8 @@ public static class UrbanCableGridTemplate
         rtus.Add(new("RTU4", "Ring B feeder F3 RTU", 4, null, feederRtuIds[2]));
         rtus.Add(new("RTU5", "Ring B feeder F4 RTU", 5, null, feederRtuIds[3]));
 
-        return new("Urban 20 kV cable grid (2x40 MVA)", 50, buses,
+        return GridProtectionDefaults.Add(new("Urban 20 kV cable grid (2x40 MVA)", 50, buses,
             [new("GRID", "110 kV upstream grid", "HV", 1, 3000, new(0, 8))], lines, transformers,
-            switches, loads, generators, capacitors, protections, rtus);
+            switches, loads, generators, capacitors, protections, rtus));
     }
 }

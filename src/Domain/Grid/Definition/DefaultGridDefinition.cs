@@ -96,8 +96,8 @@ public static class DefaultGridDefinition
         rtus[1] = rtus[1] with { ElementIds = rtus[1].ElementIds.Concat(["TIE", "TIE-LINE"]).ToArray() };
         rtus[2] = rtus[2] with { ElementIds = rtus[2].ElementIds.Concat(["PV2"]).ToArray() };
         rtus.Insert(0, new("RTU1", "Primary substation RTU", 1, null, ["HV", "MV", "GRID", "TR1", "Q0", "DS0", "CAP1", "Q0-51", "MV-27"]));
-        return new("Central European distribution grid", 50, buses,
+        return GridProtectionDefaults.Add(new("Central European distribution grid", 50, buses,
             [new("GRID", "110 kV grid", "HV", 1, 2500, new(0, 6))], lines, transformers,
-            switches, loads, generators, capacitors, protections, rtus);
+            switches, loads, generators, capacitors, protections, rtus));
     }
 }

@@ -1,5 +1,7 @@
 namespace Domain.Grid.Snapshots;
 
+/// <param name="Converged">True only for a current normal power flow. Fault periods retain prefault power estimates
+/// with Uncertain power measurement quality; stale/diverged results mark all measurements Uncertain and raise SolverDivergence.</param>
 /// <summary>Complete state of the network after one simulation step (ground truth; redact before showing to operators).</summary>
 public sealed record GridSnapshot(
     string Name,

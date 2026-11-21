@@ -9,47 +9,112 @@ distribution network. The mode is selected on the sign-in page; water code paths
 
 Topology (`Domain.Grid.Network.GridWorld`):
 
-- Switch states decide connectivity. BFS from the source slack nodes marks the energized island; every other node gets
-  0 V and its loads report loss of supply.
+- Each branch terminal has its own switch connectivity. An open terminal attaches to an isolated internal equipment node, rather than deleting the branch; the other terminal retains line charging and can backfeed a midpoint fault. BFS from the source slack nodes marks the energized island; every other node gets
+  0 V and its loads report loss of supply. Branch current snapshots use the larger physical terminal current;
+  protection always uses its own switch terminal and voltage base.
 - Lines are pi-models (`R+jX` per km × length, charging `B` split to both ends). Transformers are pi-models with an
-  off-nominal tap on the HV terminal: `Yff = (1/Z + Ysh)/τ²`, `Yft = -1/(Z·τ)`, `Ytt = 1/Z + Ysh`, with
-  `Z = (Pcu + j√(uk²−Pcu²)) · (Sbase/Srated) · (Vlv,bus/Vlv,rated)²` and `τ = (Vhv,rated/Vlv,rated)/(Vhv,bus/Vlv,bus) / (1 + (tap−neutral)·step%)`.
+  off-nominal tap on the HV terminal: `Yff = (1/Z + Ysh)/τ²`, `Yft = -1/(Z·τ)`, `Ytt = 1/Z + Ysh,to`, with
+  `r = Pcu,kW/(1000 Srated,MVA)`, `uk = uk,%/100`,
+  `Z = (r + j√(uk²−r²)) · (Sbase/Srated) · (Vlv,rated/Vlv,bus)²` and `τ = (Vhv,rated/Vlv,rated)/(Vhv,bus/Vlv,bus) / (1 + (tap−neutral)·step%)`.
 - The 110 kV infeed is a slack bus (`VoltageSetpointPu`, default 1.0) behind its Thevenin impedance
   `Z = (Sbase/Sk")·(1+j10)/√101`.
 - Capacitor banks are shunt admittances `j·Q·steps/stepsMax/Sbase` with `Q ∝ V²` in the snapshot.
 
 Power flow (`Domain.Grid.PowerFlow.GridPowerFlowSolver`): polar Newton–Raphson in per-unit on a 100 MVA base with
 per-voltage-level impedance bases. Unknowns are `|V|, δ` of every non-slack energized node; the Jacobian is evaluated by
-central finite differences of the power mismatch `S_specified − V·(YV)*`. Loads have a ZIP voltage dependency
-(`P(V) = P·(0.4 + 0.3·V + 0.3·V²)`); PV plants are PQ injections following the sun curve
-`max(0, sin(π·(h−6)/12))`; the solver therefore handles radial and meshed (tie closed) networks identically.
+forward finite differences of the power mismatch `S_specified − V·(YV)*`. Loads have a ZIP voltage dependency
+(`P(V) = P·(0.4 + 0.3·V + 0.3·V²)`); PV plants are PQ injections following
+a daylight/weather envelope (see profiles below); the solver therefore handles radial and meshed (tie closed) networks identically.
 Convergence tolerance is 1e-6 pu, max 30 iterations, with damping when a voltage delta exceeds 0.2 pu. On divergence the
 last good state is kept and a `SolverDivergence` alarm is raised.
 
-Short circuit: an injected `ThreePhaseShortCircuit`/`EarthFault` on a line is modelled as a fault node in the middle of the
-line (bus faults at the bus). The Thevenin impedance at the fault point is read from the inverse of the network admittance
-(`Z = Y⁻¹` restricted to the energized block), `I_f = V_f/Z_th`, and the resulting voltage drop is superimposed on the
-pre-fault solution (earth faults use a residual equivalent `Z0 ≈ 3·Z1`, which also yields the 51N earth current per branch).
+Short circuit: an injected `ThreePhaseShortCircuit`/`EarthFault` on a line uses a midpoint fault node; bus faults
+use the bus node. The positive-sequence driving-point/transfer impedances come from the reduced admittance inverse.
+For a three-phase fault, `If = E/Z1`; voltages follow Thevenin superposition. These are fault currents and voltages,
+not a converged post-fault PQ power flow. Inverter fault-current injection is deliberately omitted (zero additional
+inverter contribution), rather than extending unrestricted PQ generation into a fault.
+
+Earthing is a declared training equivalent, with no new definition record fields:
+
+- Each MV transformer LV neutral uses a resistor rated **300 A at nominal phase voltage**: at 20 kV,
+  `Rn = 20000/(sqrt(3)*300) = 38.49 ohm`. Separate neutrals contribute separately when bus sections are coupled;
+  300 A is the per-neutral nominal rating, not a network-wide clamp. External source voltage zones use the same
+  nominal 300 A equivalent. The default tap +2 gives approximately 307 A for a nearby MV earth fault.
+- The zero-sequence network contains line series impedances `Z0,line = 3 Z1,line`, neutral paths
+  `Z0,neutral = Z1,transformer + 3 Rn`, and no zero-sequence transfer between transformer voltage levels.
+  Distribution LV neutrals are solidly grounded (`Rn=0`, `Z0,transformer=Z1,transformer`). These are assumed
+  equivalents, not vector-group-specific sequence data; charging earth current and grounding-electrode impedance
+  are omitted. Vector-group clock displacement is outside the balanced model.
+- With `Z2=Z1`, an earth fault uses `Ia = 3 I0 = 3 E/(Z1+Z2+Z0)`; positive-sequence voltage changes use `I1=Ia/3`.
+  A separate zero-sequence solve routes **3I0 per terminal**, using that terminal's voltage/current base. Thus an MV
+  earth fault reaches the MV neutral backup, but is not incorrectly passed to an HV-side residual relay.
+  Phase protection/interruption uses the conservative phase envelope `|Ipositive| + 2 |3I0|/3` at each terminal.
+  Bus voltages during earth faults are positive-sequence magnitudes, not reconstructed individual phase voltages.
 
 Protection (`Domain.Grid.Protection.GridProtectionCurves`, IEC 60255): operate time
 `SI: t = TMS·0.14/((I/Is)^0.02−1)`, `VI: t = TMS·13.5/((I/Is)−1)`, `EI: t = TMS·80/((I/Is)²−1)`, definite time `t = TMS`.
-Each relay accumulates `dt/t_op` per simulation sub-step (0.02 s while a fault is present); at 1.0 it trips its breaker.
-Closing onto a persistent fault re-trips (the relay re-accumulates because the breaker operation counter changed).
-`SwitchStuck` makes a breaker refuse to open; the busbar/incomer 51 with a longer delay then clears the fault (backup protection).
+Each relay accumulates `dt/t_op`. The engine splits at the earliest relay crossing, AVR delay, or absolute simulation
+second (profile sample). Crossing times use simulation ticks; zero-delay operation has a minimum 1 microsecond
+interval. Integration and profile cadence do not depend on an outer fault flag or outer step size. All timers integrate
+against the same pre-event state before boundary operations are applied, so opening one circuit cannot retroactively
+change another relay's elapsed current or credit AVR time before fault clearance. Pickup dropout,
+opening/reclosing, disabled/changed settings, and invalid solver data reset progress immediately; there is no thermal
+memory. Closing onto a persistent fault starts a fresh operate interval.
 
-OLTC/AVR: every `AvrDelaySeconds` the tap moves one step toward `AvrTargetLvKv` while the error exceeds the deadband
-(`target·deadband%/2`). Tap commands in automatic mode are rejected (set manual first).
+`Tripped` and `LastTripAt` are latched only after an accepted breaker opening. `SwitchStuck` or terminal current above
+`BreakingCapacityKa * 1000` leaves it closed, emits `BreakerFailed`, and latches a high `BreakerFailure` alarm. A
+failed relay attempt is held until dropout/reset rather than retried every substep. Successful opening clears the
+failure alarm. Load-break switches with no fault interruption rating cannot interrupt a carrying fault; numeric
+ratings, when present, are enforced. An unspecified breaker rating remains unspecified, so edited definitions should
+provide one. Default 25 kA MV and 50 kA local LV breakers cover these networks' fault levels.
+
+Built-in incomers have 51N backup **75 A / 0.8 s**, graded behind feeder 51N (default 50 A / 0.2 s). It clears a
+resistance-limited fault even when a feeder breaker fails and phase 51/27 do not pick up. Three-phase faults retain
+the phase backup. Every built-in distribution transformer has an additive LV breaker with a local definite-time
+51 equivalent (**1.5 times rated LV current / 0.15 s**), ahead of feeder backup for local LV faults. These are
+training equivalents to local fuse/overcurrent protection, without inrush, automatic reclosing or detailed fuse curves.
+
+Undervoltage 27 uses source-connectivity supervision: a source-connected zero-voltage bus picks up 27, while a
+bus with no source path is blocked. Dead-bus undervoltage alarms are likewise blocked; load loss-of-supply alarms
+still identify the outage. AVR and all physics-based alarm/relay decisions suspend on invalid current solver data.
+
+Transformer excitation uses `Yexc = G - j Bm`, with `G = P0/Sbase`. Since the definition has no measured no-load
+current field, nonzero iron loss uses an illustrative **0.2% rated no-load current**, floored at the iron-loss VA:
+`S0=max(0.002 Srated, P0)`, `Qm=sqrt(S0²-P0²)`, `Bm=Qm/Sbase`. A zero-loss ideal transformer retains zero excitation.
+For TR1 this is approximately 22 kW and 59 kvar at rated winding voltage. Manufacturer data is required for design work.
+
+OLTC/AVR requires continuous error in the same direction outside `target·deadband%/2`. Deadband entry, error reversal,
+mode change, tap command, fault state or invalid solver data resets its timer. Each elapsed delay moves one tap toward
+the target, re-solves voltage and starts a new interval; a large outer step can include several tap moves and respects
+limits. Tap commands in automatic mode are rejected (set manual first).
 
 Alarms (`GridAlarmType`) have pickup delay and hysteresis: under/overvoltage raise at the bus limit and clear 0.01 pu
 inside it (2 s delay), overload raises above 100 % and clears below 98 % (5 s), high overload above 110 %; plus
 protection trip, loss of supply per load, communication loss per RTU, tap at limit and solver divergence.
 
 Measurements: every RTU reports voltage/current/power/tap/switch-state for its elements plus frequency (50 Hz ± 0.005).
+Normal solved powers satisfy `Pimport + Pgeneration = Pload + Ploss`, including source impedance losses and
+transformer excitation. `Converged=true` identifies a current normal PQ result. During an energized fault,
+`Converged=false`, current/voltage measurements use the valid fault solution, and all power measurements have
+`Uncertain` quality: branch/load/generator powers and totals are **balanced prefault estimates**, not fault power.
+They have no additional inverter fault contribution. A `SolverDivergence` alarm distinguishes stale results:
+voltages, currents and solved powers freeze at the last valid result, all measurements become `Uncertain`, and
+protection/AVR suspend until a valid solve returns. Opening commands are interlocked while current data is invalid,
+because interruption capability cannot be checked. This preserves finite, JSON-serializable contract numbers.
+Consumers must carry the validity/quality flags when displaying estimates.
+
 Analog values carry ±0.2 % seeded noise; an offline RTU reports `Bad` quality with frozen last values; a spoof overrides the
 reported value (ground truth `TrueValue`/`IsSpoofed` is visible to Administrators only).
 
 Daily profiles (`Domain.Grid.Profiles.GridProfiles`): 24-point residential (evening peak 19–20 h), commercial (daytime)
-and industrial (shift) curves interpolated at the simulated time of day, plus small seeded noise. The simulation starts at
+and industrial (shift) curves interpolated on absolute simulation-second boundaries, including the represented end
+second (less than one second of quantisation, never one outer step of lag). A shared smooth ±1.5% demand variation
+models correlation; constant-profile loads remain constant. Days 5/6 in each seven-day cycle represent weekends:
+commercial/industrial demand scales to 65%/80%, residential to 105%. PV uses daylight
+`D=12+3 sin(2π day/365)` hours, sunrise `12-D/2`, amplitude `0.72+0.18 sin(1.73 day+0.4)`, and
+`P/Pmax=amplitude * sin(π(h-sunrise)/D)^1.5` during daylight, zero otherwise. Simulation day zero is an illustrative
+spring weekday; advancing days changes season and repeatable daily weather. This is an illustrative teaching
+profile, not a dated Serbian annual production forecast. RTU noise remains seeded. The simulation starts at
 `Grid:StartTimeOfDay` (default 08:00) and advances `Grid:StepSeconds` per step.
 
 ## Default network
@@ -58,11 +123,11 @@ and industrial (shift) curves interpolated at the simulated time of day, plus sm
 
 - 110 kV infeed `GRID` (Sk" 2500 MVA) → `TR1` 110/20 kV, 31.5 MVA, uk 12 %, OLTC ±10 × 1.5 %, AVR target 20.5 kV,
   deadband 1.5 %, delay 30 s → 20 kV busbar `MV` with incomer breaker `Q0` (backup 51, 1200 A / 1.2 s) and busbar
-  undervoltage `MV-27` (0.8 pu / 5 s).
+  undervoltage `MV-27` (0.8 pu / 5 s) and neutral backup 51N (75 A / 0.8 s).
 - Three feeders `F1`–`F3`, each with a busbar breaker `QF1`–`QF3` and 51 (SI, 220 A / 0.15), 50 (1500 A / 0.08 s) and 51N
   (50 A / 0.2 s): F1 urban cable NA2XS(F)2Y 3x1x150 (0.206+j0.122 Ω/km, 300 A), F2 mixed, F3 rural overhead Al/Fe 95/15
   (0.306+j0.365 Ω/km, 330 A).
-- 11 distribution substations 20/0.4 kV (0.63/1.0 MVA, uk 6 %, Dyn11) with disconnectors, each feeding a 0.4 kV bus with
+- 11 distribution substations 20/0.4 kV (0.63/1.0 MVA, uk 6 %, Dyn11) with disconnectors and local LV breaker/51 equivalents, each feeding a 0.4 kV bus with
   aggregated consumers (residential ~190, commercial ~85, industrial ~12 customers; peaks 0.38–0.68 MW).
 - 2 PV plants (0.8 MW at 0.4 kV, 1.5 MW at 20 kV), one 20 kV capacitor bank `CAP1` (2 Mvar, 4 steps), and a normally-open
   tie load-break switch `TIE` between the ends of F2 and F3 for restoration.
@@ -130,12 +195,22 @@ Section `Grid` (see [configuration.md](configuration.md)):
 | `Grid:Enabled` | `true` | Run the hosted grid loop and load the active definition on startup |
 | `Grid:StepSeconds` | `1` | Simulated seconds per step (0,60] |
 | `Grid:TimeScale` | `60` | Simulated seconds per wall second; the loop uses a wall-clock timer |
-| `Grid:RandomSeed` | `104` | Seed for noise, profiles jitter and measurement noise |
+| `Grid:RandomSeed` | `104` | Seed for frequency and measurement noise |
 | `Grid:SelectTimeoutSeconds` | `30` | Select-before-operate timeout (wall clock) |
 | `Grid:StartTimeOfDay` | `08:00` | Simulated time of day at startup (HH:mm) |
 
 The loop timer is deliberately wall-clock (`new PeriodicTimer(period)`), like the water `SimulationService`: tests may
 replace the DI `TimeProvider` with a fake one, and a fake-time timer would fire thousands of steps per `Advance()`.
+
+## Definition size limits
+
+Validation rejects a worst-case solver-node budget above **256**:
+`buses + 3*lines + 2*transformers + sources` (two possible open internal terminals plus a midpoint fault per line),
+and more than **2000 total definition elements**. The dense complex Y matrix is quadratic and the real numerical
+Jacobian has up to twice the energized unknown count in each dimension; factorization is cubic. This deliberately
+conservative interactive-training limit covers all built-in networks and bounds a worst-case Jacobian near 2 MiB,
+rather than allowing thousands of drawn buses to allocate gigabytes during activation. Larger networks need a
+sparse solver and a separate scaling review. Missing scenario targets on a line-less network return clean errors.
 
 ## Storage
 
