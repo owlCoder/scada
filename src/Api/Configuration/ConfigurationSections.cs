@@ -11,6 +11,7 @@ public static class ConfigurationSections
     public const string CommandRate = "Security:CommandRate";
     public const string Users = "Security:Users";
     public const string Modbus = "Protocols:Modbus";
+    public const string OpcUa = "Protocols:OpcUa";
     public const string ApiKeys = "Security:ApiKeys";
     public const string Lockout = "Security:Lockout";
     public const string DevelopmentAccounts = "Security:DevelopmentAccounts";

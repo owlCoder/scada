@@ -2,5 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="../Application/Application.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.196" />
+    <InternalsVisibleTo Include="UnitTests" />
   </ItemGroup>
 </Project>
