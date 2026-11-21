@@ -31,10 +31,10 @@ public sealed class GridProtectionTamperingRule(IGridView view) : GridDetectionR
 
         foreach (var protection in context.Current.Protections.Where(p => p.SettingsChanged))
         {
-            var definition = _view.Definition.Protections.FirstOrDefault(p => p.Id == protection.Id);
             subjects.TryAdd(protection.Id,
-                $"enabled={protection.Enabled}, pickup={protection.PickupValue}, time={protection.TimeSetting}" +
-                (definition is null ? "" : $" (definition: enabled={definition.Enabled}, pickup={definition.PickupValue}, time={definition.TimeSetting})"));
+                // Operators and incidents learn that the relay no longer matches its approved settings, not the tampered values
+                // (instructors see those on the protection page).
+                protection.Enabled ? "settings differ from the approved definition" : "relay disabled");
         }
 
         foreach (var (protectionId, detail) in subjects)

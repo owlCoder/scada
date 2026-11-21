@@ -38,10 +38,10 @@ public sealed class GridMeasurementInconsistencyRule(IGridView view) : GridDetec
                 continue;
             findings.Add(new($"measurement:{measurement.Id}", $"Measurement {measurement.Id} deviates from physical value",
                 $"{measurement.Kind} on {measurement.ElementId} reports {measurement.ReportedValue:0.###} {measurement.Unit} " +
-                $"but the network state implies {measurement.TrueValue:0.###} ({deviation:0.#}% deviation).",
+                $"but disagrees with the network state estimate by {deviation:0.#}%.",
                 measurement.ElementId,
                 [Evidence("measurement", measurement.Id,
-                    string.Create(CultureInfo.InvariantCulture, $"reported {measurement.ReportedValue:0.####}, true {measurement.TrueValue:0.####}, deviation {deviation:0.##}%"))]));
+                    string.Create(CultureInfo.InvariantCulture, $"reported {measurement.ReportedValue:0.####}, state-estimate deviation {deviation:0.##}%"))]));
         }
 
         // (b) Kirchhoff residual per bus using reported values where telemetered, true values otherwise.

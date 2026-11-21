@@ -61,7 +61,8 @@
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         var loadId = ++_loadId;
-        var result = await EventStore.QueryAsync(_query, cancellationToken);
+        // Training events are for instructors only; the session role is applied at query time.
+        var result = await EventStore.QueryAsync(_query with { ExcludeTraining = !Session.IsInstructor }, cancellationToken);
         if (loadId == _loadId)
             _result = result;
     }

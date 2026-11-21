@@ -39,6 +39,8 @@ public sealed class PostgresEventStore(IDbContextFactory<ScadaDbContext> factory
         await using var db = await factory.CreateDbContextAsync(cancellationToken);
         query = query.Normalize();
         var items = db.Events.AsNoTracking();
+        if (query.ExcludeTraining)
+            items = items.Where(e => e.Category != EventCategories.Scenario);
         if (!string.IsNullOrWhiteSpace(query.Category))
             items = items.Where(e => e.Category.ToLower() == query.Category.Trim().ToLower());
         if (!string.IsNullOrWhiteSpace(query.Actor))

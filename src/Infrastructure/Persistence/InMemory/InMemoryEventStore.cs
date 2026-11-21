@@ -36,6 +36,8 @@ public sealed class InMemoryEventStore(int capacity = 50_000) : IEventStore, IRe
             snapshot = _events.Reverse().ToArray();
 
         IEnumerable<SecurityEvent> items = snapshot;
+        if (query.ExcludeTraining)
+            items = items.Where(e => !string.Equals(e.Category, EventCategories.Scenario, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrWhiteSpace(query.Category))
             items = items.Where(e => string.Equals(e.Category, query.Category, StringComparison.OrdinalIgnoreCase));
         if (!string.IsNullOrWhiteSpace(query.Actor))

@@ -1,3 +1,4 @@
+using Application.Events;
 using Application.Realtime;
 using Application.Simulation;
 using Domain.Process.Snapshots;
@@ -32,6 +33,9 @@ internal sealed class HubClientSubscription : IAsyncDisposable
         {
             await foreach (var message in _subscription.Reader.ReadAllAsync(_stop.Token))
             {
+                // Training events (injected faults, spoofing, tampering) are for instructors only.
+                if (!instructor && message.Payload is SecurityEvent { Category: EventCategories.Scenario })
+                    continue;
                 var payload = !instructor && message.Payload is PlantSnapshot plant
                     ? PlantViewRedactor.ForOperators(plant) : message.Payload;
                 await client.SendAsync(ScadaHub.MessageMethod, message.Topic, payload, _stop.Token);

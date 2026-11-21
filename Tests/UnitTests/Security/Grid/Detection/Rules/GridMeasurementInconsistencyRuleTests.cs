@@ -25,7 +25,12 @@ public sealed class GridMeasurementInconsistencyRuleTests
 
         var findings = rule.Evaluate(ContextOf(report), rule.DefaultSettings);
 
-        Assert.Contains(findings, f => f.Key == $"measurement:{measurementId}");
+        var finding = Assert.Single(findings, f => f.Key == $"measurement:{measurementId}");
+        // Findings become detections and incidents that operators read: they must not carry the true value.
+        var trueText = view.Snapshot().Measurements.Single(m => m.Id == measurementId).TrueValue
+            .ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.DoesNotContain(trueText, finding.Description, StringComparison.Ordinal);
+        Assert.All(finding.Evidence, e => Assert.DoesNotContain("true", e.Detail, StringComparison.OrdinalIgnoreCase));
 
         return Task.CompletedTask;
     }
