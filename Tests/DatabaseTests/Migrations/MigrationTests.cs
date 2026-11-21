@@ -46,7 +46,9 @@ public sealed class MigrationTests(PostgresContainerFixture postgres)
             VALUES (1, '2025-03-01T10:00:00Z', interval '1 second', 'LT-101', 42, 'Good', 'legacy-hash'),
                    (1, '2025-03-01T10:00:00Z', interval '1 second', 'LT-101', 42, 'Good', 'legacy-hash')
             """);
-        Assert.Single(await database.MigrateAsync());
+        var applied = await database.MigrateAsync();
+        Assert.Equal(new[] { "AddTelemetrySampleIdentity", "AddGridDefinitions" },
+            applied.Select(id => id[(id.IndexOf('_') + 1)..]));
         var store = new PostgresTelemetryStore(database.ContextFactory());
         var rows = await store.QueryAsync(new TelemetryQuery(null, null, null), CancellationToken.None);
         Assert.Equal(2, rows.Count);
@@ -110,7 +112,7 @@ public sealed class MigrationTests(PostgresContainerFixture postgres)
             VALUES ('ana', 'Ana', 'Ana', 'Operator', 'password-hash', 'key-hash', true, '2025-03-01T10:00:00Z', 2)
             """);
 
-        Assert.Equal(new[] { "AddUserAccountVersion", "AddTelemetrySampleIdentity" },
+        Assert.Equal(new[] { "AddUserAccountVersion", "AddTelemetrySampleIdentity", "AddGridDefinitions" },
             (await database.MigrateAsync()).Select(id => id[(id.IndexOf('_') + 1)..]));
 
         var store = new PostgresUserAccountStore(factory);

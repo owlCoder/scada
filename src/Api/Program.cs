@@ -65,6 +65,7 @@ ScenarioEndpoints.Map(app);
 DetectionEndpoints.Map(app);
 GridSecurityEndpoints.Map(app);
 AccountEndpoints.Map(app);
+Api.Endpoints.Grid.GridEndpoints.Map(app);
 app.MapScadaHmi();
 
 app.Run();

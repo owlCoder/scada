@@ -22,6 +22,7 @@ public static class ServiceRegistrationExtensions
             .AddScadaHmi()
             .AddGridHmiServices()
             .AddProtocolServices()
+            .AddGridServices()
             .AddHostedWorkers();
     }
 }

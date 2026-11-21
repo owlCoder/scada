@@ -13,6 +13,7 @@ public sealed class ScadaDbContext(DbContextOptions<ScadaDbContext> options) : D
     public const string Schema = "scada";
     public const string MigrationsHistoryTable = "__ef_migrations_history";
 
+    public DbSet<GridDefinitionEntity> GridDefinitions => Set<GridDefinitionEntity>();
     public DbSet<EventEntity> Events => Set<EventEntity>();
     public DbSet<TelemetrySampleEntity> Telemetry => Set<TelemetrySampleEntity>();
     public DbSet<AlarmHistoryEntity> AlarmHistory => Set<AlarmHistoryEntity>();
@@ -28,6 +29,7 @@ public sealed class ScadaDbContext(DbContextOptions<ScadaDbContext> options) : D
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);
+        GridDefinitionEntityConfiguration.Apply(modelBuilder);
         EventEntityConfiguration.Apply(modelBuilder);
         TelemetrySampleEntityConfiguration.Apply(modelBuilder);
         AlarmHistoryEntityConfiguration.Apply(modelBuilder);
