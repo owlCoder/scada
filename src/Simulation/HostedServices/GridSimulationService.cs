@@ -6,7 +6,7 @@ namespace Simulation.HostedServices;
 
 /// <summary>Loads the active grid before stepping; electrical time advances independently of the water plant.</summary>
 public sealed class GridSimulationService(GridCoordinator coordinator, GridEngine engine, IGridDefinitionStore store,
-    GridOptions options, TimeProvider time, ILogger<GridSimulationService> logger) : BackgroundService
+    GridOptions options, ILogger<GridSimulationService> logger) : BackgroundService
 {
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -18,7 +18,9 @@ public sealed class GridSimulationService(GridCoordinator coordinator, GridEngin
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Enabled) return;
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.StepSeconds / options.TimeScale), time);
+        // Wall-clock timer on purpose, exactly like the water SimulationService: tests may replace the DI
+        // TimeProvider with a fake one, and a fake-time PeriodicTimer would fire thousands of steps per Advance().
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(options.StepSeconds / options.TimeScale));
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try { await coordinator.StepAsync(false, stoppingToken); }
