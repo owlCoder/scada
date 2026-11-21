@@ -126,12 +126,12 @@ public sealed class GridCoordinator(GridEngine engine, IGridDefinitionStore stor
     {
         foreach (var e in report.Events)
         {
-            var category = e.Kind is GridStepEventKind.ProtectionTripped or GridStepEventKind.AlarmRaised or GridStepEventKind.SupplyLost
+            var category = e.Kind is GridStepEventKind.ProtectionTripped or GridStepEventKind.BreakerFailed or GridStepEventKind.AlarmRaised or GridStepEventKind.SupplyLost
                 ? EventCategories.ProcessAlarm : e.Kind == GridStepEventKind.RtuOnlineChanged ? EventCategories.Communication
                 : e.Kind is GridStepEventKind.ProtectionSettingChanged or GridStepEventKind.MeasurementSpoofed or GridStepEventKind.FaultInjected
                     ? EventCategories.Scenario : EventCategories.DeviceChange;
             events.Publish(SecurityEvent.Create(report.Timestamp, category,
-                e.Kind is GridStepEventKind.ProtectionTripped or GridStepEventKind.SupplyLost ? EventSeverity.High : EventSeverity.Information,
+                e.Kind is GridStepEventKind.ProtectionTripped or GridStepEventKind.BreakerFailed or GridStepEventKind.SupplyLost ? EventSeverity.High : EventSeverity.Information,
                 $"grid:{e.Channel ?? "engine"}", e.Message, e.Actor ?? "grid", e.SourceId));
         }
         var visible = GridViewRedactor.ForOperators(report.Snapshot, engine.Definition);

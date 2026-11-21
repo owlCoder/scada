@@ -8,6 +8,7 @@ public sealed class GridRelayState(GridProtectionDefinition definition)
     public long LastTripOperation { get; set; } = -1;
     public double Progress { get; set; }
     public bool PickedUp { get; set; }
+    public bool Failed { get; set; }
     public bool Tripped { get; set; }
     public TimeSpan? LastTripAt { get; set; }
 }

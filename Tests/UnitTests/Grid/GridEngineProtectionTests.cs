@@ -49,10 +49,13 @@ public sealed class GridEngineProtectionTests
         world.Step(0.5);
         Assert.True(world.Switches["QF1"].Closed);
         Assert.True(world.Switches["Q0"].Closed);
-        Assert.True(world.Relays["QF1-50"].Tripped);
+        Assert.False(world.Relays["QF1-50"].Tripped);
+        Assert.True(world.Relays["QF1-50"].Failed);
+        Assert.Contains(world.Snapshot().Alarms, a => a.SourceId == "QF1" && a.Type == GridAlarmType.BreakerFailure && a.Active);
         world.Step(1);
         Assert.False(world.Switches["Q0"].Closed);
-        Assert.True(world.Relays["Q0-51"].LastTripAt > world.Relays["QF1-50"].LastTripAt);
+        Assert.Null(world.Relays["QF1-50"].LastTripAt);
+        Assert.Equal(TimeSpan.FromHours(8) + TimeSpan.FromSeconds(1.2), world.Relays["Q0-51"].LastTripAt);
         Assert.Equal(0, world.Snapshot().Totals.CustomersSupplied);
         return Task.CompletedTask;
     }

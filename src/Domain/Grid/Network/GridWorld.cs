@@ -16,6 +16,7 @@ public sealed class GridWorld
     private readonly Random _random;
     private readonly GridPowerFlowSolver _solver = new();
     private readonly Dictionary<string, double> _avrTime = [];
+    private readonly Dictionary<string, int> _avrDirection = [];
     private readonly Dictionary<string, double> _alarmTime = [];
     private readonly Dictionary<string, GridAlarm> _alarms = [];
     private readonly Dictionary<string, GridMeasurementSnapshot> _measurements = [];
@@ -60,6 +61,8 @@ public sealed class GridWorld
     public Dictionary<string, double> Generation { get; } = [];
 
     public bool Connected(string elementId) => Definition.Switches.Where(s => s.ElementId == elementId).All(s => Switches[s.Id].Closed);
+    public bool TerminalConnected(string elementId, string busId) => Definition.Switches
+        .Where(s => s.ElementId == elementId && s.BusId == busId).All(s => Switches[s.Id].Closed);
     public bool Reachable(string elementId) => Definition.Rtus.Where(r => r.ElementIds.Contains(elementId)).All(r => RtuOnline[r.Id]);
 
     public IReadOnlyList<GridTransition> DrainEvents()
@@ -70,20 +73,53 @@ public sealed class GridWorld
     public GridSnapshot Step(double seconds)
     {
         if (!double.IsFinite(seconds) || seconds <= 0) throw new ArgumentOutOfRangeException(nameof(seconds));
-        UpdateDemand();
-        // Resolve relay operation and backup ordering inside an outer simulation tick.
+        // Fixed simulation-second profile samples and exact relay/AVR crossings are independent of outer ticks.
+        var end = SimulationTime + TimeSpan.FromSeconds(seconds);
         var remaining = seconds;
-        while (remaining > 1e-9)
+        while (remaining > 1e-8)
         {
-            var dt = Math.Min(remaining, Faults.Values.Any(f => f is GridEquipmentFault.ThreePhaseShortCircuit or GridEquipmentFault.EarthFault) ? 0.02 : remaining);
-            SimulationTime += TimeSpan.FromSeconds(dt);
-            Solve();
-            if (RunProtection(dt)) Solve();
-            if (RunAvr(dt)) Solve();
-            remaining -= dt;
+            var untilProfile = 1 - (SimulationTime.Ticks % TimeSpan.TicksPerSecond) / (double)TimeSpan.TicksPerSecond;
+            var dt = Math.Min(remaining, untilProfile);
+            if (_converged)
+            {
+                foreach (var relay in Relays.Values)
+                {
+                    var value = ProtectionMultiple(relay.Settings);
+                    if (value <= 1 || !relay.Settings.Enabled || relay.Failed) continue;
+                    var duration = GridProtectionCurves.OperateSeconds(relay.Settings.Curve, value, relay.Settings.TimeSetting);
+                    dt = Math.Min(dt, Math.Max(1e-6, duration * Math.Max(0, 1 - relay.Progress)));
+                }
+                foreach (var t in Definition.Transformers.Where(t => TapAutomatic[t.Id] && t.AvrTargetLvKv.HasValue))
+                {
+                    var direction = AvrDirection(t);
+                    if (direction == 0) continue;
+                    var elapsed = direction == _avrDirection.GetValueOrDefault(t.Id) ? _avrTime.GetValueOrDefault(t.Id) : 0;
+                    dt = Math.Min(dt, Math.Max(1e-6, t.AvrDelaySeconds - elapsed));
+                }
+            }
+            var ticks = Math.Min((end - SimulationTime).Ticks, Math.Max(1, (long)Math.Ceiling(dt * TimeSpan.TicksPerSecond - 1e-6)));
+            dt = ticks / (double)TimeSpan.TicksPerSecond;
+            SimulationTime += TimeSpan.FromTicks(ticks);
+            UpdateAlarms(dt);
+            if (_converged)
+            {
+                // Integrate every timer against the same pre-event electrical state, then apply boundary events.
+                RunProtection(dt, false);
+                RunAvr(dt, false);
+                RunProtection(0);
+                RunAvr(0);
+            }
+            else
+            {
+                foreach (var relay in Relays.Values) { relay.Progress = 0; relay.PickedUp = false; }
+                _avrTime.Clear(); _avrDirection.Clear();
+            }
+            remaining = (end - SimulationTime).TotalSeconds;
+            if (SimulationTime.Ticks % TimeSpan.TicksPerSecond == 0) { UpdateDemand(); Solve(); }
         }
+        SimulationTime = end;
         StepCount++; Revision++;
-        UpdateAlarms(seconds);
+        UpdateAlarms(0);
         _frequency = Definition.NominalFrequencyHz + (_random.NextDouble() - 0.5) * 0.01;
         RefreshMeasurements();
         return Snapshot();
@@ -92,9 +128,28 @@ public sealed class GridWorld
     public GridCommandResult OperateSwitch(string id, bool closed, string? actor, GridChangeCause cause)
     {
         if (!Switches.TryGetValue(id, out var state)) return Reject(GridCommandRejection.UnknownTarget, "Unknown switch.");
-        if (!closed && Faults.GetValueOrDefault(id) == GridEquipmentFault.SwitchStuck)
-            return Reject(GridCommandRejection.Interlocked, "Switch failed to open.");
         if (state.Closed == closed) return Reject(GridCommandRejection.AlreadyInState, "Switch already in requested state.");
+        if (!closed && !_converged)
+            return Reject(GridCommandRejection.Interlocked, "Current solution unavailable; cannot verify interruption capability.");
+        var definition = Definition.Switches.First(s => s.Id == id);
+        var current = CurrentFor(definition.ElementId, definition.BusId);
+        var exceeded = definition.BreakingCapacityKa is { } capacity && current > capacity * 1000;
+        var loadBreakFault = definition.Kind == GridSwitchKind.LoadBreakSwitch && _flow.FaultActive && current > 1
+            && definition.BreakingCapacityKa is null;
+        if (!closed && (Faults.GetValueOrDefault(id) == GridEquipmentFault.SwitchStuck || exceeded || loadBreakFault))
+        {
+            var reason = exceeded || loadBreakFault ? "Interrupting capability exceeded" : "Switch stuck";
+            if (!Active(id, GridAlarmType.BreakerFailure))
+            {
+                Revision++;
+                _transitions.Add(new("BreakerFailed", id, $"{reason}: {current:0.#} A; backup required", actor, cause));
+            }
+            SetAlarm(id, GridAlarmType.BreakerFailure, true, AlarmSeverity.High, reason, 0, 0);
+            return Reject(GridCommandRejection.Interlocked, reason);
+        }
+        foreach (var relay in Relays.Values.Where(r => r.Settings.SwitchId == id))
+        { relay.Progress = 0; relay.PickedUp = false; relay.Failed = false; }
+        SetAlarm(id, GridAlarmType.BreakerFailure, false, AlarmSeverity.High, "Breaker opened", 0, 0);
         state.Operations++;
         state.Closed = closed; state.SelectedToClose = null; state.SelectedUntil = null; state.SelectedBy = null;
         state.LastOperatedBy = actor; state.LastCause = cause; Revision++;
@@ -141,7 +196,7 @@ public sealed class GridWorld
             var t = Definition.Transformers.FirstOrDefault(t => t.Id == id && t.HasOnLoadTapChanger);
             if (t is null) return Reject(GridCommandRejection.UnknownTarget, "Unknown OLTC.");
             if (command.Type is GridCommandType.SetTapAutomatic or GridCommandType.SetTapManual)
-            { TapAutomatic[id] = command.Type == GridCommandType.SetTapAutomatic; return GridCommandResult.Ok("Tap mode changed."); }
+            { TapAutomatic[id] = command.Type == GridCommandType.SetTapAutomatic; _avrTime[id] = 0; _avrDirection[id] = 0; return GridCommandResult.Ok("Tap mode changed."); }
             if (TapAutomatic[id]) return Reject(GridCommandRejection.Interlocked, "Set tap to manual first.");
             return SetTap(id, Taps[id] + (command.Type == GridCommandType.TapRaise ? 1 : -1), actor, GridChangeCause.Operator);
         }
@@ -163,7 +218,7 @@ public sealed class GridWorld
         else if (command.Type == GridCommandType.ResetProtection)
         {
             if (!Relays.TryGetValue(id, out var relay)) return Reject(GridCommandRejection.UnknownTarget, "Unknown protection.");
-            relay.Tripped = false; relay.Progress = 0;
+            relay.Tripped = false; relay.Progress = 0; relay.Failed = false;
             SetAlarm(id, GridAlarmType.ProtectionTrip, false, AlarmSeverity.High, "Protection reset", 0, 0);
         }
         else if (command.Type == GridCommandType.AcknowledgeAlarm)
@@ -206,7 +261,7 @@ public sealed class GridWorld
         if (!double.IsFinite(pickup) || pickup <= 0 || !double.IsFinite(setting) || setting < 0)
             return Reject(GridCommandRejection.InvalidValue, "Invalid protection settings.");
         relay.Settings = relay.Settings with { PickupValue = pickup, TimeSetting = setting, Enabled = enabled };
-        relay.Progress = 0;
+        relay.Progress = 0; relay.PickedUp = false; relay.Failed = false;
         _transitions.Add(new("ProtectionSettingChanged", id, "Protection settings changed", actor, GridChangeCause.Unattributed));
         Revision++; return GridCommandResult.Ok("Protection updated.");
     }
@@ -216,7 +271,7 @@ public sealed class GridWorld
         var t = Definition.Transformers.FirstOrDefault(t => t.Id == id && t.HasOnLoadTapChanger);
         if (t is null) return Reject(GridCommandRejection.UnknownTarget, "Unknown OLTC.");
         if (tap < t.TapMin || tap > t.TapMax) return Reject(GridCommandRejection.InvalidValue, "Tap out of range.");
-        Taps[id] = tap; _avrTime[id] = 0; Revision++;
+        Taps[id] = tap; _avrTime[id] = 0; _avrDirection[id] = 0; Revision++;
         _transitions.Add(new("TapChanged", id, $"Tap position {tap}", actor, cause));
         Solve(); RefreshMeasurements(); return GridCommandResult.Ok("Tap updated.");
     }
@@ -234,7 +289,7 @@ public sealed class GridWorld
         Faults.Clear(); Spoofs.Clear();
         foreach (var p in Definition.Protections)
         {
-            Relays[p.Id].Settings = p; Relays[p.Id].Progress = 0;
+            Relays[p.Id].Settings = p; Relays[p.Id].Progress = 0; Relays[p.Id].Failed = false;
             Relays[p.Id].PickedUp = false; Relays[p.Id].Tripped = false;
             SetAlarm(p.Id, GridAlarmType.ProtectionTrip, false, AlarmSeverity.High, "Protection reset", 0, 0);
         }
@@ -243,7 +298,7 @@ public sealed class GridWorld
         {
             Taps[t.Id] = t.InitialTap;
             TapAutomatic[t.Id] = t.HasOnLoadTapChanger && t.AvrTargetLvKv.HasValue;
-            _avrTime[t.Id] = 0;
+            _avrTime[t.Id] = 0; _avrDirection[t.Id] = 0;
         }
         foreach (var c in Definition.Capacitors) CapacitorSteps[c.Id] = c.InitialSteps;
         _transitions.Add(new("FaultCleared", "grid", "Training defaults restored", actor));
@@ -263,16 +318,16 @@ public sealed class GridWorld
         {
             var bus = buses.First(b => b.Id == l.BusId);
             var on = bus.Energized && Connected(l.Id) && !ShedLoads.Contains(l.Id);
-            var p = on ? Demand[l.Id] * GridProfiles.VoltageFactor(bus.VoltagePu) : 0;
+            var p = _flow.LoadPowersMw.GetValueOrDefault(l.Id);
             return new LoadSnapshot(l.Id, l.Name, l.BusId, on, Demand[l.Id], p, p * Math.Tan(Math.Acos(l.PowerFactor)),
                 l.Customers, on ? l.Customers : 0, ShedLoads.Contains(l.Id), l.Critical);
         }).ToArray();
         var generators = Definition.Generators.Select(g =>
         {
             var on = Connected(g.Id) && buses.First(b => b.Id == g.BusId).Energized;
-            return new GeneratorSnapshot(g.Id, g.Name, g.BusId, g.Kind, on, on ? Generation[g.Id] : 0, 0);
+            return new GeneratorSnapshot(g.Id, g.Name, g.BusId, g.Kind, on, _flow.GeneratorPowersMw.GetValueOrDefault(g.Id), 0);
         }).ToArray();
-        return new(Definition.Name, Revision, SimulationTime, StepCount, _frequency, _converged, _iterations, buses, branches,
+        return new(Definition.Name, Revision, SimulationTime, StepCount, _frequency, _converged && !_flow.FaultActive, _iterations, buses, branches,
             Definition.Switches.Select(s => new SwitchSnapshot(s.Id, s.Name, s.Kind, s.BusId, s.ElementId, Switches[s.Id].Closed,
                 Switches[s.Id].SelectedToClose.HasValue && (!now.HasValue || Switches[s.Id].SelectedUntil > now),
                 !now.HasValue || Switches[s.Id].SelectedUntil > now ? Switches[s.Id].SelectedToClose : null, Switches[s.Id].LastOperatedBy,
@@ -300,13 +355,16 @@ public sealed class GridWorld
             if (models.Length > 0)
             {
                 var first = models[0]; var last = models[^1];
-                sf = _flow.NodeVoltages[first.From] * Complex.Conjugate(first.FromCurrent(_flow.NodeVoltages)) * GridPowerFlowSolver.BaseMva;
-                st = _flow.NodeVoltages[last.To] * Complex.Conjugate(last.ToCurrent(_flow.NodeVoltages)) * GridPowerFlowSolver.BaseMva;
-                current = CurrentFor(id, from);
+                var powersAt = _flow.FaultActive ? _flow.PrefaultVoltages : _flow.NodeVoltages;
+                sf = first.From == _flow.BusIndices[from] ? powersAt[first.From] * Complex.Conjugate(first.FromCurrent(powersAt)) * GridPowerFlowSolver.BaseMva : Complex.Zero;
+                st = last.To == _flow.BusIndices[to] ? powersAt[last.To] * Complex.Conjugate(last.ToCurrent(powersAt)) * GridPowerFlowSolver.BaseMva : Complex.Zero;
+                current = Math.Max(CurrentFor(id, from), CurrentFor(id, to));
             }
             var loading = kind == GridBranchKind.Line ? current / rating * 100 : Math.Max(sf.Magnitude, st.Magnitude) / rating * 100;
-            result.Add(new(id, name, kind, from, to, models.Length > 0 && (_flow.Voltages[from].Magnitude > 0.01 || _flow.Voltages[to].Magnitude > 0.01),
-                current, sf.Real, sf.Imaginary, st.Real, st.Imaginary, Math.Max(0, sf.Real + st.Real), loading,
+            result.Add(new(id, name, kind, from, to, models.Any(b => _flow.NodeVoltages[b.From].Magnitude > 0.01 || _flow.NodeVoltages[b.To].Magnitude > 0.01),
+                current, sf.Real, sf.Imaginary,
+                st.Real, st.Imaginary,
+                Math.Max(0, sf.Real + st.Real), loading,
                 Taps.TryGetValue(id, out var tap) ? tap : null, TapAutomatic.TryGetValue(id, out var auto) ? auto : null, Faults.GetValueOrDefault(id)));
         }
         return result.ToArray();
@@ -318,9 +376,11 @@ public sealed class GridWorld
         if (models.Length == 0) return 0;
         var kv = Definition.Buses.First(b => b.Id == busId).NominalVoltageKv;
         var index = _flow.BusIndices[busId];
-        return models.Where(b => b.From == index || b.To == index)
+        var positive = models.Where(b => b.From == index || b.To == index)
             .Select(b => (b.From == index ? b.FromCurrent(_flow.NodeVoltages) : b.ToCurrent(_flow.NodeVoltages)).Magnitude
                 * GridPowerFlowSolver.BaseMva * 1000 / (Math.Sqrt(3) * kv)).DefaultIfEmpty(0).Max();
+        // Conservative maximum phase envelope: prefault + residual fault contribution.
+        return positive + 2 * _flow.EarthCurrents.GetValueOrDefault($"{id}:{busId}") / 3;
     }
 
     private bool Solve()
@@ -328,75 +388,107 @@ public sealed class GridWorld
         var flow = _solver.Solve(this);
         _converged = flow.Converged; _iterations = flow.Iterations;
         if (flow.Converged) _flow = flow;
+        foreach (var relay in Relays.Values)
+            if (!flow.Converged || !relay.Settings.Enabled || ProtectionMultiple(relay.Settings) <= 1)
+            { relay.Progress = 0; relay.PickedUp = false; relay.Failed = false; }
+        foreach (var t in Definition.Transformers.Where(t => t.HasOnLoadTapChanger && t.AvrTargetLvKv.HasValue))
+            if (!flow.Converged || !TapAutomatic[t.Id] || AvrDirection(t) != _avrDirection.GetValueOrDefault(t.Id))
+            { _avrTime[t.Id] = 0; _avrDirection[t.Id] = 0; }
         SetAlarm("grid", GridAlarmType.SolverDivergence, !flow.Converged, AlarmSeverity.High, "Power flow failed; retaining last good state", 0, 0);
         return flow.Converged;
     }
 
     private bool UpdateDemand()
     {
-        foreach (var l in Definition.Loads) Demand[l.Id] = l.PeakActivePowerMw * GridProfiles.Load(l.Profile, SimulationTime) * (0.998 + _random.NextDouble() * 0.004);
+        foreach (var l in Definition.Loads) Demand[l.Id] = l.PeakActivePowerMw * GridProfiles.Load(l.Profile, SimulationTime) * (l.Profile == GridLoadProfile.Constant ? 1 : GridProfiles.DemandVariation(SimulationTime));
         foreach (var g in Definition.Generators) Generation[g.Id] = g.RatedPowerMw * (g.Kind == GridGeneratorKind.Photovoltaic ? GridProfiles.Sun(SimulationTime) : 0.85);
         return true;
     }
 
-    private bool RunProtection(double seconds)
+    private bool RunProtection(double seconds, bool operate = true)
     {
         var changed = false;
         foreach (var (id, relay) in Relays)
         {
+            if (!_converged) break;
             var p = relay.Settings; var sw = Definition.Switches.First(s => s.Id == p.SwitchId);
-            var voltage = _flow.Voltages[sw.BusId].Magnitude;
-            var value = p.Function switch
-            {
-                GridProtectionFunction.Undervoltage27 => voltage > 0.01 ? p.PickupValue / voltage : 0,
-                GridProtectionFunction.Overvoltage59 => voltage / p.PickupValue,
-                GridProtectionFunction.EarthFault51N => _flow.EarthCurrents.GetValueOrDefault(sw.ElementId) / p.PickupValue,
-                _ => CurrentFor(sw.ElementId, sw.BusId) / p.PickupValue
-            };
+            var value = ProtectionMultiple(p);
             var picked = p.Enabled && Switches[sw.Id].Closed && value > 1;
             if (picked && !relay.PickedUp) _transitions.Add(new("ProtectionPickup", id, "Protection picked up", null, GridChangeCause.Protection));
             relay.PickedUp = picked;
-            if (!picked) { relay.Progress = 0; continue; }
+            if (!picked) { relay.Progress = 0; relay.Failed = false; continue; }
+            if (relay.Failed) continue;
             var duration = GridProtectionCurves.OperateSeconds(p.Curve, value, p.TimeSetting);
             relay.Progress += duration <= 0 ? 1 : seconds / duration;
-            if (relay.Progress < 1) continue;
-            if (!relay.Tripped || relay.LastTripOperation != Switches[sw.Id].Operations)
-            {
-                relay.LastTripOperation = Switches[sw.Id].Operations;
-                relay.Tripped = true; relay.LastTripAt = SimulationTime;
-                _transitions.Add(new("ProtectionTripped", id, $"{p.Name} tripped {sw.Id}", null, GridChangeCause.Protection));
-                SetAlarm(id, GridAlarmType.ProtectionTrip, true, AlarmSeverity.High, $"{p.Name} trip", 0, 0);
-            }
-            changed |= OperateSwitch(sw.Id, false, null, GridChangeCause.Protection).Accepted;
+            if (relay.Progress < 1 - 1e-8 || !operate) continue;
+            var opened = OperateSwitch(sw.Id, false, null, GridChangeCause.Protection).Accepted;
+            if (!opened) { relay.Failed = true; continue; }
+            changed = true;
+            relay.LastTripOperation = Switches[sw.Id].Operations;
+            relay.Tripped = true; relay.LastTripAt = SimulationTime;
+            _transitions.Add(new("ProtectionTripped", id, $"{p.Name} tripped {sw.Id}", null, GridChangeCause.Protection));
+            SetAlarm(id, GridAlarmType.ProtectionTrip, true, AlarmSeverity.High, $"{p.Name} trip", 0, 0);
         }
         return changed;
     }
 
-    private bool RunAvr(double seconds)
+    private bool RunAvr(double seconds, bool operate = true)
     {
+        if (!_converged) return false;
         var changed = false;
         foreach (var t in Definition.Transformers.Where(t => t.HasOnLoadTapChanger && TapAutomatic[t.Id] && t.AvrTargetLvKv.HasValue))
         {
-            var voltage = _flow.Voltages[t.LvBusId].Magnitude * Definition.Buses.First(b => b.Id == t.LvBusId).NominalVoltageKv;
-            var error = t.AvrTargetLvKv!.Value - voltage;
-            if (voltage < 0.1 || Math.Abs(error) <= t.AvrTargetLvKv.Value * t.AvrDeadbandPercent / 200)
-            { _avrTime[t.Id] = 0; continue; }
+            var direction = AvrDirection(t);
+            if (direction == 0) { _avrTime[t.Id] = 0; _avrDirection[t.Id] = 0; continue; }
+            if (_avrDirection.GetValueOrDefault(t.Id) != direction) _avrTime[t.Id] = 0;
+            _avrDirection[t.Id] = direction;
             _avrTime[t.Id] = _avrTime.GetValueOrDefault(t.Id) + seconds;
-            if (_avrTime[t.Id] < t.AvrDelaySeconds) continue;
-            var tap = Math.Clamp(Taps[t.Id] + Math.Sign(error), t.TapMin, t.TapMax);
+            if (_avrTime[t.Id] < t.AvrDelaySeconds - 1e-8 || !operate) continue;
+            var tap = Math.Clamp(Taps[t.Id] + direction, t.TapMin, t.TapMax);
             _avrTime[t.Id] = 0;
             if (tap != Taps[t.Id]) changed |= SetTap(t.Id, tap, null, GridChangeCause.Automatic).Accepted;
         }
         return changed;
     }
 
+    private double ProtectionMultiple(GridProtectionDefinition p)
+    {
+        var sw = Definition.Switches.First(s => s.Id == p.SwitchId);
+        if (!Switches[sw.Id].Closed) return 0;
+        var voltage = _flow.Voltages[sw.BusId].Magnitude;
+        return p.Function switch
+        {
+            GridProtectionFunction.Undervoltage27 => _flow.EnergizedBuses.Contains(sw.BusId)
+                ? p.PickupValue / Math.Max(voltage, 1e-12) : 0,
+            GridProtectionFunction.Overvoltage59 => voltage / p.PickupValue,
+            GridProtectionFunction.EarthFault51N => _flow.EarthCurrents.GetValueOrDefault($"{sw.ElementId}:{sw.BusId}") / p.PickupValue,
+            _ => CurrentFor(sw.ElementId, sw.BusId) / p.PickupValue
+        };
+    }
+
+    private int AvrDirection(GridTransformerDefinition t)
+    {
+        var voltage = _flow.Voltages[t.LvBusId].Magnitude * Definition.Buses.First(b => b.Id == t.LvBusId).NominalVoltageKv;
+        var error = t.AvrTargetLvKv!.Value - voltage;
+        if (!_flow.EnergizedBuses.Contains(t.LvBusId) || _flow.FaultActive || Math.Abs(error) <= t.AvrTargetLvKv.Value * t.AvrDeadbandPercent / 200)
+            return 0;
+        var direction = Math.Sign(error);
+        return Taps[t.Id] + direction < t.TapMin || Taps[t.Id] + direction > t.TapMax ? 0 : direction;
+    }
+
     private bool UpdateAlarms(double seconds)
     {
+        if (!_converged)
+        {
+            foreach (var r in RtuOnline) SetAlarm(r.Key, GridAlarmType.CommunicationLoss, !r.Value, AlarmSeverity.High, "RTU communication lost", seconds, 0);
+            SetAlarm("grid", GridAlarmType.SolverDivergence, true, AlarmSeverity.High, "Power flow failed; retaining last good state", seconds, 0);
+            return false;
+        }
         foreach (var b in Definition.Buses)
         {
             var v = _flow.Voltages[b.Id].Magnitude;
-            SetAlarm(b.Id, GridAlarmType.Undervoltage, v > 0.01 && v < b.MinVoltagePu + (Active(b.Id, GridAlarmType.Undervoltage) ? 0.01 : 0), AlarmSeverity.Medium, "Bus undervoltage", seconds, 2);
-            SetAlarm(b.Id, GridAlarmType.Overvoltage, v > b.MaxVoltagePu - (Active(b.Id, GridAlarmType.Overvoltage) ? 0.01 : 0), AlarmSeverity.Medium, "Bus overvoltage", seconds, 2);
+            SetAlarm(b.Id, GridAlarmType.Undervoltage, _converged && _flow.EnergizedBuses.Contains(b.Id) && v < b.MinVoltagePu + (Active(b.Id, GridAlarmType.Undervoltage) ? 0.01 : 0), AlarmSeverity.Medium, "Bus undervoltage", seconds, 2);
+            SetAlarm(b.Id, GridAlarmType.Overvoltage, _converged && v > b.MaxVoltagePu - (Active(b.Id, GridAlarmType.Overvoltage) ? 0.01 : 0), AlarmSeverity.Medium, "Bus overvoltage", seconds, 2);
         }
         foreach (var b in BranchSnapshots()) SetAlarm(b.Id, GridAlarmType.Overload, b.LoadingPercent > (Active(b.Id, GridAlarmType.Overload) ? 98 : 100),
             b.LoadingPercent > 110 ? AlarmSeverity.High : AlarmSeverity.Medium, "Equipment overload", seconds, 5);
@@ -451,13 +543,12 @@ public sealed class GridWorld
                 if (Switches.TryGetValue(id, out var sw)) Measure(id, GridMeasurementKind.SwitchState, "", sw.Closed ? 1 : 0);
                 if (Definition.Loads.FirstOrDefault(l => l.Id == id) is { } load)
                 {
-                    var on = Connected(id) && !ShedLoads.Contains(id) && _flow.Voltages[load.BusId].Magnitude > 0.01;
-                    var p = on ? Demand[id] * GridProfiles.VoltageFactor(_flow.Voltages[load.BusId].Magnitude) : 0;
+                    var p = _flow.LoadPowersMw.GetValueOrDefault(id);
                     Measure(id, GridMeasurementKind.ActivePower, "MW", p);
                     Measure(id, GridMeasurementKind.ReactivePower, "Mvar", p * Math.Tan(Math.Acos(load.PowerFactor)));
                 }
                 if (Definition.Generators.FirstOrDefault(g => g.Id == id) is { } generator)
-                    Measure(id, GridMeasurementKind.ActivePower, "MW", Connected(id) && _flow.Voltages[generator.BusId].Magnitude > 0.01 ? Generation[id] : 0);
+                    Measure(id, GridMeasurementKind.ActivePower, "MW", _flow.GeneratorPowersMw.GetValueOrDefault(id));
             }
             Measure(rtu.Id, GridMeasurementKind.Frequency, "Hz", _frequency);
 
@@ -469,7 +560,7 @@ public sealed class GridWorld
                 var spoofed = Spoofs.TryGetValue(key, out var spoof);
                 var online = RtuOnline[rtu.Id];
                 var reported = !online && _measurements.TryGetValue(key, out var previous) ? previous.ReportedValue : spoofed ? spoof : value;
-                _measurements[key] = new(key, elementId, rtu.Id, kind, unit, reported, online ? MeasurementQuality.Good : MeasurementQuality.Bad, truth, spoofed, spoofed ? spoof : null);
+                _measurements[key] = new(key, elementId, rtu.Id, kind, unit, reported, !online ? MeasurementQuality.Bad : !_converged || _flow.FaultActive && kind is GridMeasurementKind.ActivePower or GridMeasurementKind.ReactivePower ? MeasurementQuality.Uncertain : MeasurementQuality.Good, truth, spoofed, spoofed ? spoof : null);
                 return true;
             }
         }

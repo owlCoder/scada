@@ -4,7 +4,18 @@ namespace Domain.Grid.Profiles;
 
 public static class GridProfiles
 {
-    public static double Load(GridLoadProfile profile, TimeSpan time) => profile switch
+    public static double Load(GridLoadProfile profile, TimeSpan time) =>
+        (profile == GridLoadProfile.Constant ? 1 : WeekendFactor(profile, time)) * Shape(profile, time);
+
+    private static double WeekendFactor(GridLoadProfile profile, TimeSpan time) =>
+        (int)Math.Floor(time.TotalDays) % 7 is 5 or 6 ? profile switch
+        {
+            GridLoadProfile.Commercial => 0.65,
+            GridLoadProfile.Industrial => 0.8,
+            _ => 1.05
+        } : 1;
+
+    private static double Shape(GridLoadProfile profile, TimeSpan time) => profile switch
     {
         GridLoadProfile.Residential => Interpolate(time, [0.35, 0.28, 0.27, 0.26, 0.28, 0.38, 0.55, 0.65, 0.58, 0.48, 0.44, 0.45,
             0.5, 0.48, 0.46, 0.5, 0.62, 0.8, 0.95, 1, 0.92, 0.78, 0.6, 0.44]),
@@ -15,7 +26,19 @@ public static class GridProfiles
         _ => 1
     };
 
-    public static double Sun(TimeSpan time) => Math.Max(0, Math.Sin(Math.PI * ((time.TotalHours % 24) - 6) / 12));
+    // Simulation day zero is an illustrative spring weekday, not a dated annual production forecast.
+    public static double Sun(TimeSpan time)
+    {
+        var day = Math.Floor(time.TotalDays);
+        var daylight = 12 + 3 * Math.Sin(2 * Math.PI * day / 365);
+        var hour = (time.TotalHours % 24 + 24) % 24;
+        var angle = Math.PI * (hour - (12 - daylight / 2)) / daylight;
+        var weather = 0.72 + 0.18 * Math.Sin(day * 1.73 + 0.4);
+        return angle is > 0 and < Math.PI ? weather * Math.Pow(Math.Sin(angle), 1.5) : 0;
+    }
+
+    public static double DemandVariation(TimeSpan time) => 1 + 0.015 * Math.Sin(time.TotalHours * Math.PI / 3);
+
     public static double VoltageFactor(double voltagePu) => 0.4 + 0.3 * voltagePu + 0.3 * voltagePu * voltagePu;
 
     private static double Interpolate(TimeSpan time, double[] values)

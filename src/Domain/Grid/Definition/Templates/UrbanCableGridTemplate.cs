@@ -26,10 +26,12 @@ public static class UrbanCableGridTemplate
         };
         var transformers = new List<GridTransformerDefinition>
         {
+            // Initial taps are the AVR's settled positions at 08:00, so the simulation does not start with a burst of
+            // corrective tap changes (which the tap-manipulation rule rightly treats as rapid operation).
             new("TR1", "110/20 kV TR1 40 MVA", "HV", "MV-A", 40, 110, 20, 12.5, 210, 28,
-                true, -10, 10, 0, 0, 0.9, 20.6, 1.5, 30, "ONAN 40 MVA", new(4, 6)),
+                true, -10, 10, 0, 4, 0.9, 20.6, 1.5, 30, "ONAN 40 MVA", new(4, 6)),
             new("TR2", "110/20 kV TR2 40 MVA", "HV", "MV-B", 40, 110, 20, 12.5, 210, 28,
-                true, -10, 10, 0, 0, 0.9, 20.6, 1.5, 30, "ONAN 40 MVA", new(4, 10))
+                true, -10, 10, 0, 3, 0.9, 20.6, 1.5, 30, "ONAN 40 MVA", new(4, 10))
         };
         var switches = new List<GridSwitchDefinition>
         {
@@ -152,8 +154,8 @@ public static class UrbanCableGridTemplate
         rtus.Add(new("RTU4", "Ring B feeder F3 RTU", 4, null, feederRtuIds[2]));
         rtus.Add(new("RTU5", "Ring B feeder F4 RTU", 5, null, feederRtuIds[3]));
 
-        return new("Urban 20 kV cable grid (2x40 MVA)", 50, buses,
+        return GridProtectionDefaults.Add(new("Urban 20 kV cable grid (2x40 MVA)", 50, buses,
             [new("GRID", "110 kV upstream grid", "HV", 1, 3000, new(0, 8))], lines, transformers,
-            switches, loads, generators, capacitors, protections, rtus);
+            switches, loads, generators, capacitors, protections, rtus));
     }
 }

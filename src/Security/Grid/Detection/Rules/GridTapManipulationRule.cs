@@ -16,7 +16,7 @@ public sealed class GridTapManipulationRule(IGridView view) : GridDetectionRuleB
 {
     private readonly IGridView _view = view ?? throw new ArgumentNullException(nameof(view));
     private readonly Lock _sync = new();
-    private readonly Dictionary<string, Queue<DateTimeOffset>> _changes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<TimeSpan>> _changes = new(StringComparer.Ordinal);
 
     public override string Id => "grid-tap-manipulation";
     public override string Name => "Tap changer manipulation";
@@ -39,12 +39,15 @@ public sealed class GridTapManipulationRule(IGridView view) : GridDetectionRuleB
         lock (_sync)
         {
             var findings = new List<DetectionFinding>();
-            var windowStart = context.Now.AddSeconds(-settings.WindowSeconds);
+            // Tap timing is a property of the simulated process, so the window is measured in simulated time; with a time
+            // scale above 1 a wall-clock window would count normal AVR operation over many simulated minutes as "rapid".
+            var now = context.Current.SimulationTime;
+            var windowStart = now - TimeSpan.FromSeconds(settings.WindowSeconds);
 
             foreach (var stepEvent in context.Report.Events.Where(e => e.Kind == GridStepEventKind.TapChanged))
             {
                 var queue = _changes.TryGetValue(stepEvent.SourceId, out var q) ? q : _changes[stepEvent.SourceId] = new();
-                queue.Enqueue(context.Now);
+                queue.Enqueue(now);
                 if (stepEvent.Cause == GridChangeCause.Unattributed)
                     findings.Add(new($"{stepEvent.SourceId}:forced", $"Forced tap change on {stepEvent.SourceId}",
                         $"{stepEvent.Message} (cause {stepEvent.Cause}).", stepEvent.SourceId,

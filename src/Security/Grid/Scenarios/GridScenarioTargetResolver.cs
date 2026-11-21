@@ -88,6 +88,7 @@ public static class GridScenarioTargetResolver
             case GridScenarioTargetKind.FeederRtu:
                 {
                     var feeder = MostLoadedFeederId(snapshot);
+                    if (feeder is null) return Fail(target, "no line feeder exists", errors);
                     var rtu = definition.Rtus.Where(r => r.ElementIds.Contains(feeder)
                             || definition.Switches.Any(s => s.ElementId == feeder && r.ElementIds.Contains(s.Id)))
                         .OrderBy(r => r.Id, StringComparer.Ordinal).FirstOrDefault();
@@ -117,6 +118,7 @@ public static class GridScenarioTargetResolver
             case GridScenarioTargetKind.FeederCurrentMeasurements:
                 {
                     var feeder = MostLoadedFeederId(snapshot);
+                    if (feeder is null) return Fail(target, "no line feeder exists", errors);
                     var ids = snapshot.Measurements
                         .Where(m => m.ElementId == feeder && m.Kind == GridMeasurementKind.Current)
                         .OrderBy(m => m.Id, StringComparer.Ordinal).Select(m => m.Id).ToArray();
@@ -148,10 +150,10 @@ public static class GridScenarioTargetResolver
             .Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
     }
 
-    private static string MostLoadedFeederId(GridSnapshot snapshot) =>
+    private static string? MostLoadedFeederId(GridSnapshot snapshot) =>
         snapshot.Branches.Where(b => b.Kind == GridBranchKind.Line)
             .OrderByDescending(b => b.LoadingPercent).ThenBy(b => b.Id, StringComparer.Ordinal)
-            .First().Id;
+            .FirstOrDefault()?.Id;
 
     private static string[]? Take(GridScenarioTarget target, string[] ids, string what, List<string> errors)
     {

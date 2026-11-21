@@ -107,9 +107,12 @@ public sealed class GridEngineTelemetryTests
         world.OperateSwitch("Q0", false, "instructor", GridChangeCause.Operator);
         world.Step(1);
         var deenergized = GridViewRedactor.ForOperators(world.Snapshot(), world.Definition);
-        Assert.True(deenergized.Totals.SourceImportMw < 0.01);
+        // TR1 stays energised from the 110 kV side, so the import is only its no-load (excitation) loss.
+        var noLoadMw = world.Definition.Transformers.Single(t => t.Id == "TR1").NoLoadLossKw / 1000;
+        Assert.InRange(deenergized.Totals.SourceImportMw, 0, noLoadMw * 1.5);
         Assert.Equal(0, deenergized.Totals.CustomersSupplied);
-        Assert.Equal(0, deenergized.Totals.LossesMw);
+        // With no load supplied, the reported losses are exactly that no-load import.
+        Assert.Equal(deenergized.Totals.SourceImportMw, deenergized.Totals.LossesMw, 9);
         return Task.CompletedTask;
     }
 
