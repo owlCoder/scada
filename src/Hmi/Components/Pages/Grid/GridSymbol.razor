@@ -1,0 +1,22 @@
+@if (Kind == "Bus") { <line x1="-24" y1="0" x2="24" y2="0" class="bus-symbol" /> }
+else if (Kind == "Transformer")
+{
+    <circle cx="0" cy="-9" r="13" /><circle cx="0" cy="9" r="13" />
+}
+else if (Kind == "Breaker") { <rect x="-9" y="-9" width="18" height="18" class="@(Closed ? "switch-closed" : "switch-open")" /> }
+else if (Kind == "Disconnector")
+{
+    <circle cy="-12" r="2" /><circle cy="12" r="2" /><path d="@(Closed ? "M0,-10 L0,10" : "M0,-10 L12,8")" />
+}
+else if (Kind == "LoadBreakSwitch")
+{
+    <path d="@(Closed ? "M0,-12 L0,12 M-5,-12 L5,-12" : "M0,-12 L12,8 M-5,-12 L5,-12")" /><circle cy="12" r="3" />
+}
+else if (Kind == "Load") { <path d="M-12,-8 L12,-8 L0,14 Z" /> }
+else if (Kind == "PV") { <rect x="-13" y="-10" width="26" height="20" /><path d="M-13,0 L13,0 M0,-10 L0,10 M-20,-20 L-10,-12 M-9,-21 L-4,-13" /> }
+else if (Kind == "Capacitor") { <path d="M0,-18 L0,-4 M-13,-4 L13,-4 M-13,4 L13,4 M0,4 L0,18" /> }
+else if (Kind == "Source") { <circle r="15" /><path d="M-10,0 Q-5,-12 0,0 Q5,12 10,0" /> }
+@code {
+    [Parameter] public string Kind { get; set; } = "Bus";
+    [Parameter] public bool Closed { get; set; }
+}

@@ -1,0 +1,50 @@
+@page "/grid"
+@inherits GridPageBase
+
+<PageTitle>Grid overview · SCADA</PageTitle>
+<h1>Electrical distribution grid</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+@if (Snapshot is { } grid)
+{
+    <p class="muted">@grid.Name · version @Status?.DefinitionVersion · @Number(grid.FrequencyHz) Hz</p>
+    <section class="metrics">
+        <article class="panel metric"><h2>Load</h2><strong>@Number(grid.Totals.LoadMw) MW</strong></article>
+        <article class="panel metric"><h2>Generation</h2><strong>@Number(grid.Totals.GenerationMw) MW</strong></article>
+        <article class="panel metric"><h2>Import</h2><strong>@Number(grid.Totals.SourceImportMw) MW</strong></article>
+        <article class="panel metric"><h2>Losses</h2><strong>@Number(grid.Totals.LossesMw) MW</strong></article>
+        <article class="panel metric"><h2>Customers supplied / total</h2><strong>@grid.Totals.CustomersSupplied / @grid.Totals.Customers</strong></article>
+    </section>
+    <section class="columns">
+        <article class="panel"><h2>Active alarms by priority</h2>
+            @foreach (var severity in Enum.GetValues<AlarmSeverity>().OrderDescending())
+            {
+                <p><span class="pill @(grid.Alarms.Any(a => a.Active && a.Severity == severity) ? "pill-alarm" : "pill-neutral")">@severity</span>
+                    @grid.Alarms.Count(a => a.Active && a.Severity == severity)</p>
+            }
+            <a href="/grid/alarms">Alarm list</a>
+        </article>
+        <article class="panel"><h2>Voltage range by level</h2>
+            @foreach (var level in grid.Buses.GroupBy(b => b.NominalVoltageKv).OrderByDescending(g => g.Key))
+            {
+                <p>@Number(level.Key) kV: @Number(level.Min(b => b.VoltageKv)) – @Number(level.Max(b => b.VoltageKv)) kV</p>
+            }
+        </article>
+        <article class="panel"><h2>Transformer loading</h2>
+            @foreach (var branch in grid.Branches.Where(b => b.Kind == GridBranchKind.Transformer))
+            {
+                <p>@branch.Name · @Number(branch.LoadingPercent) %</p>
+                <GridLoadingBar Percent="branch.LoadingPercent" />
+            }
+        </article>
+    </section>
+    <h2>Feeders</h2>
+    <section class="metrics">
+        @foreach (var feeder in grid.Branches.Where(b => b.Kind == GridBranchKind.Line))
+        {
+            <article class="panel metric"><h2>@feeder.Name</h2><strong>@Number(feeder.CurrentA) A</strong>
+                <GridLoadingBar Percent="feeder.LoadingPercent" />
+                <p>@(feeder.Energized ? "Energized" : "De-energized") · @Number(feeder.LoadingPercent) % loading</p>
+                <a href="/grid/diagram">Open diagram</a></article>
+        }
+    </section>
+}

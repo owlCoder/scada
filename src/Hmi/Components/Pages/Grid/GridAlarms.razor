@@ -1,0 +1,24 @@
+@page "/grid/alarms"
+@inherits GridPageBase
+<PageTitle>Grid alarms · SCADA</PageTitle>
+<h1>Grid alarms</h1>
+<GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
+<OutcomeBanner Outcome="Outcome" />
+@if (Snapshot is { } grid)
+{
+    <p class="muted">Unacknowledged alarms remain visible after return to normal.</p>
+    <table class="grid"><thead><tr><th>Priority</th><th>Time (simulation)</th><th>Source</th><th>Alarm</th><th>State</th><th>Acknowledgement</th></tr></thead><tbody>
+    @foreach (var alarm in grid.Alarms.OrderBy(a => a.Acknowledged).ThenByDescending(a => a.Severity).ThenByDescending(a => a.RaisedAt))
+    {
+        <tr class="@(!alarm.Acknowledged ? "row-alarm" : "")"><td><span class="pill @PriorityClass(alarm.Severity)">@alarm.Severity</span></td>
+            <td>@alarm.RaisedAt.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</td><td>@alarm.SourceId</td><td>@alarm.Message</td>
+            <td>@(alarm.Active ? "Active" : "Returned to normal") · @(alarm.Acknowledged ? "Acknowledged" : "Unacknowledged")</td>
+            <td>@if (Session.CanOperate && !alarm.Acknowledged) { <button class="btn" @onclick="() => Command(GridCommandType.AcknowledgeAlarm, alarm.Key)">Acknowledge</button> }
+                else { @alarm.AcknowledgedBy }</td></tr>
+    }
+    </tbody></table>
+}
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+@code {
+    private static string PriorityClass(AlarmSeverity severity) => severity >= AlarmSeverity.High ? "pill-alarm" : "pill-warn";
+}

@@ -122,7 +122,7 @@ public abstract class RealtimeComponentBase : ComponentBase, IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public virtual async ValueTask DisposeAsync()
     {
         await _stopping.CancelAsync();
         if (_subscription is not null)

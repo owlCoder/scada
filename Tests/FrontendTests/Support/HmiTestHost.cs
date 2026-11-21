@@ -1,4 +1,8 @@
 using Application.Detection;
+using Application.Common;
+using Application.Grid;
+using System.Security.Claims;
+using Hmi.Services.Grid;
 using Application.Identity;
 using Application.Persistence;
 using Application.Realtime;
@@ -20,7 +24,7 @@ namespace FrontendTests.Support;
 /// </summary>
 public sealed class HmiTestHost : IAsyncDisposable
 {
-    private HmiTestHost(AccessRole role, string name, RegisterWriteOptions? registerOptions)
+    private HmiTestHost(AccessRole role, string name, RegisterWriteOptions? registerOptions, SimulationMode mode)
     {
         RealtimeBroadcaster? broadcaster = null;
         Rig = new TestRig(registerOptions, createRealtime: time => broadcaster = new RealtimeBroadcaster(time));
@@ -28,6 +32,7 @@ public sealed class HmiTestHost : IAsyncDisposable
         var authorization = Context.AddAuthorization();
         authorization.SetAuthorized(name);
         authorization.SetRoles(role.ToString());
+        authorization.SetClaims(new Claim("scada:mode", mode.ToString()));
         authorization.SetPolicies(Enum.GetValues<AccessRole>().Where(r => r <= role).Select(r => r.ToString()).ToArray());
 
         var services = Context.Services;
@@ -54,15 +59,32 @@ public sealed class HmiTestHost : IAsyncDisposable
         services.AddSingleton<Application.Events.IEventPublisher>(Rig.Events);
         services.AddSingleton<TimeProvider>(Rig.Time);
         services.AddSingleton<IRealtimeFeed>(Broadcaster);
+        GridControl = new HmiFakeGridControl(Grid);
+        GridStore = new HmiFakeGridDefinitionStore(Grid, Rig.Time);
+        GridAdministration = new HmiFakeGridDefinitionAdministration(GridStore);
+        services.AddSingleton<Func<Domain.Grid.Snapshots.GridSnapshot, Domain.Grid.Snapshots.GridSnapshot>>(HmiFakeGridRedactor.ForOperators);
+        services.AddSingleton<IGridView>(Grid);
+        services.AddSingleton<IGridControl>(GridControl);
+        services.AddSingleton<IGridTraining>(GridTraining);
+        services.AddSingleton<IGridRuntime>(GridRuntime);
+        services.AddSingleton<IGridDefinitionStore>(GridStore);
+        services.AddSingleton<IGridDefinitionAdministration>(GridAdministration);
+        services.AddSingleton<GridEquipmentCatalog>();
         services.AddScoped<HmiSession>();
     }
 
+    public HmiFakeGridView Grid { get; } = new();
+    public HmiFakeGridControl GridControl { get; }
+    public HmiFakeGridTraining GridTraining { get; } = new();
+    public HmiFakeGridRuntime GridRuntime { get; } = new();
+    public HmiFakeGridDefinitionStore GridStore { get; }
+    public HmiFakeGridDefinitionAdministration GridAdministration { get; }
     public BunitContext Context { get; } = new();
     public TestRig Rig { get; }
     public RealtimeBroadcaster Broadcaster { get; }
 
-    public static HmiTestHost Create(AccessRole role, string name = "tester", RegisterWriteOptions? registerOptions = null) =>
-        new(role, name, registerOptions);
+    public static HmiTestHost Create(AccessRole role, string name = "tester", RegisterWriteOptions? registerOptions = null, SimulationMode mode = SimulationMode.Water) =>
+        new(role, name, registerOptions, mode);
 
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }

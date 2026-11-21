@@ -1,11 +1,12 @@
 using System.Text.Encodings.Web;
+using Application.Common;
 
 namespace Api.Endpoints.SignIn;
 
 /// <summary>Server-rendered sign-in page. No inline script or style, so it works under the strict CSP.</summary>
 public static class LoginPage
 {
-    public static string Render(string formFieldName, string token, string returnUrl, string? error, string? ssoName)
+    public static string Render(string formFieldName, string token, string returnUrl, string? error, string? ssoName, SimulationMode mode = SimulationMode.Water)
     {
         var html = HtmlEncoder.Default;
         var errorBlock = error is null ? "" : $"""<p class="login-error" role="alert">{html.Encode(error)}</p>""";
@@ -29,6 +30,13 @@ public static class LoginPage
                   <input type="hidden" name="returnUrl" value="{html.Encode(returnUrl)}">
                   <label>Username <input name="username" autocomplete="username" required maxlength="64"></label>
                   <label>Password <input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+                  <fieldset class="mode-cards">
+                    <legend>Simulation mode</legend>
+                    <label class="mode-card"><input type="radio" name="mode" value="Water" {(mode == SimulationMode.Water ? "checked" : "")}>
+                      <span>Water treatment plant</span></label>
+                    <label class="mode-card"><input type="radio" name="mode" value="Grid" {(mode == SimulationMode.Grid ? "checked" : "")}>
+                      <span>Electrical distribution grid</span></label>
+                  </fieldset>
                   <button type="submit">Sign in</button>
                 </form>
                 {sso}

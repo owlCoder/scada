@@ -1,0 +1,154 @@
+@inject GridEquipmentCatalog Catalog
+<section class="panel editor-properties">
+    <h2>Properties · @Draft.SelectedId</h2>
+    @if (Draft.Nodes.FirstOrDefault(n => n.Id == Draft.SelectedId) is { } node)
+    {
+        <GridEditorField Label="X (grid units)" Type="number" Value="node.Position.X" Changed="s => Move(node, s, true)" />
+        <GridEditorField Label="Y (grid units)" Type="number" Value="node.Position.Y" Changed="s => Move(node, s, false)" />
+    }
+    @if (Draft.Definition.Buses.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } bus)
+    {
+        <GridEditorField Label="Name" Value="bus.Name" Changed="s => Bus(bus with { Name = s })" />
+        <GridEditorField Label="Nominal voltage (kV)" Type="number" Value="bus.NominalVoltageKv" Changed="s => Bus(bus with { NominalVoltageKv = D(s) })" />
+        <GridEditorField Label="Minimum voltage (pu)" Type="number" Value="bus.MinVoltagePu" Changed="s => Bus(bus with { MinVoltagePu = D(s) })" />
+        <GridEditorField Label="Maximum voltage (pu)" Type="number" Value="bus.MaxVoltagePu" Changed="s => Bus(bus with { MaxVoltagePu = D(s) })" />
+    }
+    @if (Draft.Definition.Lines.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } line)
+    {
+        <GridEditorField Label="Name" Value="line.Name" Changed="s => Line(line with { Name = s })" />
+        <label class="editor-field">Conductor catalogue<select value="@line.CatalogType" @onchange="e => Conductor(line, e.Value?.ToString())"><option value="">Custom</option>
+            @foreach (var item in Catalog.Conductors) { <option value="@item.Name">@item.Name</option> }</select></label>
+        <label class="editor-field">From bus<select value="@line.FromBusId" @onchange="e => Line(line with { FromBusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <label class="editor-field">To bus<select value="@line.ToBusId" @onchange="e => Line(line with { ToBusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <GridEditorField Label="Length (km)" Type="number" Value="line.LengthKm" Changed="s => Line(line with { LengthKm = D(s) })" />
+        <GridEditorField Label="R (Ω/km)" Type="number" Value="line.ResistanceOhmPerKm" Changed="s => Line(line with { ResistanceOhmPerKm = D(s) })" />
+        <GridEditorField Label="X (Ω/km)" Type="number" Value="line.ReactanceOhmPerKm" Changed="s => Line(line with { ReactanceOhmPerKm = D(s) })" />
+        <GridEditorField Label="B (μS/km)" Type="number" Value="line.SusceptanceMicroSiemensPerKm" Changed="s => Line(line with { SusceptanceMicroSiemensPerKm = D(s) })" />
+        <GridEditorField Label="Rated current (A)" Type="number" Value="line.RatedCurrentA" Changed="s => Line(line with { RatedCurrentA = D(s) })" />
+        <p>@line.Waypoints.Count waypoint(s). Enable waypoint mode, then click the canvas.</p>
+        <button class="btn" @onclick="() => Line(line with { Waypoints = [] })">Clear waypoints</button>
+    }
+    @if (Draft.Definition.Transformers.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } transformer)
+    {
+        <GridEditorField Label="Name" Value="transformer.Name" Changed="s => Transformer(transformer with { Name = s })" />
+        <label class="editor-field">Transformer catalogue<select value="@transformer.CatalogType" @onchange="e => TransformerType(transformer, e.Value?.ToString())"><option value="">Custom</option>
+            @foreach (var item in Catalog.Transformers) { <option value="@item.Name">@item.Name</option> }</select></label>
+        <label class="editor-field">HV bus<select value="@transformer.HvBusId" @onchange="e => Transformer(transformer with { HvBusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <label class="editor-field">LV bus<select value="@transformer.LvBusId" @onchange="e => Transformer(transformer with { LvBusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <GridEditorField Label="Rated power (MVA)" Type="number" Value="transformer.RatedPowerMva" Changed="s => Transformer(transformer with { RatedPowerMva = D(s) })" />
+        <GridEditorField Label="HV rated voltage (kV)" Type="number" Value="transformer.HvRatedKv" Changed="s => Transformer(transformer with { HvRatedKv = D(s) })" />
+        <GridEditorField Label="LV rated voltage (kV)" Type="number" Value="transformer.LvRatedKv" Changed="s => Transformer(transformer with { LvRatedKv = D(s) })" />
+        <GridEditorField Label="Short-circuit voltage (%)" Type="number" Value="transformer.ShortCircuitVoltagePercent" Changed="s => Transformer(transformer with { ShortCircuitVoltagePercent = D(s) })" />
+        <GridEditorField Label="Load loss (kW)" Type="number" Value="transformer.LoadLossKw" Changed="s => Transformer(transformer with { LoadLossKw = D(s) })" />
+        <GridEditorField Label="No-load loss (kW)" Type="number" Value="transformer.NoLoadLossKw" Changed="s => Transformer(transformer with { NoLoadLossKw = D(s) })" />
+        <label class="editor-field"><input type="checkbox" checked="@transformer.HasOnLoadTapChanger" @onchange="e => Transformer(transformer with { HasOnLoadTapChanger = e.Value is true })" />On-load tap changer</label>
+        <GridEditorField Label="Tap minimum" Type="number" Value="transformer.TapMin" Changed="s => Transformer(transformer with { TapMin = I(s) })" />
+        <GridEditorField Label="Tap maximum" Type="number" Value="transformer.TapMax" Changed="s => Transformer(transformer with { TapMax = I(s) })" />
+        <GridEditorField Label="Initial tap" Type="number" Value="transformer.InitialTap" Changed="s => Transformer(transformer with { InitialTap = I(s) })" />
+        <GridEditorField Label="Tap step (%)" Type="number" Value="transformer.TapStepPercent" Changed="s => Transformer(transformer with { TapStepPercent = D(s) })" />
+        <GridEditorField Label="AVR target LV (kV; blank disables)" Type="number" Value="transformer.AvrTargetLvKv" Changed="s => Transformer(transformer with { AvrTargetLvKv = string.IsNullOrWhiteSpace(s) ? null : D(s) })" />
+        <GridEditorField Label="AVR deadband (%)" Type="number" Value="transformer.AvrDeadbandPercent" Changed="s => Transformer(transformer with { AvrDeadbandPercent = D(s) })" />
+        <GridEditorField Label="AVR delay (s)" Type="number" Value="transformer.AvrDelaySeconds" Changed="s => Transformer(transformer with { AvrDelaySeconds = D(s) })" />
+    }
+    @if (Draft.Definition.Switches.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } sw)
+    {
+        <GridEditorField Label="Name" Value="sw.Name" Changed="s => Switch(sw with { Name = s })" />
+        <label class="editor-field">Bus<select value="@sw.BusId" @onchange="e => Switch(sw with { BusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <label class="editor-field">Element<select value="@sw.ElementId" @onchange="e => Switch(sw with { ElementId = e.Value?.ToString() ?? string.Empty })"><option value="">Choose element</option>
+            @foreach (var id in Draft.Definition.Lines.Select(x => x.Id).Concat(Draft.Definition.Transformers.Select(x => x.Id)).Concat(Draft.Definition.Loads.Select(x => x.Id)).Concat(Draft.Definition.Generators.Select(x => x.Id)).Concat(Draft.Definition.Capacitors.Select(x => x.Id))) { <option>@id</option> }</select></label>
+        <label class="editor-field"><input type="checkbox" checked="@sw.NormallyClosed" @onchange="e => Switch(sw with { NormallyClosed = e.Value is true })" />Normally closed</label>
+        <GridEditorField Label="Breaking capacity (kA)" Type="number" Value="sw.BreakingCapacityKa" Changed="s => Switch(sw with { BreakingCapacityKa = string.IsNullOrWhiteSpace(s) ? null : D(s) })" />
+    }
+    @if (Draft.Definition.Loads.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } load)
+    {
+        <GridEditorField Label="Name" Value="load.Name" Changed="s => Load(load with { Name = s })" />
+        <label class="editor-field">Bus<select value="@load.BusId" @onchange="e => Load(load with { BusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <label class="editor-field">Load type<select value="@load.Profile" @onchange="e => Load(load with { Profile = Enum.Parse<GridLoadProfile>(e.Value!.ToString()!) })">
+            @foreach (var profile in Enum.GetValues<GridLoadProfile>()) { <option>@profile</option> }</select></label>
+        <GridEditorField Label="Peak demand (MW)" Type="number" Value="load.PeakActivePowerMw" Changed="s => Load(load with { PeakActivePowerMw = D(s) })" />
+        <GridEditorField Label="Power factor" Type="number" Value="load.PowerFactor" Changed="s => Load(load with { PowerFactor = D(s) })" />
+        <GridEditorField Label="Customers" Type="number" Value="load.Customers" Changed="s => Load(load with { Customers = I(s) })" />
+        <label class="editor-field"><input type="checkbox" checked="@load.Critical" @onchange="e => Load(load with { Critical = e.Value is true })" />Critical load</label>
+    }
+    @if (Draft.Definition.Sources.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } source)
+    {
+        <GridEditorField Label="Name" Value="source.Name" Changed="s => Source(source with { Name = s })" />
+        <label class="editor-field">Bus<select value="@source.BusId" @onchange="e => Source(source with { BusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <GridEditorField Label="Voltage setpoint (pu)" Type="number" Value="source.VoltageSetpointPu" Changed="s => Source(source with { VoltageSetpointPu = D(s) })" />
+        <GridEditorField Label="Short-circuit power (MVA)" Type="number" Value="source.ShortCircuitPowerMva" Changed="s => Source(source with { ShortCircuitPowerMva = D(s) })" />
+    }
+    @if (Draft.Definition.Generators.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } pv)
+    {
+        <GridEditorField Label="Name" Value="pv.Name" Changed="s => Generator(pv with { Name = s })" />
+        <label class="editor-field">Bus<select value="@pv.BusId" @onchange="e => Generator(pv with { BusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <GridEditorField Label="Rated generation (MW)" Type="number" Value="pv.RatedPowerMw" Changed="s => Generator(pv with { RatedPowerMw = D(s) })" />
+    }
+    @if (Draft.Definition.Capacitors.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } cap)
+    {
+        <GridEditorField Label="Name" Value="cap.Name" Changed="s => Capacitor(cap with { Name = s })" />
+        <label class="editor-field">Bus<select value="@cap.BusId" @onchange="e => Capacitor(cap with { BusId = e.Value?.ToString() ?? string.Empty })">@BusOptions()</select></label>
+        <GridEditorField Label="Rated power (Mvar)" Type="number" Value="cap.RatedPowerMvar" Changed="s => Capacitor(cap with { RatedPowerMvar = D(s) })" />
+        <GridEditorField Label="Steps" Type="number" Value="cap.Steps" Changed="s => Capacitor(cap with { Steps = I(s) })" />
+        <GridEditorField Label="Initial steps" Type="number" Value="cap.InitialSteps" Changed="s => Capacitor(cap with { InitialSteps = I(s) })" />
+    }
+    @if (Draft.Definition.Protections.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } relay)
+    {
+        <GridEditorField Label="Name" Value="relay.Name" Changed="s => Protection(relay with { Name = s })" />
+        <label class="editor-field">Breaker<select value="@relay.SwitchId" @onchange="e => Protection(relay with { SwitchId = e.Value?.ToString() ?? string.Empty })"><option value="">Choose breaker</option>
+            @foreach (var item in Draft.Definition.Switches.Where(s => s.Kind == GridSwitchKind.Breaker)) { <option value="@item.Id">@item.Name</option> }</select></label>
+        <label class="editor-field">Function<select value="@relay.Function" @onchange="e => Protection(relay with { Function = Enum.Parse<GridProtectionFunction>(e.Value!.ToString()!) })">
+            @foreach (var item in Enum.GetValues<GridProtectionFunction>()) { <option>@item</option> }</select></label>
+        <label class="editor-field">Curve<select value="@relay.Curve" @onchange="e => Protection(relay with { Curve = Enum.Parse<GridCurveType>(e.Value!.ToString()!) })">
+            @foreach (var item in Enum.GetValues<GridCurveType>()) { <option>@item</option> }</select></label>
+        <GridEditorField Label="Pickup value" Type="number" Value="relay.PickupValue" Changed="s => Protection(relay with { PickupValue = D(s) })" />
+        <GridEditorField Label="Time setting" Type="number" Value="relay.TimeSetting" Changed="s => Protection(relay with { TimeSetting = D(s) })" />
+        <label class="editor-field"><input type="checkbox" checked="@relay.Enabled" @onchange="e => Protection(relay with { Enabled = e.Value is true })" />Enabled</label>
+    }
+    @if (Draft.Definition.Rtus.FirstOrDefault(x => x.Id == Draft.SelectedId) is { } rtu)
+    {
+        <GridEditorField Label="Name" Value="rtu.Name" Changed="s => Rtu(rtu with { Name = s })" />
+        <GridEditorField Label="IEC 104 common address" Type="number" Value="rtu.CommonAddress" Changed="s => Rtu(rtu with { CommonAddress = I(s) })" />
+        <GridEditorField Label="Link ID" Value="rtu.LinkId" Changed="s => Rtu(rtu with { LinkId = string.IsNullOrWhiteSpace(s) ? null : s })" />
+        <fieldset><legend>Assigned elements</legend>
+            @foreach (var id in Draft.AllIds().Except(Draft.Definition.Rtus.Select(r => r.Id)))
+            {
+                <label class="editor-field"><input type="checkbox" checked="@rtu.ElementIds.Contains(id)" @onchange="e => Assign(rtu, id, e.Value is true)" />@id</label>
+            }
+        </fieldset>
+    }
+</section>
+@code {
+    [Parameter, EditorRequired] public GridEditorDocument Draft { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+    private static double D(string s) => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && double.IsFinite(value) ? value : 0;
+    private static int I(string s) => int.TryParse(s, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    private Task Update(GridDefinition definition) { Draft.Replace(definition); return Changed.InvokeAsync(); }
+    private Task Move(GridDiagramNode node, string value, bool x) { Draft.Move(node.Id, x ? node.Position with { X = D(value) } : node.Position with { Y = D(value) }); return Changed.InvokeAsync(); }
+    private RenderFragment BusOptions() => @<text><option value="">Choose bus</option>@foreach (var b in Draft.Definition.Buses) { <option value="@b.Id">@b.Id · @b.Name</option> }</text>;
+    private Task Bus(GridBusDefinition item) => Update(Draft.Definition with { Buses = Draft.Definition.Buses.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Line(GridLineDefinition item) => Update(Draft.Definition with { Lines = Draft.Definition.Lines.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Transformer(GridTransformerDefinition item) => Update(Draft.Definition with { Transformers = Draft.Definition.Transformers.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Switch(GridSwitchDefinition item) => Update(Draft.Definition with { Switches = Draft.Definition.Switches.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Load(GridLoadDefinition item) => Update(Draft.Definition with { Loads = Draft.Definition.Loads.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Source(GridSourceDefinition item) => Update(Draft.Definition with { Sources = Draft.Definition.Sources.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Generator(GridGeneratorDefinition item) => Update(Draft.Definition with { Generators = Draft.Definition.Generators.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Capacitor(GridCapacitorDefinition item) => Update(Draft.Definition with { Capacitors = Draft.Definition.Capacitors.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Protection(GridProtectionDefinition item) => Update(Draft.Definition with { Protections = Draft.Definition.Protections.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Rtu(GridRtuDefinition item) => Update(Draft.Definition with { Rtus = Draft.Definition.Rtus.Select(x => x.Id == item.Id ? item : x).ToArray() });
+    private Task Assign(GridRtuDefinition rtu, string id, bool assigned) => Rtu(rtu with { ElementIds = assigned ? rtu.ElementIds.Append(id).Distinct().ToArray() : rtu.ElementIds.Where(x => x != id).ToArray() });
+    private Task Conductor(GridLineDefinition line, string? name)
+    {
+        var item = Catalog.Conductors.FirstOrDefault(x => x.Name == name);
+        return item is null ? Line(line with { CatalogType = null }) : Line(line with { CatalogType = item.Name, Kind = item.Kind, ResistanceOhmPerKm = item.R, ReactanceOhmPerKm = item.X, SusceptanceMicroSiemensPerKm = item.B, RatedCurrentA = item.RatedCurrentA });
+    }
+    private Task TransformerType(GridTransformerDefinition transformer, string? name)
+    {
+        var item = Catalog.Transformers.FirstOrDefault(x => x.Name == name);
+        return item is null ? Transformer(transformer with { CatalogType = null }) : Transformer(transformer with
+        {
+            CatalogType = item.Name, RatedPowerMva = item.Mva, HvRatedKv = item.HvKv, LvRatedKv = item.LvKv, ShortCircuitVoltagePercent = item.UkPercent,
+            LoadLossKw = item.LoadLossKw, NoLoadLossKw = item.NoLoadLossKw, HasOnLoadTapChanger = item.Oltc, TapMin = item.Oltc ? -8 : -2,
+            TapMax = item.Oltc ? 8 : 2, TapStepPercent = item.Oltc ? 1.25 : 2.5, AvrTargetLvKv = item.Oltc ? item.LvKv : null
+        });
+    }
+}

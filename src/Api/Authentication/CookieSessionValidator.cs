@@ -1,4 +1,5 @@
 using System.Globalization;
+using Application.Common;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Security.Authentication;
@@ -17,7 +18,8 @@ public static class CookieSessionValidator
     public static Task StartSessionAsync(CookieSigningInContext context)
     {
         var now = context.Options.TimeProvider!.GetUtcNow();
-        context.Properties.SetString(StartedAt, now.ToString("O", CultureInfo.InvariantCulture));
+        if (context.Properties.GetString(StartedAt) is null)
+            context.Properties.SetString(StartedAt, now.ToString("O", CultureInfo.InvariantCulture));
         return Task.CompletedTask;
     }
 
@@ -45,7 +47,9 @@ public static class CookieSessionValidator
 
         if (!principal.IsInRole(user.Role.ToString()))
         {
-            context.ReplacePrincipal(ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, startedAt));
+            var mode = Enum.TryParse<SimulationMode>(principal.FindFirst(ScadaClaimTypes.Mode)?.Value, out var parsed) && Enum.IsDefined(parsed)
+                ? parsed : SimulationMode.Water;
+            context.ReplacePrincipal(ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, startedAt, mode));
             context.ShouldRenew = true;
         }
 

@@ -1,0 +1,142 @@
+@inherits GridPageBase
+@inject TimeProvider Clock
+@inject IGridControl Control
+
+<aside class="panel detail grid-faceplate" aria-label="Element faceplate">
+    <h2>@ElementId</h2>
+    <OutcomeBanner Outcome="Outcome" />
+    <RefreshErrorBanner Error="@RefreshError" />
+    @if (Snapshot is { } grid)
+    {
+        @if (grid.Switch(ElementId) is { } device)
+        {
+            <h3>@device.Name</h3>
+            <dl class="facts"><dt>Kind</dt><dd>@device.Kind</dd><dt>State</dt><dd>@(device.Closed ? "Closed" : "Open")</dd>
+                <dt>Last operation</dt><dd>@(device.LastOperatedBy ?? "—") · @device.LastCause</dd>
+                <dt>Selection</dt><dd>@(device.Selected ? (device.SelectedToClose == true ? "Close" : "Open") : "None")</dd></dl>
+            @if (Session.IsInstructor && device.Fault != GridEquipmentFault.None) { <p>Fault: @device.Fault</p> }
+            @if (Session.CanOperate)
+            {
+                <div class="actions">
+                    <button class="btn" @onclick="() => Select(GridCommandType.SelectOpen)">Select open</button>
+                    <button class="btn" @onclick="() => Select(GridCommandType.SelectClose)">Select close</button>
+                    <button class="btn" disabled="@(!CanExecute)" @onclick="() => Execute()">Execute</button>
+                    <button class="btn" disabled="@(!device.Selected && _selectionUntil is null)" @onclick="() => CancelSelection()">Cancel selection</button>
+                </div>
+                @if (_selectionUntil is not null)
+                {
+                    <p role="status">Selection: @SecondsRemaining s remaining (local execute window)</p>
+                }
+                <p class="muted">Select, then execute. The service checks ownership, expiry and interlocks.</p>
+            }
+        }
+        @if (grid.Branch(ElementId) is { } branch)
+        {
+            <h3>@branch.Name</h3>
+            <p>@Number(branch.CurrentA) A · @Number(branch.LoadingPercent) % loading</p>
+            <GridLoadingBar Percent="branch.LoadingPercent" />
+            @if (Session.IsInstructor && branch.Fault != GridEquipmentFault.None) { <p>Fault: @branch.Fault</p> }
+            @if (branch.Kind == GridBranchKind.Transformer)
+            {
+                <p>Tap @branch.TapPosition · AVR @(branch.TapAutomatic == true ? "Automatic" : "Manual")</p>
+                @if (Session.CanOperate)
+                {
+                    <div class="actions">
+                        <button class="btn" @onclick="() => Command(GridCommandType.TapRaise, ElementId)">Raise tap</button>
+                        <button class="btn" @onclick="() => Command(GridCommandType.TapLower, ElementId)">Lower tap</button>
+                        <button class="btn" @onclick="() => Command(branch.TapAutomatic == true ? GridCommandType.SetTapManual : GridCommandType.SetTapAutomatic, ElementId)">
+                            @(branch.TapAutomatic == true ? "Set AVR manual" : "Set AVR automatic")</button>
+                    </div>
+                }
+            }
+        }
+        @if (grid.Load(ElementId) is { } load)
+        {
+            <h3>@load.Name</h3><p>Demand @Number(load.DemandMw) MW · supplied @Number(load.ActivePowerMw) MW</p>
+            <p>Customers @load.CustomersSupplied / @load.Customers · @(load.Shed ? "Shed" : "Restored")</p>
+            @if (Session.CanOperate)
+            {
+                <button class="btn" @onclick="() => Command(load.Shed ? GridCommandType.RestoreLoad : GridCommandType.ShedLoad, ElementId)">@(load.Shed ? "Restore load" : "Shed load")</button>
+            }
+        }
+        @if (grid.Capacitors.FirstOrDefault(c => c.Id == ElementId) is { } capacitor)
+        {
+            <h3>@capacitor.Name</h3><p>Steps @capacitor.StepsInService / @capacitor.Steps · @Number(capacitor.ReactivePowerMvar) Mvar</p>
+            @if (Session.CanOperate)
+            {
+                <label>Steps <input type="number" min="0" max="@capacitor.Steps" @bind="_steps" /></label>
+                <button class="btn" @onclick="() => Command(GridCommandType.SetCapacitorSteps, ElementId, _steps)">Set steps</button>
+            }
+        }
+        @if (grid.Bus(ElementId) is { } bus)
+        {
+            <h3>@bus.Name</h3><p>@Number(bus.VoltageKv) kV · @Number(bus.VoltagePu) pu · @(bus.Energized ? "Energized" : "De-energized")</p>
+        }
+        @if (grid.Generators.FirstOrDefault(g => g.Id == ElementId) is { } generator)
+        {
+            <h3>@generator.Name</h3><p>@Number(generator.ActivePowerMw) MW · @Number(generator.ReactivePowerMvar) Mvar</p>
+        }
+        @foreach (var relay in grid.Protections.Where(p => p.SwitchId == ElementId || p.Id == ElementId))
+        {
+            <h3>@relay.Name</h3><p>@relay.Function · @relay.Curve · pickup @Number(relay.PickupValue) · time @Number(relay.TimeSetting)</p>
+            <p>@(relay.Enabled ? "Enabled" : "Disabled") · @(relay.Tripped ? "Tripped" : relay.PickedUp ? "Picked up" : "Normal")</p>
+            @if (Session.CanOperate) { <button class="btn" @onclick="() => Command(GridCommandType.ResetProtection, relay.Id)">Reset protection</button> }
+        }
+        <h3>Measurements</h3>
+        @foreach (var reading in grid.Measurements.Where(m => m.ElementId == ElementId))
+        {
+            <p>@reading.Kind: @Number(reading.ReportedValue) @reading.Unit · @reading.Quality
+                @if (Session.IsInstructor) { <span> · true @Number(reading.TrueValue) · spoofed @reading.IsSpoofed</span> }</p>
+        }
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+</aside>
+
+@code {
+    [Parameter, EditorRequired] public string ElementId { get; set; } = "";
+    private DateTimeOffset? _selectionUntil;
+    private int _steps;
+    private int SecondsRemaining => _selectionUntil is { } until ? Math.Max(0, (int)Math.Ceiling((until - Clock.GetUtcNow()).TotalSeconds)) : 0;
+    private bool CanExecute => SecondsRemaining > 0 && Snapshot?.Switch(ElementId)?.Selected == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _ = CountdownAsync();
+    }
+
+    private async Task CountdownAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
+            while (await timer.WaitForNextTickAsync(StoppingToken))
+                if (_selectionUntil is not null)
+                    await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { }
+    }
+
+    private bool Select(GridCommandType type) => Ask($"{type}: {ElementId}?", "Reserve this switch for your operation. Execute within 10 seconds after selection.", async () =>
+    {
+        var result = await Control.ExecuteAsync(new GridCommand(type, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = result.Accepted ? Clock.GetUtcNow().AddSeconds(10) : null;
+        return ActionOutcome.From(result);
+    });
+
+    private bool Execute() => Ask($"Execute: {ElementId}?", "Operate the selected switch on the live grid.", async () =>
+    {
+        if (!CanExecute)
+            return ActionOutcome.Failed("Selection expired. Select the switch again.");
+        var result = await Control.ExecuteAsync(new GridCommand(GridCommandType.Execute, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = null;
+        return ActionOutcome.From(result);
+    });
+
+    private bool CancelSelection() => Ask($"Cancel selection: {ElementId}?", "Release the selected switch without operating it.", async () =>
+    {
+        var result = await Control.ExecuteAsync(new GridCommand(GridCommandType.Cancel, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = null;
+        return ActionOutcome.From(result);
+    }, dangerous: false);
+}
