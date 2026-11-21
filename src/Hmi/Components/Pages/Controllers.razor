@@ -1,0 +1,69 @@
+@page "/controllers"
+@inherits ConfirmedComponentBase
+@using Domain.Control
+@using Domain.Process.Commands
+@inject Application.Simulation.SimulationEngine Engine
+@inject Application.Training.InstructorTrainingService Training
+
+<PageTitle>PLC / RTU · SCADA</PageTitle>
+<h1>PLC / RTU</h1>
+<OutcomeBanner Outcome="Outcome" />
+
+@foreach (var controller in _controllers)
+{
+    <section class="panel" @key="controller.Id">
+        <h2>@controller.Id · @controller.Name (@controller.Kind)</h2>
+        <dl class="facts">
+            <dt>State</dt><dd><StatusPill Text="@controller.State.ToString()" Kind="@(controller.State == ControllerState.Running ? "ok" : "warn")" /></dd>
+            <dt>Field / supervisory</dt><dd>@controller.FieldCommunication / @controller.SupervisoryCommunication</dd>
+            <dt>Scan cycle / count</dt><dd>@controller.ScanCycleMilliseconds ms / @controller.ScanCount</dd>
+            <dt>Last scan</dt><dd>@controller.LastScanAt.ToString("c", CultureInfo.InvariantCulture) simulated</dd>
+            <dt>Failures</dt><dd>@controller.ConsecutiveFailures consecutive / @controller.TotalFailures total</dd>
+            <dt>Commands issued</dt><dd>@controller.CommandsIssued</dd>
+            <dt>Last error</dt><dd>@(controller.LastError ?? "—")</dd>
+            <dt>Forced registers</dt><dd>@controller.ForcedRegisterCount</dd>
+        </dl>
+        @if (Session.IsInstructor)
+        {
+            <div class="actions">
+                <button class="btn" @onclick='() => AskControl("Start", controller.Id, () => Training.SetControllerRunning(controller.Id, true, Session.Actor))'>Start</button>
+                <button class="btn" @onclick='() => AskControl("Stop", controller.Id, () => Training.SetControllerRunning(controller.Id, false, Session.Actor))'>Stop</button>
+                <button class="btn" @onclick='() => AskControl("Reset", controller.Id, () => Training.ResetController(controller.Id, Session.Actor))'>Reset</button>
+                <button class="btn" disabled="@(controller.ForcedRegisterCount == 0)"
+                        @onclick='() => AskControl("Release forces on", controller.Id, () => Training.ReleaseForces(controller.Id, Session.Actor))'>Release forces</button>
+            </div>
+        }
+        <details class="hmi-details">
+            <summary>Setpoints and forced registers</summary>
+            <table class="grid">
+                <thead><tr><th>Area</th><th>Address</th><th>Tag</th><th>Value</th><th>Forced</th></tr></thead>
+                <tbody>
+                    @foreach (var register in controller.Registers.Where(IsRelevant))
+                    {
+                        <tr><td>@register.Area</td><td>@register.Address</td><td>@register.Tag</td><td>@register.Value</td><td>@(register.IsForced ? "Yes" : "—")</td></tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    </section>
+}
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private IReadOnlyList<ControllerSnapshot> _controllers = [];
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Controllers];
+
+    protected override bool Refresh()
+    {
+        _controllers = Engine.Read(world => world.Controllers.Select(controller => controller.Snapshot()).ToArray());
+        return true;
+    }
+
+    private bool AskControl(string label, string id, Func<CommandResult> run) =>
+        Ask($"{label} {id}?", $"Apply this operation to controller {id}.", () => ActionOutcome.From(run()));
+
+    private static bool IsRelevant(RegisterSnapshot register) =>
+        register.IsForced || (register.Area == RegisterArea.Holding &&
+            register.Address is >= ControllerRegisterMap.SetpointBase and < ControllerRegisterMap.StatusBase);
+}

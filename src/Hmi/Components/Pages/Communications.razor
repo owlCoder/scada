@@ -1,0 +1,106 @@
+@page "/communications"
+@inherits ConfirmedComponentBase
+@using Domain.Network
+@inject Application.Simulation.SimulationEngine Engine
+@inject Application.Training.InstructorTrainingService Training
+
+<PageTitle>Communications · SCADA</PageTitle>
+<h1>Communications</h1>
+<OutcomeBanner Outcome="Outcome" />
+
+<p class="muted">Blocked connection attempts: @_blockedAttempts</p>
+<div class="table-scroll">
+    <table class="grid">
+        <thead><tr><th>Link</th><th>Path</th><th>State</th><th>Latency</th><th>Packet loss</th><th>Lost / timed out</th>
+            @if (Session.IsInstructor) { <th>Controls</th> }
+        </tr></thead>
+        <tbody>
+            @foreach (var link in _links)
+            {
+                <tr @key="link.Id">
+                    <th scope="row"><strong class="cell-title">@link.Id</strong> @link.Name</th>
+                    <td>@link.SourceNode → @link.TargetNode</td>
+                    <td><StatusPill Text="@link.State.ToString()" Kind="@LinkKind(link.State)" /></td>
+                    <td>@Number(link.LatencyMilliseconds) ms</td>
+                    <td>@Number(link.PacketLossPercent) %</td>
+                    <td>@link.Lost / @link.TimedOut</td>
+                    @if (Session.IsInstructor)
+                    {
+                        <td class="actions-cell">
+                            @if (link.State == LinkState.Down)
+                            {
+                                <button class="btn" @onclick="() => AskConnection(link.Id, true)">Connect</button>
+                            }
+                            else
+                            {
+                                <button class="btn" @onclick="() => AskConnection(link.Id, false)">Disconnect</button>
+                            }
+                            <button class="btn" @onclick="() => EditImpairment(link)">Edit impairment</button>
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (Session.IsInstructor && _editedLink is { } linkId)
+{
+    <section class="panel hmi-details">
+        <h2>Impairment · @linkId</h2>
+        <div class="form-row">
+            <label>Latency (ms)<input type="number" min="0" step="any" @bind="_latency" /></label>
+            <label>Packet loss (%)<input type="number" min="0" max="100" step="any" @bind="_loss" /></label>
+            <button class="btn btn-primary" disabled="@(_latency is null || _loss is null)" @onclick="() => AskImpairment()">Apply impairment</button>
+        </div>
+    </section>
+}
+
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private IReadOnlyList<LinkSnapshot> _links = [];
+    private long _blockedAttempts;
+    private string? _editedLink;
+    private double? _latency;
+    private double? _loss;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Network];
+
+    protected override bool Refresh()
+    {
+        var network = Engine.Read(world => world.Network.Snapshot());
+        _links = network.Links;
+        _blockedAttempts = network.BlockedAttempts;
+        return true;
+    }
+
+    private bool AskConnection(string id, bool connected)
+    {
+        var operation = connected ? "Connect" : "Disconnect";
+        return Ask($"{operation} {id}?", $"{operation} this link in the simulation.",
+            () => ActionOutcome.From(Training.SetLinkConnected(id, connected, Session.Actor)), dangerous: !connected);
+    }
+
+    private bool EditImpairment(LinkSnapshot link)
+    {
+        _editedLink = link.Id;
+        _latency = link.LatencyMilliseconds;
+        _loss = link.PacketLossPercent;
+        return true;
+    }
+
+    private bool AskImpairment() =>
+        _editedLink is { } id && _latency is { } latency && _loss is { } loss &&
+        Ask($"Change impairment on {id}?", $"Set latency to {Number(latency)} ms and packet loss to {Number(loss)} %.",
+            () => ActionOutcome.From(Training.SetLinkImpairment(id, latency, loss, Session.Actor)));
+
+    private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string LinkKind(LinkState state) => state switch
+    {
+        LinkState.Up => "ok",
+        LinkState.Degraded => "warn",
+        _ => "alarm"
+    };
+}

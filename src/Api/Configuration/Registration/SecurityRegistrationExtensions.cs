@@ -53,6 +53,7 @@ public static class SecurityRegistrationExtensions
         services.AddSingleton<IEnumerable<IDetectionRule>>(sp =>
             DefaultDetectionRules.Create(sp.GetRequiredService<SimulationTopology>(), sp.GetRequiredService<TelemetryHistorian>()));
         services.AddSingleton<DetectionEngine>();
+        services.AddSingleton<DetectionRuleAdministrationService>();
 
         services.AddSingleton<IEnumerable<ScenarioDefinition>>(_ => DefaultScenarios.Create());
         services.AddSingleton<ScenarioServices>();

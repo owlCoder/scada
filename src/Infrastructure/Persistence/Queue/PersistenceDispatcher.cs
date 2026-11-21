@@ -1,6 +1,7 @@
 using Application.Alarms;
 using Application.Events;
 using Application.Persistence;
+using Application.Realtime;
 using Application.Simulation;
 using Application.Telemetry;
 
@@ -11,24 +12,33 @@ public sealed class PersistenceDispatcher(
     IEventStore events,
     ITelemetryStore telemetry,
     IAlarmHistoryStore alarms,
-    IPlantStateStore plantState)
+    IPlantStateStore plantState,
+    IRealtimePublisher? realtime = null)
 {
     public async Task<int> DispatchAsync(IReadOnlyList<PersistenceWorkItem> batch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(batch);
-        return batch.FirstOrDefault() switch
+        switch (batch.FirstOrDefault())
         {
-            SecurityEventWorkItem => await events.AppendAsync(batch.Cast<SecurityEventWorkItem>().Select(i => i.Event).ToArray(),
-                cancellationToken),
-            TelemetryBatchWorkItem => await telemetry.AppendAsync(batch.Cast<TelemetryBatchWorkItem>().SelectMany(i => i.Samples).ToArray(),
-                cancellationToken),
-            AlarmHistoryWorkItem => await alarms.AppendAsync(batch.Cast<AlarmHistoryWorkItem>().Select(i => i.Record).ToArray(),
-                cancellationToken),
-            // Older snapshots in the same group are superseded.
-            SimulationStateWorkItem => await plantState.SaveAsync(
-                batch.Cast<SimulationStateWorkItem>().MaxBy(i => i.State.SavedAt)!.State, cancellationToken) ? 1 : 0,
-            null => 0,
-            var item => throw new InvalidOperationException($"Unsupported persistence work item kind: {item.Kind}")
-        };
+            case SecurityEventWorkItem:
+                var written = await events.AppendAsync(batch.Cast<SecurityEventWorkItem>().Select(i => i.Event).ToArray(),
+                    cancellationToken);
+                realtime?.Publish(RealtimeTopics.EventsPersisted, written);
+                return written;
+            case TelemetryBatchWorkItem:
+                return await telemetry.AppendAsync(batch.Cast<TelemetryBatchWorkItem>().SelectMany(i => i.Samples).ToArray(),
+                    cancellationToken);
+            case AlarmHistoryWorkItem:
+                return await alarms.AppendAsync(batch.Cast<AlarmHistoryWorkItem>().Select(i => i.Record).ToArray(),
+                    cancellationToken);
+            case SimulationStateWorkItem:
+                // Older snapshots in the same group are superseded.
+                return await plantState.SaveAsync(
+                    batch.Cast<SimulationStateWorkItem>().MaxBy(i => i.State.SavedAt)!.State, cancellationToken) ? 1 : 0;
+            case null:
+                return 0;
+            case var item:
+                throw new InvalidOperationException($"Unsupported persistence work item kind: {item.Kind}");
+        }
     }
 }

@@ -64,7 +64,7 @@ public sealed class PostgresIncidentStore(IDbContextFactory<ScadaDbContext> fact
     }
 
     public async Task<bool> UpdateAsync(Incident incident, int expectedVersion, IReadOnlyList<IncidentTimelineEntry> timeline,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, IncidentComment? comment = null)
     {
         ArgumentNullException.ThrowIfNull(incident);
         ArgumentNullException.ThrowIfNull(timeline);
@@ -76,6 +76,8 @@ public sealed class PostgresIncidentStore(IDbContextFactory<ScadaDbContext> fact
         row.Apply(incident);
         db.Entry(row).Property(r => r.Version).OriginalValue = expectedVersion;
         db.IncidentTimeline.AddRange(timeline.Select(IncidentTimelineEntity.From));
+        if (comment is not null)
+            db.IncidentComments.Add(IncidentCommentEntity.From(comment));
         try
         {
             await db.SaveChangesAsync(cancellationToken);

@@ -1,0 +1,76 @@
+@page "/events"
+@inherits RealtimeComponentBase
+@using Application.Common
+@using Application.Events
+@inject IEventStore EventStore
+
+<PageTitle>Events · SCADA</PageTitle>
+<h1>Events</h1>
+
+<form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
+    <label>Category<input type="search" @bind="_category" /></label>
+    <label>Actor<input type="search" @bind="_actor" /></label>
+    <label>Search messages<input type="search" @bind="_search" /></label>
+    <button class="btn btn-primary" type="submit">Apply filters</button>
+</form>
+
+@if (_result is { } result)
+{
+    @if (result.Items.Count == 0)
+    {
+        <p class="muted">No matching events.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead><tr><th>Time (UTC)</th><th>Category</th><th>Severity</th><th>Source</th><th>Actor</th><th>Device</th><th>Message</th><th>Correlation ID</th></tr></thead>
+                <tbody>
+                    @foreach (var item in result.Items)
+                    {
+                        <tr @key="item.Id">
+                            <td class="nowrap">@item.Timestamp.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</td>
+                            <td>@item.Category</td><td>@item.Severity</td><td>@item.Source</td><td>@item.Actor</td>
+                            <td>@(item.DeviceId ?? "—")</td><td>@item.Message</td><td class="break-text">@(item.CorrelationId ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <PageControls Page="result.Page" TotalPages="result.TotalPages" TotalCount="result.TotalCount" PageChanged="ChangePageAsync" />
+}
+
+@code {
+    private string? _category;
+    private string? _actor;
+    private string? _search;
+    private EventQuery _query = new();
+    private PagedResult<SecurityEvent>? _result;
+    private long _loadId;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Events, RealtimeTopics.EventsPersisted];
+    protected override bool Refresh() => _query.Page == 1;
+    protected override Task RefreshAsync(CancellationToken cancellationToken) =>
+        _query.Page == 1 ? LoadAsync(cancellationToken) : Task.CompletedTask;
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var loadId = ++_loadId;
+        var result = await EventStore.QueryAsync(_query, cancellationToken);
+        if (loadId == _loadId)
+            _result = result;
+    }
+
+    private Task ApplyFilterAsync()
+    {
+        _query = new EventQuery(Category: _category?.Trim(), Actor: _actor?.Trim(), Search: _search);
+        return RefreshNowAsync();
+    }
+
+    private Task ChangePageAsync(int page)
+    {
+        _query = _query with { Page = page };
+        return LoadAsync(StoppingToken);
+    }
+}

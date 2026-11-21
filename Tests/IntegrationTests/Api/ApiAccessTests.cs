@@ -20,6 +20,23 @@ public sealed class ApiAccessTests
     }
 
     [Fact]
+    public async Task HealthServesTheHmiForBrowserRequestsAndJsonForProbes()
+    {
+        using var factory = ApiTestFactory.Create();
+        using var browser = factory.Client(ApiTestFactory.ViewerKey);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+        request.Headers.Accept.ParseAdd("text/html");
+        using var html = await browser.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, html.StatusCode);
+        Assert.Equal("text/html", html.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("_framework/blazor.web.js", await html.Content.ReadAsStringAsync());
+
+        using var probe = factory.Client(null);
+        var json = await probe.GetJsonAsync("/health");
+        Assert.Equal("memory", json.GetProperty("storage").GetString());
+    }
+
+    [Fact]
     public async Task ResponsesHaveSecurityHeaders()
     {
         using var factory = ApiTestFactory.Create();

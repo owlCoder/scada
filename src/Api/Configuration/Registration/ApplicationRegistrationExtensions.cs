@@ -20,6 +20,7 @@ public static class ApplicationRegistrationExtensions
         services.AddSingleton<TrainingEnvironment>();
         services.AddSingleton<ITrainingEnvironment>(sp => sp.GetRequiredService<TrainingEnvironment>());
         services.AddSingleton<IPlantView>(sp => sp.GetRequiredService<TrainingEnvironment>());
+        services.AddSingleton<InstructorTrainingService>();
         return builder;
     }
 }

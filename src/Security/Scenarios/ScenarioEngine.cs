@@ -115,7 +115,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
     public async Task<ScenarioControlResult> StopAsync(Actor actor, CancellationToken cancellationToken)
     {
         if (!Authorize(actor, "stop"))
-            return ScenarioControlResult.Fail("Operator role required.");
+            return ScenarioControlResult.Fail("Administrator role required.");
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -136,7 +136,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
     public async Task<ScenarioControlResult> ResetAsync(Actor actor, CancellationToken cancellationToken)
     {
         if (!Authorize(actor, "reset"))
-            return ScenarioControlResult.Fail("Operator role required.");
+            return ScenarioControlResult.Fail("Administrator role required.");
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -207,7 +207,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         CancellationToken cancellationToken)
     {
         if (!Authorize(actor, $"start scenario {definition.Id}"))
-            return ScenarioControlResult.Fail("Operator role required.");
+            return ScenarioControlResult.Fail("Administrator role required.");
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -221,8 +221,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
                 actor.Name, _time.GetUtcNow(), plant.SimulationTime, replayOf);
             _active = run;
             var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
-            UpdateCurrent(record, runId);
-            await SaveAsync(record, cancellationToken);
+            await PersistCurrentAsync(record, runId, cancellationToken);
             Publish(EventSeverity.Medium, replayOf is null
                 ? $"Scenario {definition.Name} started"
                 : $"Scenario {definition.Name} started as a replay of run {replayOf}", actor.Name, runId);
@@ -238,7 +237,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         CancellationToken cancellationToken)
     {
         if (!Authorize(actor, verb))
-            return ScenarioControlResult.Fail("Operator role required.");
+            return ScenarioControlResult.Fail("Administrator role required.");
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -250,8 +249,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
 
             run.State = to;
             var record = run.ToRecord(null, [], ScenarioOutcome.Pending);
-            UpdateCurrent(record, run.RunId);
-            await SaveAsync(record, cancellationToken);
+            await PersistCurrentAsync(record, run.RunId, cancellationToken);
             Publish(EventSeverity.Information, $"Scenario {run.Definition.Name} {to.ToString().ToLowerInvariant()}", actor.Name, run.RunId);
             return ScenarioControlResult.Ok($"Scenario {run.Definition.Name} {to.ToString().ToLowerInvariant()}.", record);
         }
@@ -287,8 +285,7 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         var record = run.ToRecord(_time.GetUtcNow(), observed, outcome);
         ScadaInstrumentation.ScenarioRuns.Add(1, new KeyValuePair<string, object?>("scenario", run.Definition.Id),
             new KeyValuePair<string, object?>("outcome", outcome.ToString()));
-        UpdateCurrent(record, null);
-        await SaveAsync(record, cancellationToken);
+        await PersistCurrentAsync(record, null, cancellationToken);
 
         var missing = run.Definition.ExpectedDetections.Except(observed, StringComparer.Ordinal).ToArray();
         Publish(outcome is ScenarioOutcome.Detected or ScenarioOutcome.Aborted ? EventSeverity.Information : EventSeverity.Medium,
@@ -318,11 +315,11 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
     private bool Authorize(Actor actor, string operation)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        if (actor.HasRole(AccessRole.Operator))
+        if (actor.HasRole(AccessRole.Administrator))
             return true;
 
         _events.Publish(SecurityEvent.Create(_time.GetUtcNow(), EventCategories.AuthorizationDenied, EventSeverity.Medium,
-            "scenario-engine", $"Denied attempt to {operation}: requires Operator, caller is {actor.Role}", actor.Name));
+            "scenario-engine", $"Denied attempt to {operation}: requires Administrator, caller is {actor.Role}", actor.Name));
         return false;
     }
 
@@ -335,6 +332,18 @@ public sealed class ScenarioEngine : ISimulationObserver, IActiveScenarioProvide
         }
 
         return publish && _realtime.Publish(RealtimeTopics.Scenarios, record);
+    }
+
+    private async Task PersistCurrentAsync(ScenarioRunRecord record, Guid? activeRunId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SaveAsync(record, cancellationToken);
+        }
+        finally
+        {
+            UpdateCurrent(record, activeRunId);
+        }
     }
 
     private async Task<bool> SaveAsync(ScenarioRunRecord record, CancellationToken cancellationToken)

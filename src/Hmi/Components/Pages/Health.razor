@@ -1,0 +1,129 @@
+@page "/health"
+@inherits RealtimeComponentBase
+@using Application.Persistence
+@using Application.Simulation
+@using Security.Detection
+@inject IStorageProbe Storage
+@inject IPersistenceQueue Queue
+@inject SimulationEngine Engine
+@inject DetectionEngine Detection
+@inject TimeProvider Time
+
+<PageTitle>System health · SCADA</PageTitle>
+<h1>System health</h1>
+
+<div class="columns">
+    <section class="panel">
+        <h2>Storage</h2>
+        <dl class="facts">
+            <dt>Provider</dt><dd>@Storage.Provider</dd>
+            <dt>Availability</dt>
+            <dd><StatusPill Text="@(_available switch { true => "Available", false => "Unavailable", _ => "Checking…" })"
+                            Kind="@(_available switch { true => "ok", false => "alarm", _ => "neutral" })" /></dd>
+        </dl>
+        <button class="btn" disabled="@_probing" @onclick="CheckStorageAsync">Check storage</button>
+    </section>
+    <section class="panel">
+        <h2>Persistence queue</h2>
+        @if (_queue is { } queue)
+        {
+            <dl class="facts">
+                <dt>Pending / capacity</dt><dd>@queue.Pending / @queue.Capacity</dd>
+                <dt>Enqueued</dt><dd>@queue.Enqueued</dd>
+                <dt>Persisted</dt><dd>@queue.Persisted</dd>
+                <dt>Dropped</dt><dd>@queue.Dropped</dd>
+                <dt>Failed</dt><dd>@queue.Failed</dd>
+                @if (queue.LastFailureAt is { } failure)
+                {
+                    <dt>Last failure</dt><dd>@failure.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</dd>
+                }
+            </dl>
+        }
+    </section>
+    <section class="panel">
+        <h2>Simulation and realtime</h2>
+        @if (_simulation is { } simulation)
+        {
+            <dl class="facts">
+                <dt>State</dt><dd>@(simulation.IsPaused ? "Paused" : "Running")</dd>
+                <dt>Step count</dt><dd>@simulation.StepCount</dd>
+                <dt>Simulation time</dt><dd>@simulation.SimulationTime.ToString("c", CultureInfo.InvariantCulture)</dd>
+                <dt>Time scale</dt><dd>@simulation.TimeScale×</dd>
+                <dt>Realtime subscribers</dt><dd>@_subscribers</dd>
+            </dl>
+        }
+    </section>
+</div>
+<section class="panel">
+    <h2>Detection metrics</h2>
+    <div class="table-scroll">
+        <table class="grid">
+            <thead><tr><th>Rule</th><th>State</th><th>Evaluations</th><th>Findings</th><th>Suppressed</th><th>Total time (ms)</th><th>Last finding (UTC)</th></tr></thead>
+            <tbody>
+                @foreach (var metric in _metrics)
+                {
+                    <tr @key="metric.RuleId">
+                        <th scope="row"><strong class="cell-title">@metric.Name</strong> @metric.RuleId</th>
+                        <td>@(metric.Enabled ? "Enabled" : "Disabled")</td><td>@metric.Evaluations</td><td>@metric.Findings</td>
+                        <td>@metric.Suppressed</td><td>@metric.TotalMilliseconds.ToString("0.###", CultureInfo.InvariantCulture)</td>
+                        <td>@(metric.LastFindingAt?.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture) ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@code {
+    private bool? _available;
+    private bool _probing;
+    private DateTimeOffset _nextProbe;
+    private PersistenceQueueStatus? _queue;
+    private SimulationStatus? _simulation;
+    private IReadOnlyList<RuleExecutionMetrics> _metrics = [];
+    private int _subscribers;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Simulation, RealtimeTopics.Detections, RealtimeTopics.EventsPersisted];
+    protected override TimeSpan MinimumRefreshInterval => TimeSpan.FromSeconds(1);
+
+    protected override bool Refresh()
+    {
+        _queue = Queue.Status;
+        _simulation = Engine.Status;
+        _metrics = Detection.Metrics;
+        _subscribers = Feed.SubscriberCount;
+        return true;
+    }
+
+    protected override Task RefreshAsync(CancellationToken cancellationToken) =>
+        Time.GetUtcNow() >= _nextProbe ? ProbeAsync(cancellationToken) : Task.CompletedTask;
+
+    private Task CheckStorageAsync()
+    {
+        _nextProbe = DateTimeOffset.MinValue;
+        return RefreshNowAsync();
+    }
+
+    private async Task ProbeAsync(CancellationToken cancellationToken)
+    {
+        if (_probing)
+            return;
+
+        _probing = true;
+        _nextProbe = Time.GetUtcNow().AddSeconds(15);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(2));
+        try
+        {
+            _available = await Storage.IsAvailableAsync(timeout.Token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _available = false;
+        }
+        finally
+        {
+            _probing = false;
+        }
+    }
+}

@@ -45,7 +45,7 @@ public static class CookieSessionValidator
 
         if (!principal.IsInRole(user.Role.ToString()))
         {
-            context.ReplacePrincipal(ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, issued));
+            context.ReplacePrincipal(ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, startedAt));
             context.ShouldRenew = true;
         }
 

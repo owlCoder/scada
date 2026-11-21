@@ -1,0 +1,116 @@
+@page "/trends"
+@inherits RealtimeComponentBase
+@using Application.Telemetry
+@inject TelemetryHistorian Historian
+
+<PageTitle>Trends · SCADA</PageTitle>
+<h1>Trends</h1>
+
+<div class="form-row">
+    @for (var index = 0; index < _selected.Length; index++)
+    {
+        var slot = index;
+        <label>Tag @(slot + 1)
+            <select value="@_selected[slot]" @onchange="args => SelectTagAsync(slot, args.Value?.ToString())">
+                <option value="">None</option>
+                @foreach (var tag in _tags)
+                {
+                    <option value="@tag" disabled="@(tag != _selected[slot] && _selected.Contains(tag))">@tag</option>
+                }
+            </select>
+        </label>
+    }
+</div>
+
+@if (_series.Length == 0)
+{
+    <p class="muted">@(_tags.Count == 0 ? "Waiting for telemetry samples." : "Select up to three tags with telemetry samples.")</p>
+}
+else
+{
+    <div class="trend-legend">
+        @foreach (var series in _series)
+        {
+            <span class="@($"legend-{series.Slot + 1}")">@series.Tag</span>
+        }
+    </div>
+    <svg class="chart" viewBox="0 0 800 300" role="img" aria-labelledby="trend-title">
+        <title id="trend-title">Reported telemetry by time (UTC)</title>
+        <line class="axis" x1="82" y1="20" x2="82" y2="255" />
+        <line class="axis" x1="82" y1="255" x2="776" y2="255" />
+        <text class="tick" x="76" y="25" text-anchor="end">@Number(_max)</text>
+        <text class="tick" x="76" y="255" text-anchor="end">@Number(_min)</text>
+        <text class="tick" x="82" y="274">@Clock(_first)</text>
+        <text class="tick" x="776" y="274" text-anchor="end">@Clock(_last)</text>
+        <text class="tick" x="429" y="291" text-anchor="middle">Time (UTC)</text>
+        @foreach (var series in _series)
+        {
+            <g>
+                <title>@series.Tag</title>
+                @if (series.Points.Count == 1)
+                {
+                    <circle class="@SeriesClass(series.Slot)" cx="@Number(X(series.Points[0]))" cy="@Number(Y(series.Points[0]))" r="3" />
+                }
+                else
+                {
+                    <polyline class="@SeriesClass(series.Slot)" points="@Coordinates(series.Points)" />
+                }
+            </g>
+        }
+    </svg>
+}
+
+@code {
+    private const int SampleCount = 240;
+    private readonly string?[] _selected = new string?[3];
+    private IReadOnlyList<string> _tags = [];
+    private (int Slot, string Tag, IReadOnlyList<TelemetryPoint> Points)[] _series = [];
+    private DateTimeOffset _first;
+    private DateTimeOffset _last;
+    private double _min;
+    private double _max;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Telemetry];
+
+    protected override bool Refresh()
+    {
+        _tags = Historian.Tags();
+        _series = _selected.Select((tag, slot) => (Tag: tag, Slot: slot))
+            .Where(selection => selection.Tag is not null)
+            .Select(selection => (selection.Slot, Tag: selection.Tag!,
+                Points: (IReadOnlyList<TelemetryPoint>)Historian.GetSeries(selection.Tag!, SampleCount)
+                    .Where(point => double.IsFinite(point.Value)).ToArray()))
+            .Where(series => series.Points.Count > 0)
+            .ToArray();
+
+        if (_series.Length > 0)
+        {
+            var points = _series.SelectMany(series => series.Points).ToArray();
+            _first = points.Min(point => point.Timestamp);
+            _last = points.Max(point => point.Timestamp);
+            _min = points.Min(point => point.Value);
+            _max = points.Max(point => point.Value);
+        }
+        return true;
+    }
+
+    private Task<bool> SelectTagAsync(int slot, string? tag)
+    {
+        _selected[slot] = tag is not null && _tags.Contains(tag) &&
+            !_selected.Where((_, index) => index != slot).Contains(tag) ? tag : null;
+        return RefreshNowAsync();
+    }
+
+    private double X(TelemetryPoint point) =>
+        _last == _first ? 429 : 82 + 694 * (point.Timestamp - _first).Ticks / (double)(_last - _first).Ticks;
+
+    private double Y(TelemetryPoint point) =>
+        _max == _min ? 137.5 : 255 - 235 * ((point.Value - _min) / (_max - _min));
+
+    private string Coordinates(IEnumerable<TelemetryPoint> points) =>
+        string.Join(' ', points.Select(point => $"{Number(X(point))},{Number(Y(point))}"));
+
+    private static string SeriesClass(int slot) => $"series series-{slot + 1}";
+    private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string Clock(DateTimeOffset time) => time.ToUniversalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+}

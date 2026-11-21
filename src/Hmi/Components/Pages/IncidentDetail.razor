@@ -1,0 +1,223 @@
+@page "/incidents/{Id:guid}"
+@inherits ConfirmedComponentBase
+@using Application.Incidents
+@using Domain.Incidents
+@inject IncidentService IncidentService
+
+<PageTitle>Incident · SCADA</PageTitle>
+<p><a href="incidents">Back to incidents</a></p>
+@if (_details is { } details)
+{
+    var incident = details.Incident;
+    <h1>@incident.DisplayId · @incident.Title</h1>
+    <OutcomeBanner Outcome="Outcome" />
+    <section class="panel">
+        <p class="preserve-lines">@incident.Description</p>
+        <dl class="facts">
+            <dt>Status</dt><dd>@incident.Status</dd>
+            <dt>Severity / priority</dt><dd>@incident.Severity / @incident.Priority</dd>
+            <dt>Category / source</dt><dd>@incident.Category / @incident.Source</dd>
+            <dt>Assigned to</dt><dd>@(incident.AssignedTo ?? "Unassigned")</dd>
+            <dt>Devices</dt><dd>@string.Join(", ", incident.DeviceIds)</dd>
+            <dt>Version</dt><dd>@incident.Version</dd>
+            @if (incident.ResolutionNotes is not null)
+            {
+                <dt>Resolution</dt><dd class="preserve-lines">@incident.ResolutionNotes</dd>
+            }
+        </dl>
+    </section>
+
+    @if (Session.CanOperate)
+    {
+        <section class="panel" aria-labelledby="incident-actions">
+            <h2 id="incident-actions">Actions</h2>
+            @if (details.AllowedTransitions.Count > 0)
+            {
+                <div class="form-row">
+                    <label>New status
+                        <select @bind="_status">
+                            <option value="">Choose status</option>
+                            @foreach (var status in details.AllowedTransitions)
+                            {
+                                <option value="@status">@status</option>
+                            }
+                        </select>
+                    </label>
+                    @if (_status is IncidentStatus.Resolved)
+                    {
+                        <label>Resolution notes<textarea maxlength="@IncidentWorkflow.MaxTextLength" @bind="_notes"></textarea></label>
+                    }
+                    <button class="btn" disabled="@(_status is null)" @onclick="() => AskStatus(incident)">Change status</button>
+                </div>
+            }
+            @if (incident.Status != IncidentStatus.Closed)
+            {
+                <div class="form-row">
+                    <label>Assignee<input @bind="_assignee" placeholder="Leave blank to unassign" /></label>
+                    <button class="btn" @onclick="() => AskAssign(incident)">Assign</button>
+                    <label>Priority
+                        <select @bind="_priority">
+                            @foreach (var priority in Enum.GetValues<IncidentPriority>())
+                            {
+                                <option value="@priority">@priority</option>
+                            }
+                        </select>
+                    </label>
+                    <button class="btn" @onclick="() => AskPriority(incident)">Change priority</button>
+                </div>
+                <div class="form-row">
+                    <label>Comment<textarea maxlength="@IncidentWorkflow.MaxTextLength" @bind="_comment" @bind:event="oninput"></textarea></label>
+                    <button class="btn" disabled="@string.IsNullOrWhiteSpace(_comment)" @onclick="() => AskComment(incident)">Add comment</button>
+                </div>
+            }
+        </section>
+    }
+
+    <section class="panel">
+        <h2>Evidence</h2>
+        @if (incident.Evidence.Count == 0)
+        {
+            <p class="muted">No evidence recorded.</p>
+        }
+        <ul class="record-list">
+            @foreach (var evidence in incident.Evidence)
+            {
+                <li><strong>@evidence.Kind</strong> · @evidence.Reference <span class="muted">@When(evidence.Timestamp)</span>
+                    <div class="preserve-lines">@evidence.Summary</div></li>
+            }
+        </ul>
+    </section>
+
+    <section class="panel">
+        <h2>Timeline</h2>
+        <ol class="record-list">
+            @foreach (var entry in details.Timeline)
+            {
+                <li @key="entry.Id"><strong>@entry.Actor</strong> <span class="muted">@When(entry.Timestamp)</span>
+                    <div>@entry.Description</div></li>
+            }
+        </ol>
+    </section>
+
+    <section class="panel">
+        <h2>Comments</h2>
+        @if (details.Comments.Count == 0)
+        {
+            <p class="muted">No comments yet.</p>
+        }
+        <ul class="record-list">
+            @foreach (var comment in details.Comments)
+            {
+                <li @key="comment.Id"><strong>@comment.Author</strong> <span class="muted">@When(comment.CreatedAt)</span>
+                    <div class="preserve-lines">@comment.Text</div></li>
+            }
+        </ul>
+    </section>
+}
+else
+{
+    <h1>Incident</h1>
+    <p class="muted">@(_loaded ? "Incident not found." : "Loading incident…")</p>
+}
+
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Guid? _currentId;
+    private long _loadId;
+    private bool _loaded;
+    private IncidentDetails? _details;
+    private IncidentStatus? _status;
+    private string? _assignee;
+    private string? _notes;
+    private string? _comment;
+    private IncidentPriority _priority;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Incidents];
+    protected override bool Refresh() => true;
+
+    protected override Task OnParametersSetAsync() =>
+        _currentId == Id ? Task.CompletedTask : RefreshAsync(StoppingToken);
+
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        if (Id != _currentId)
+        {
+            _currentId = Id;
+            _details = null;
+            _loaded = false;
+            _status = null;
+            _notes = null;
+            _comment = null;
+        }
+
+        var loadId = ++_loadId;
+        var details = await IncidentService.GetDetailsAsync(Id, cancellationToken);
+        if (loadId != _loadId || Id != _currentId)
+            return;
+
+        var previous = _details?.Incident;
+        if (details is not null)
+        {
+            if (previous is null || _assignee == previous.AssignedTo)
+                _assignee = details.Incident.AssignedTo;
+            if (previous is null || _priority == previous.Priority)
+                _priority = details.Incident.Priority;
+            if (_status is { } status && !details.AllowedTransitions.Contains(status))
+                _status = null;
+        }
+        _details = details;
+        _loaded = true;
+    }
+
+    private bool AskStatus(Incident incident)
+    {
+        var notes = _notes;
+        return _status is { } status && AskIncident("Change status", $"Set status to {status}.", incident,
+            () => IncidentService.ChangeStatusAsync(incident.Id, status, notes, incident.Version, Session.Actor, StoppingToken));
+    }
+
+    private bool AskAssign(Incident incident)
+    {
+        var assignee = _assignee;
+        var description = string.IsNullOrWhiteSpace(assignee) ? "Remove the assignee." : $"Assign to {assignee.Trim()}.";
+        return AskIncident("Assign", description, incident,
+            () => IncidentService.AssignAsync(incident.Id, assignee, incident.Version, Session.Actor, StoppingToken));
+    }
+
+    private bool AskPriority(Incident incident)
+    {
+        var priority = _priority;
+        return AskIncident("Change priority", $"Set priority to {priority}.", incident,
+            () => IncidentService.ChangePriorityAsync(incident.Id, priority, incident.Version, Session.Actor, StoppingToken));
+    }
+
+    private bool AskComment(Incident incident)
+    {
+        var comment = _comment;
+        return !string.IsNullOrWhiteSpace(comment) && AskIncident("Add comment", "Post this comment to the incident timeline.", incident,
+            async () =>
+            {
+                var result = await IncidentService.AddCommentAsync(incident.Id, comment, incident.Version, Session.Actor, StoppingToken);
+                if (result.Succeeded)
+                    _comment = null;
+                return result;
+            });
+    }
+
+    private bool AskIncident(string title, string description, Incident incident, Func<Task<IncidentChange>> run) =>
+        Ask($"{title} · {incident.DisplayId}?", description, async () =>
+        {
+            if (Id != incident.Id)
+                return ActionOutcome.Failed("The open incident changed. Select the action again.");
+
+            var result = await run();
+            return result.Status == IncidentOperationStatus.ConcurrencyConflict
+                ? ActionOutcome.Failed("Version conflict. The incident changed since this action was prepared. Review the updated incident and retry.")
+                : new ActionOutcome(result.Succeeded, result.Message);
+        }, dangerous: false);
+
+    private static string When(DateTimeOffset value) => value.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture);
+}

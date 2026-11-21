@@ -3,6 +3,7 @@ using Application.Commands;
 using Application.Events;
 using Application.Incidents;
 using Application.Registers;
+using Application.Realtime;
 using Application.Scenarios;
 using Application.Simulation;
 using Application.Telemetry;
@@ -27,7 +28,8 @@ namespace UnitTests.Support;
 /// </summary>
 public sealed class TestRig
 {
-    public TestRig(RegisterWriteOptions? registerOptions = null, CommandRateOptions? rateOptions = null)
+    public TestRig(RegisterWriteOptions? registerOptions = null, CommandRateOptions? rateOptions = null,
+        Func<TimeProvider, IRealtimePublisher>? createRealtime = null)
     {
         Time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.Zero));
         Topology = SimulationTopology.Default();
@@ -36,7 +38,7 @@ public sealed class TestRig
         Buffer = new RecentEventBuffer();
         QueueOptions = new PersistenceQueueOptions { RetryDelay = TimeSpan.Zero };
         Queue = new ChannelPersistenceQueue(QueueOptions, Time, NullLogger<ChannelPersistenceQueue>.Instance);
-        var realtime = new NullRealtimePublisher();
+        var realtime = createRealtime?.Invoke(Time) ?? new NullRealtimePublisher();
         Events = new EventPublisher(Buffer, Queue, realtime);
         ReplayGuard = new CommandReplayGuard();
         Monitor = new CommandMonitor(Events, Time, rateOptions ?? new CommandRateOptions());
@@ -54,7 +56,7 @@ public sealed class TestRig
             Events, realtime, Scenarios, Engine, NullLogger<DetectionEngine>.Instance);
         Coordinator = new SimulationCoordinator(Engine, Events, Historian, Queue, realtime, [Scenarios, Detection], Time,
             NullLogger<SimulationCoordinator>.Instance);
-        Worker = new PersistenceWorker(Queue, new PersistenceDispatcher(EventStore, TelemetryStore, AlarmStore, PlantStateStore),
+        Worker = new PersistenceWorker(Queue, new PersistenceDispatcher(EventStore, TelemetryStore, AlarmStore, PlantStateStore, realtime),
             QueueOptions, Time, NullLogger<PersistenceWorker>.Instance);
     }
 

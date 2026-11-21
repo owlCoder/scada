@@ -1,0 +1,128 @@
+@page "/incidents"
+@inherits RealtimeComponentBase
+@using Application.Common
+@using Application.Incidents
+@using Domain.Incidents
+@inject IncidentService IncidentService
+
+<PageTitle>Incidents · SCADA</PageTitle>
+<h1>Incidents</h1>
+
+<form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
+    <label>Status
+        <select @bind="_status">
+            <option value="">All</option>
+            @foreach (var status in Enum.GetValues<IncidentStatus>())
+            {
+                <option value="@status">@status</option>
+            }
+        </select>
+    </label>
+    <label>Severity
+        <select @bind="_severity">
+            <option value="">All</option>
+            @foreach (var severity in Enum.GetValues<IncidentSeverity>())
+            {
+                <option value="@severity">@severity</option>
+            }
+        </select>
+    </label>
+    <label>Search<input type="search" @bind="_search" /></label>
+    <label>Sort by
+        <select @bind="_sort">
+            @foreach (var field in Enum.GetValues<IncidentSortField>())
+            {
+                <option value="@field">@SortLabel(field)</option>
+            }
+        </select>
+    </label>
+    <label>Order
+        <select @bind="_order">
+            <option value="descending">Descending</option>
+            <option value="ascending">Ascending</option>
+        </select>
+    </label>
+    <label class="check"><input type="checkbox" @bind="_activeOnly" /> Active only</label>
+    <button class="btn btn-primary" type="submit">Apply filters</button>
+</form>
+
+@if (_result is { } result)
+{
+    @if (result.Items.Count == 0)
+    {
+        <p class="muted">No matching incidents.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead><tr><th>Incident</th><th>Category</th><th>Status</th><th>Severity</th><th>Priority</th><th>Assignee</th><th>Created (UTC)</th></tr></thead>
+                <tbody>
+                    @foreach (var incident in result.Items)
+                    {
+                        <tr @key="incident.Id">
+                            <th scope="row"><a class="cell-title" href="@($"incidents/{incident.Id}")">@incident.DisplayId</a> @incident.Title</th>
+                            <td>@incident.Category</td><td>@incident.Status</td><td>@incident.Severity</td><td>@incident.Priority</td>
+                            <td>@(incident.AssignedTo ?? "Unassigned")</td>
+                            <td class="nowrap">@incident.CreatedAt.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <PageControls Page="result.Page" TotalPages="result.TotalPages" TotalCount="result.TotalCount" PageChanged="ChangePageAsync" />
+}
+
+@code {
+    private IncidentStatus? _status;
+    private IncidentSeverity? _severity;
+    private bool _activeOnly;
+    private string? _search;
+    private IncidentSortField _sort = IncidentSortField.CreatedAt;
+    private string _order = "descending";
+    private IncidentQuery _query = new();
+    private PagedResult<Incident>? _result;
+    private long _loadId;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Incidents];
+    protected override bool Refresh() => true;
+
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        var query = _query;
+        var loadId = ++_loadId;
+        var result = await IncidentService.QueryAsync(query, cancellationToken);
+        if (loadId != _loadId)
+            return;
+
+        if (result.Page > 1 && result.Page > result.TotalPages)
+        {
+            _query = query with { Page = Math.Max(1, result.TotalPages) };
+            await RefreshAsync(cancellationToken);
+            return;
+        }
+
+        _result = result;
+    }
+
+    private Task ApplyFilterAsync()
+    {
+        _query = new IncidentQuery(Status: _status, Severity: _severity, Search: _search, ActiveOnly: _activeOnly,
+            SortBy: _sort, Descending: _order == "descending");
+        return RefreshNowAsync();
+    }
+
+    private Task ChangePageAsync(int page)
+    {
+        _query = _query with { Page = page };
+        return RefreshNowAsync();
+    }
+
+    private static string SortLabel(IncidentSortField field) => field switch
+    {
+        IncidentSortField.CreatedAt => "Created time",
+        IncidentSortField.UpdatedAt => "Updated time",
+        _ => field.ToString()
+    };
+}
