@@ -114,12 +114,16 @@ Stop the API, take a backup, build/pull the new image and recreate the service; 
 
 Avoid running two simulator versions against one database during an upgrade. Restore a matching backup if rolling back a schema-incompatible version; the legacy public tables do not capture new activity after migration.
 
-## Parallel Step 7 additions
+## Compose variants and smoke test
 
-These are planned **(added in Step 7)** and absent from this branch at documentation time; the lead must reconcile exact commands/defaults after merging:
-
-- `deploy/compose.inmemory.yaml`: an in-memory stack without PostgreSQL. Its standalone/override usage, services, ports and volumes must be verified from the merged file before use.
-- `deploy/.env.example`: a template for local values; replace all placeholders and keep real secrets out of Git.
-- `scripts/smoke.sh`: deployment smoke checks; flags and dependencies to be verified after merge.
-- `Protocols:OpcUa:BindAddress`: configurable listener address. Current OPC UA is loopback only; simply publishing container port 4840 does not make the loopback listener externally reachable. Reconcile default/validation and Compose protocol exposure after merge.
-- CI jobs `build-test`, `integration`, `database`, `e2e`, `format`, `docker`, `dependencies` and protocol/performance/Playwright suites; [testing](testing.md) tracks their planned status.
+- `deploy/compose.yaml`: API plus PostgreSQL (default). Copy `deploy/.env.example` to `deploy/.env` and set distinct secrets.
+- `deploy/compose.inmemory.yaml`: API only with `Storage__Provider=InMemory`:
+  `docker compose -f deploy/compose.inmemory.yaml --env-file deploy/.env up --build -d`.
+- `deploy/compose.opcua.yaml` and `deploy/compose.modbus.yaml`: overrides that publish OPC UA (4840) or Modbus TCP on
+  `127.0.0.1` only. Combine them with a base file and also set `SCADA_OPCUA_ENABLED=true` / `SCADA_MODBUS_ENABLED=true`.
+  Inside the container the listeners bind `0.0.0.0` through `Protocols:OpcUa:BindAddress` and
+  `Protocols:Modbus:BindAddress` (default `127.0.0.1`, IPv4 only), while the host port stays loopback.
+- The API container runs as non-root with `read_only: true`, a `/tmp` tmpfs, `no-new-privileges`, `cap_drop: [ALL]`
+  and a health check (`dotnet Api.dll --healthcheck`, which probes `/health/live`).
+- `scripts/smoke.sh` builds the image, starts the stack with generated secrets, checks health, runs a scenario to
+  Detected and tears everything down (`docker compose down -v`) on exit.

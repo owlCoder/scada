@@ -88,4 +88,4 @@ client's trust store. With automatic acceptance disabled, place trusted client c
 `rejected/certs`. The default `.scada/` directory is ignored by Git.
 
 
-`Protocols:OpcUa:BindAddress` is planned **(added in Step 7)**; it is absent on this branch. Reconcile the merged option before publishing OPC UA from a container. Current binding is loopback, regardless of Docker port publishing.
+`Protocols:OpcUa:BindAddress` (default `127.0.0.1`, IPv4 only) selects the listener address. Containers set `0.0.0.0` and publish the port on the host loopback only; see [deployment](deployment.md#compose-variants-and-smoke-test). `Protocols:Modbus:BindAddress` works the same way.

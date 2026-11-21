@@ -64,7 +64,7 @@ dotnet build scada.slnx -c Release --disable-build-servers
 dotnet test scada.slnx -c Release --no-build
 ```
 
-The full test command includes PostgreSQL Testcontainers and requires Docker. [Testing](docs/testing.md) lists individual projects and the planned Step 7 suites. `bash scripts/verify.sh` restores, builds and tests the solution.
+The full test command includes PostgreSQL Testcontainers and requires Docker. [Testing](docs/testing.md) lists every test project, the Playwright setup and the CI jobs. `bash scripts/verify.sh` restores, builds and tests the solution.
 
 ## Documentation
 

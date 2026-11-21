@@ -131,7 +131,7 @@ Source: [options](../src/Protocols/OpcUa/OpcUaOptions.cs), [server](../src/Proto
 | `Protocols:OpcUa:ApplicationName` | `Protocols__OpcUa__ApplicationName` | `SCADA Training Plant OPC UA` | Nonblank discovery/application name. |
 | `Protocols:OpcUa:AutoAcceptUntrustedCertificates` | `Protocols__OpcUa__AutoAcceptUntrustedCertificates` | `false` | When true, automatically trusts client certificates permanently; local training/tests only. |
 
-`Protocols:OpcUa:BindAddress` is planned **(added in Step 7)** and is not present on this branch. Current code binds `127.0.0.1`; the final key/default/validation must be reconciled after merging. See [deployment](deployment.md).
+`Protocols:OpcUa:BindAddress` (default `127.0.0.1`, IPv4 only) selects the listener address. Containers set `0.0.0.0` and publish the port on the host loopback only; see [deployment](deployment.md#compose-variants-and-smoke-test). `Protocols:Modbus:BindAddress` works the same way.
 
 ## Logging, telemetry and host
 

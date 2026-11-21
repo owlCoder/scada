@@ -35,19 +35,26 @@ dotnet test Tests/IntegrationTests -c Release --no-build --filter FullyQualified
 
 Use `--logger 'trx;LogFileName=results.trx'` when collecting machine-readable results. Do not store credential files, PKI private keys or secret-bearing logs in test artifacts.
 
-## CI and parallel Step 7 additions
+## Step 7 suites and CI
 
-The current `.github/workflows/ci.yml` contains one `verify` job: restore, Release build and solution tests on Ubuntu with .NET 10.x. It runs on relevant pushes to main or workflow_dispatch, cancels superseded runs and has a 15-minute timeout.
+| Project / asset | Command | Notes |
+| --- | --- | --- |
+| `Tests/ProtocolTests` | `dotnet test Tests/ProtocolTests -c Release --no-build` | Wire-level Modbus TCP (raw sockets), OPC UA client and SignalR hub tests |
+| `Tests/PerformanceTests` | `dotnet test Tests/PerformanceTests -c Release --no-build` | Deterministic, CI-safe bounds (`Category=Performance`); measured numbers go to the test output |
+| `Tests/EndToEndTests` | `dotnet test Tests/EndToEndTests -c Release --no-build` | Playwright (headless Chromium) against an in-process Kestrel host; screenshots and traces go to `TestResults/EndToEndTests` on failure |
+| `scripts/smoke.sh` | `scripts/smoke.sh` | Builds the image, starts compose with random secrets, waits for `/health/ready`, runs a scenario to Detected, removes everything. `SCADA_SMOKE_PROVIDER=InMemory`, `SCADA_OPCUA_ENABLED=true`, `SCADA_MODBUS_ENABLED=true` select variants |
 
-The following are planned **(added in Step 7)** by parallel branches and are absent here. Their final assertions, dependencies, thresholds and invocation details must be reconciled after merge; these are intended commands, not evidence of a completed run:
+Install the Playwright browser once after building:
 
-| Planned project / asset | Intended use |
-| --- | --- |
-| `Tests/ProtocolTests` | Dedicated protocol coverage; build solution after merge, then `dotnet test Tests/ProtocolTests -c Release --no-build` |
-| `Tests/PerformanceTests` | Performance coverage; `dotnet test Tests/PerformanceTests -c Release --no-build`; confirm thresholds/environment in merged source |
-| `Tests/EndToEndTests` | Playwright browser workflows; `dotnet test Tests/EndToEndTests -c Release --no-build`; confirm browser installation/host setup in merged source |
-| `SCADA_E2E_REQUIRED` | Planned Playwright environment gate; exact accepted values and missing-browser/host behavior are not yet verified |
-| `scripts/smoke.sh` | Deployment smoke check; inspect merged script for arguments, Docker requirements and cleanup behavior |
-| CI jobs | `build-test`, `integration`, `database`, `e2e`, `format`, `docker`, `dependencies`; replace the current single-job description after merge |
+```bash
+PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright node Tests/EndToEndTests/bin/Release/net10.0/.playwright/package/cli.js install chromium
+```
 
-Do not assume Playwright browsers are installed just because NuGet restore succeeded. The lead should document the merged project's browser installation command and explicit required-mode value, then run it in CI. [Deployment additions](deployment.md#parallel-step-7-additions)
+Without a browser the E2E tests are skipped with a message; `SCADA_E2E_REQUIRED=1` turns the skip into a failure (CI sets it).
+
+`.github/workflows/ci.yml` runs on pushes to `main`, pull requests and manual dispatch, with the jobs `build-test`
+(build, architecture, unit, frontend), `integration` (integration, protocol, performance), `database` (Testcontainers
+PostgreSQL), `e2e` (Playwright Chromium), `format` (`dotnet format --verify-no-changes`), `docker` (image build plus
+`scripts/smoke.sh`) and `dependencies` (`dotnet list package --vulnerable --include-transitive`). Test results (trx) are
+uploaded when a job fails.
+

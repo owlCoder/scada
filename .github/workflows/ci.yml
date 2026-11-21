@@ -2,7 +2,7 @@ name: Build and test
 
 on:
   push:
-    branches: [main, feature/delivery-infra]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -117,6 +117,8 @@ jobs:
           cache-dependency-path: '**/*.csproj'
       - name: Build and run optional Playwright tests
         shell: bash
+        env:
+          SCADA_E2E_REQUIRED: '1'
         run: |
           set -euo pipefail
           shopt -s nullglob
