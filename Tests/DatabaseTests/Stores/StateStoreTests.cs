@@ -137,8 +137,14 @@ public sealed class StateStoreTests(PostgresContainerFixture postgres)
             [new ScenarioActionLog(TimeSpan.FromSeconds(1), Samples.Start.AddSeconds(1), "Replay command", true, "ok")],
             new Dictionary<string, double> { ["commands"] = 3 }, ["command-replay"], [], ScenarioOutcome.Pending, null);
         await runs.SaveAsync(run, None);
-        var finished = run with { State = ScenarioRunState.Completed, EndedAt = Samples.Start.AddMinutes(1), ObservedDetections = ["command-replay"],
-            Outcome = ScenarioOutcome.Detected, ProgressPercent = 100 };
+        var finished = run with
+        {
+            State = ScenarioRunState.Completed,
+            EndedAt = Samples.Start.AddMinutes(1),
+            ObservedDetections = ["command-replay"],
+            Outcome = ScenarioOutcome.Detected,
+            ProgressPercent = 100
+        };
         await runs.SaveAsync(finished, None);
         await runs.SaveAsync(run with { RunId = Guid.NewGuid(), StartedAt = Samples.Start.AddMinutes(5) }, None);
 

@@ -39,5 +39,6 @@ public sealed class UserAccountEntity
     }
 
     public UserAccount ToRecord() => new(Username, DisplayName, Role, PasswordHash, ApiKeyHash, IsEnabled, CreatedAt,
-        PasswordChangedAt, LastLoginAt, FailedLoginCount, LockedUntil) { Version = Version };
+        PasswordChangedAt, LastLoginAt, FailedLoginCount, LockedUntil)
+    { Version = Version };
 }

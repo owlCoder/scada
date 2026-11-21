@@ -15,8 +15,14 @@ public sealed class IncidentTimelineEntity
 
     public static IncidentTimelineEntity From(IncidentTimelineEntry e) => new()
     {
-        Id = e.Id, IncidentId = e.IncidentId, Timestamp = Timestamps.Utc(e.Timestamp), Actor = e.Actor, Kind = e.Kind,
-        Description = e.Description, FromStatus = e.FromStatus, ToStatus = e.ToStatus
+        Id = e.Id,
+        IncidentId = e.IncidentId,
+        Timestamp = Timestamps.Utc(e.Timestamp),
+        Actor = e.Actor,
+        Kind = e.Kind,
+        Description = e.Description,
+        FromStatus = e.FromStatus,
+        ToStatus = e.ToStatus
     };
 
     public IncidentTimelineEntry ToRecord() => new(Id, IncidentId, Timestamp, Actor, Kind, Description, FromStatus, ToStatus);

@@ -82,8 +82,12 @@ public sealed class InMemoryStoreTests
     {
         var store = new InMemoryIncidentStore();
         var open = await store.AddAsync(UnitTests.Domain.Incidents.IncidentWorkflowTests.NewIncident() with { CorrelationKey = "k" }, [], CancellationToken.None);
-        await store.AddAsync(UnitTests.Domain.Incidents.IncidentWorkflowTests.NewIncident() with { Id = Guid.NewGuid(), CorrelationKey = "k",
-            Status = IncidentStatus.Resolved }, [], CancellationToken.None);
+        await store.AddAsync(UnitTests.Domain.Incidents.IncidentWorkflowTests.NewIncident() with
+        {
+            Id = Guid.NewGuid(),
+            CorrelationKey = "k",
+            Status = IncidentStatus.Resolved
+        }, [], CancellationToken.None);
 
         Assert.Equal(open.Id, (await store.FindActiveByCorrelationAsync("k", CancellationToken.None))!.Id);
         Assert.Null(await store.FindActiveByCorrelationAsync("other", CancellationToken.None));

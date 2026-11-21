@@ -18,8 +18,16 @@ public sealed class EventEntity
 
     public static EventEntity From(SecurityEvent e) => new()
     {
-        Id = e.Id, Timestamp = Timestamps.Utc(e.Timestamp), Category = e.Category, Severity = e.Severity, Source = e.Source,
-        Message = e.Message, Actor = e.Actor, DeviceId = e.DeviceId, ScenarioRunId = e.ScenarioRunId, CorrelationId = e.CorrelationId
+        Id = e.Id,
+        Timestamp = Timestamps.Utc(e.Timestamp),
+        Category = e.Category,
+        Severity = e.Severity,
+        Source = e.Source,
+        Message = e.Message,
+        Actor = e.Actor,
+        DeviceId = e.DeviceId,
+        ScenarioRunId = e.ScenarioRunId,
+        CorrelationId = e.CorrelationId
     };
 
     public SecurityEvent ToRecord() =>

@@ -93,7 +93,9 @@ public sealed class OpcUaWireTests
         var item = new MonitoredItem(subscription.DefaultItem)
         {
             StartNodeId = OpcUaTestHost.PlantNode(session, "Plant/Sensors/LT-101/Value"),
-            AttributeId = Attributes.Value, SamplingInterval = 0, QueueSize = 16
+            AttributeId = Attributes.Value,
+            SamplingInterval = 0,
+            QueueSize = 16
         };
         item.Notification += (monitored, _) =>
         {

@@ -107,7 +107,9 @@ public sealed class BrowserTestSession(WebApplicationFactory<Program> factory, I
                 {
                     await context.Pages[pageIndex].ScreenshotAsync(new()
                     {
-                        Path = Path.Combine(directory, $"context-{index}-page-{pageIndex}.png"), FullPage = true, Timeout = 3_000
+                        Path = Path.Combine(directory, $"context-{index}-page-{pageIndex}.png"),
+                        FullPage = true,
+                        Timeout = 3_000
                     });
                 }
                 catch (PlaywrightException exception)

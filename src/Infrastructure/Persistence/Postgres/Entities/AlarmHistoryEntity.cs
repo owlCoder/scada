@@ -18,8 +18,15 @@ public sealed class AlarmHistoryEntity
 
     public static AlarmHistoryEntity From(AlarmHistoryRecord r) => new()
     {
-        Id = r.Id, Timestamp = Timestamps.Utc(r.Timestamp), AlarmKey = r.AlarmKey, SourceId = r.SourceId, Type = r.Type,
-        Severity = r.Severity, Transition = r.Transition, Message = r.Message, Actor = r.Actor
+        Id = r.Id,
+        Timestamp = Timestamps.Utc(r.Timestamp),
+        AlarmKey = r.AlarmKey,
+        SourceId = r.SourceId,
+        Type = r.Type,
+        Severity = r.Severity,
+        Transition = r.Transition,
+        Message = r.Message,
+        Actor = r.Actor
     };
 
     public AlarmHistoryRecord ToRecord() => new(Id, Timestamp, AlarmKey, SourceId, Type, Severity, Transition, Message, Actor);

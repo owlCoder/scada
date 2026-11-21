@@ -22,9 +22,19 @@ public sealed class DetectionEntity
 
     public static DetectionEntity From(DetectionRecord d) => new()
     {
-        Id = d.Id, Timestamp = Timestamps.Utc(d.Timestamp), RuleId = d.RuleId, RuleName = d.RuleName, Severity = d.Severity,
-        Category = d.Category, Title = d.Title, Description = d.Description, DeviceId = d.DeviceId, ScenarioRunId = d.ScenarioRunId,
-        Fingerprint = d.Fingerprint, Evidence = PersistenceJson.Serialize(d.Evidence), IncidentId = d.IncidentId
+        Id = d.Id,
+        Timestamp = Timestamps.Utc(d.Timestamp),
+        RuleId = d.RuleId,
+        RuleName = d.RuleName,
+        Severity = d.Severity,
+        Category = d.Category,
+        Title = d.Title,
+        Description = d.Description,
+        DeviceId = d.DeviceId,
+        ScenarioRunId = d.ScenarioRunId,
+        Fingerprint = d.Fingerprint,
+        Evidence = PersistenceJson.Serialize(d.Evidence),
+        IncidentId = d.IncidentId
     };
 
     public DetectionRecord ToRecord() => new(Id, Timestamp, RuleId, RuleName, Severity, Category, Title, Description, DeviceId,

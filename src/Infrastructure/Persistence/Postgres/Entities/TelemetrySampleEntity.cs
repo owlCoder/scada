@@ -16,8 +16,14 @@ public sealed class TelemetrySampleEntity
 
     public static TelemetrySampleEntity From(TelemetrySample s) => new()
     {
-        SampleId = s.SampleId, Sequence = s.Sequence, Timestamp = Timestamps.Utc(s.Timestamp), SimulationTime = s.SimulationTime, TagId = s.TagId,
-        Value = s.Value, Quality = s.Quality, Hash = s.Hash
+        SampleId = s.SampleId,
+        Sequence = s.Sequence,
+        Timestamp = Timestamps.Utc(s.Timestamp),
+        SimulationTime = s.SimulationTime,
+        TagId = s.TagId,
+        Value = s.Value,
+        Quality = s.Quality,
+        Hash = s.Hash
     };
 
     public TelemetrySample ToRecord() => new(Sequence, Timestamp, SimulationTime, TagId, Value, Quality, Hash) { SampleId = SampleId };

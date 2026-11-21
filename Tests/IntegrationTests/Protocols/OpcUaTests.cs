@@ -108,11 +108,11 @@ public sealed class OpcUaTests
         Assert.Equal(StatusCodes.Good, await OpcUaTestHost.CallAsync(user, Pump, "SetAutomatic"));
 
         Assert.Contains(events.GetRecent(), item => item is
-            { Source: "OpcUa", Actor: "opcua-anonymous", DeviceId: "P-101", Category: EventCategories.AuthorizationDenied });
+        { Source: "OpcUa", Actor: "opcua-anonymous", DeviceId: "P-101", Category: EventCategories.AuthorizationDenied });
         Assert.Contains(events.GetRecent(), item => item is
-            { Source: "OpcUa", Actor: "opc-viewer", DeviceId: "V-301", Category: EventCategories.AuthorizationDenied });
+        { Source: "OpcUa", Actor: "opc-viewer", DeviceId: "V-301", Category: EventCategories.AuthorizationDenied });
         Assert.Contains(events.GetRecent(), item => item is
-            { Source: "OpcUa", Actor: "ana", DeviceId: "V-301", Category: EventCategories.Audit } &&
+        { Source: "OpcUa", Actor: "ana", DeviceId: "V-301", Category: EventCategories.Audit } &&
             item.Message.Contains("45%", StringComparison.Ordinal));
     }
 

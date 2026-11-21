@@ -34,7 +34,10 @@ public sealed partial class BrowserSession(HttpClient client) : IAsyncDisposable
         token ??= await FormTokenAsync();
         return await Client.PostAsync("/account/login", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["__RequestVerificationToken"] = token, ["username"] = username, ["password"] = password, ["returnUrl"] = returnUrl
+            ["__RequestVerificationToken"] = token,
+            ["username"] = username,
+            ["password"] = password,
+            ["returnUrl"] = returnUrl
         }));
     }
 

@@ -12,7 +12,11 @@ public sealed class IncidentCommentEntity
 
     public static IncidentCommentEntity From(IncidentComment c) => new()
     {
-        Id = c.Id, IncidentId = c.IncidentId, Author = c.Author, Text = c.Text, CreatedAt = Timestamps.Utc(c.CreatedAt)
+        Id = c.Id,
+        IncidentId = c.IncidentId,
+        Author = c.Author,
+        Text = c.Text,
+        CreatedAt = Timestamps.Utc(c.CreatedAt)
     };
 
     public IncidentComment ToRecord() => new(Id, IncidentId, Author, Text, CreatedAt);

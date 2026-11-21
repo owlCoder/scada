@@ -51,7 +51,8 @@ public sealed class OidcSignInTests
                 services.PostConfigure<OpenIdConnectOptions>(ScadaAuthenticationSchemes.Oidc, options => options.ConfigurationManager =
                     new StaticConfigurationManager<OpenIdConnectConfiguration>(new OpenIdConnectConfiguration
                     {
-                        Issuer = Authority, AuthorizationEndpoint = $"{Authority}/protocol/openid-connect/auth"
+                        Issuer = Authority,
+                        AuthorizationEndpoint = $"{Authority}/protocol/openid-connect/auth"
                     }))));
         await using var session = BrowserSession.Open(factory);
 
