@@ -1,0 +1,22 @@
+@using Domain.Grid.Definition
+@using Domain.Grid.Definition.Templates
+
+<label class="muted">Start from template
+    <select class="template-picker" @bind="_selectedId">
+        @foreach (var entry in GridTemplateCatalog.All)
+        {
+            <option value="@entry.Id" title="@entry.Description">@entry.Name</option>
+        }
+    </select>
+</label>
+<button class="btn" @onclick="LoadAsync">Start from template</button>
+
+@code {
+    [Parameter] public EventCallback<GridDefinition> TemplateSelected { get; set; }
+    private string _selectedId = GridTemplateCatalog.All[0].Id;
+    private Task LoadAsync()
+    {
+        var entry = GridTemplateCatalog.Find(_selectedId);
+        return entry is null ? Task.CompletedTask : TemplateSelected.InvokeAsync(entry.Factory());
+    }
+}

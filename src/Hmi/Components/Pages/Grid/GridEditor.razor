@@ -17,6 +17,7 @@ else
     <OutcomeBanner Outcome="Outcome" />
     <div class="actions editor-toolbar">
         <button class="btn" @onclick="() => Empty()">Start empty</button><button class="btn" disabled="@(Definition is null)" @onclick="() => LoadActive()">Load active definition</button>
+        <GridTemplatePicker TemplateSelected="d => StartFromTemplate(d)" />
         <span class="muted">@(_draft.Dirty ? "Unsaved draft" : "Draft matches loaded version")</span>
     </div>
     <div class="form-row">
@@ -177,6 +178,7 @@ else
     private bool Empty() => Ask("Start an empty network?", "Replace the current draft. Unsaved changes will be lost.", () => { _draft.Load(GridEditorDocument.Empty()); Validate(); return ActionOutcome.Done("Empty draft created."); });
     private bool LoadActive() => LoadDraft(Definition!);
     private bool LoadVersion(GridDefinitionVersion version) => LoadDraft(version.Definition);
+    private bool StartFromTemplate(GridDefinition template) => LoadDraft(template);
     private bool LoadDraft(GridDefinition definition) => Ask("Replace editor draft?", "Load this definition into the editor. Unsaved changes will be lost.", () => { _draft.Load(definition); Validate(); return ActionOutcome.Done("Definition loaded into draft."); });
     private bool Save()
     {
