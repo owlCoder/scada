@@ -89,3 +89,7 @@ client's trust store. With automatic acceptance disabled, place trusted client c
 
 
 `Protocols:OpcUa:BindAddress` (default `127.0.0.1`, IPv4 only) selects the listener address. Containers set `0.0.0.0` and publish the port on the host loopback only; see [deployment](deployment.md#compose-variants-and-smoke-test). `Protocols:Modbus:BindAddress` works the same way.
+
+## IEC 60870-5-104 (grid mode)
+
+The API can also host an IEC 60870-5-104 slave exposing the grid RTUs (common address per RTU, IOA ranges 1000+ measurements, 2000+ switch status, 3000+ taps, 4000+ protection trips, 5000+ RTU status) with general interrogation, spontaneous COT 3 data, CP56Time2a time tags and select-before-operate switch/tap commands. It is disabled by default and binds IPv4 loopback on port 2404. See [iec104.md](iec104.md) for the full protocol, timer and security notes.

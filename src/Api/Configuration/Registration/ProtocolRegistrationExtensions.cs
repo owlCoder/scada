@@ -9,7 +9,7 @@ public static class ProtocolRegistrationExtensions
 {
     public static WebApplicationBuilder AddProtocolServices(this WebApplicationBuilder builder)
     {
-        return builder.AddModbus().AddOpcUa();
+        return builder.AddModbus().AddOpcUa().AddIec104();
     }
 
     private static WebApplicationBuilder AddModbus(this WebApplicationBuilder builder)
