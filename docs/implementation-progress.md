@@ -5,6 +5,16 @@ A box is ticked only after the feature is implemented **and** verified by a buil
 
 Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `main` at `e95fb31`.
 
+## Overall status (2026-11-21)
+
+Steps 1–4 of the 7-step plan in `docs/SESSION-HANDOFF.md` are done and merged to `main` (about 60 % of the work):
+scenario engine, simulation/detection/incidents/Modbus/API, PostgreSQL persistence, authentication and observability.
+
+Remaining:
+- Step 5: OPC UA server.
+- Step 6: Blazor HMI and SignalR. This is the largest remaining step.
+- Step 7: E2E, performance and protocol tests, Docker smoke test, CI, documentation, PR.
+
 ## Phase A — Inspection
 - [x] Repository cloned to Desktop, Git identity set to `owlCoder` (verified GitHub-linked email)
 - [x] Baseline Release build and tests verified
