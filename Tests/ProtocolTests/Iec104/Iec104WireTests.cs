@@ -5,6 +5,7 @@ using Application.Events;
 using Application.Grid;
 using Application.Identity;
 using Domain.Grid.Commands;
+using Domain.Grid.Snapshots;
 using Microsoft.Extensions.DependencyInjection;
 using IntegrationTests.Support;
 using ProtocolTests.Support;
@@ -88,7 +89,7 @@ public sealed class Iec104WireTests
 
         var data = responses.Where(r => r.Header.Cause == CauseOfTransmission.InterrogationResponse).ToList();
         var objects = data.SelectMany(r => r.Objects).ToList();
-        var expected = host.Factory.Services.GetRequiredService<Iec104AddressMap>().Rtu(1)!.Points;
+        var expected = host.Factory.Services.GetRequiredService<Iec104AddressMapProvider>().Current.Rtu(1)!.Points;
         Assert.Equal(expected.Count, objects.Count);
         Assert.Equal(expected.Select(p => p.InformationObjectAddress).Order(), objects.Select(o => o.InformationObjectAddress).Order());
         foreach (var point in expected)
@@ -167,7 +168,9 @@ public sealed class Iec104WireTests
         Assert.Equal(GridCommandType.Execute, commands[1].Command.Type);
         Assert.All(commands, c =>
         {
-            Assert.Equal("iec104-master", c.Actor.Name);
+            // Per-connection actor: {CommandActor}@{remote ip}:{port}#{connection id}; this client is connection #1.
+            Assert.StartsWith("iec104-master@127.0.0.1:", c.Actor.Name, StringComparison.Ordinal);
+            Assert.EndsWith("#1", c.Actor.Name, StringComparison.Ordinal);
             Assert.Equal(AccessRole.Operator, c.Actor.Role);
             Assert.Equal("iec104", c.Source);
         });
@@ -184,20 +187,86 @@ public sealed class Iec104WireTests
     }
 
     [Fact]
-    public async Task RegulatingStepCommandMapsToTapRaiseAndLower()
+    public async Task RegulatingStepCommandFollowsTheRccStandardMapping()
     {
         await using var host = await Iec104TestHost.StartAsync();
         await using var client = await StartedClientAsync(host.Port);
+        // RCC bits 0-1 (IEC 60870-5-101/104): 1 = next step LOWER, 2 = next step HIGHER.
         await client.SendAsync(RawIec104Client.Information(0, 0,
             RawIec104Client.AsduBytes(Iec104TypeId.C_RC_NA_1, CauseOfTransmission.ActivationRequest, 2, (3000, [0x01]))));
-        var raise = await CollectUntilTerminationAsync(client, firstSendSequence: 0);
-        Assert.Equal(CauseOfTransmission.ActivationConfirm, raise[0].Header.Cause);
+        var lower = await CollectUntilTerminationAsync(client, firstSendSequence: 0);
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, lower[0].Header.Cause);
         await client.SendAsync(RawIec104Client.Information(1, 2,
             RawIec104Client.AsduBytes(Iec104TypeId.C_RC_NA_1, CauseOfTransmission.ActivationRequest, 2, (3000, [0x02]))));
-        var lower = await CollectUntilTerminationAsync(client, firstSendSequence: 2);
-        Assert.Equal(CauseOfTransmission.ActivationConfirm, lower[0].Header.Cause);
-        Assert.Equal([GridCommandType.TapRaise, GridCommandType.TapLower], host.Control.Commands.Select(c => c.Command.Type));
+        var raise = await CollectUntilTerminationAsync(client, firstSendSequence: 2);
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, raise[0].Header.Cause);
+        Assert.Equal([GridCommandType.TapLower, GridCommandType.TapRaise], host.Control.Commands.Select(c => c.Command.Type));
         Assert.All(host.Control.Commands, c => Assert.Equal(Iec104SampleGrid.TransformerId, c.Command.TargetId));
+    }
+
+    [Fact]
+    public async Task RegulatingStepCommandRejectsNotPermittedValuesAndHonoursSelectExecute()
+    {
+        await using var host = await Iec104TestHost.StartAsync();
+        await using var client = await StartedClientAsync(host.Port);
+        // RCO/RCC 0 and 3 are not permitted: negative activation confirmation, no command, no act term.
+        var send = 0;
+        foreach (var rcc in new byte[] { 0x00, 0x03 })
+        {
+            await client.SendAsync(RawIec104Client.Information(send, send,
+                RawIec104Client.AsduBytes(Iec104TypeId.C_RC_NA_1, CauseOfTransmission.ActivationRequest, 2, (3000, [rcc]))));
+            var (con, _) = await client.ReceiveAsduAsync();
+            Assert.Equal(CauseOfTransmission.ActivationConfirmNegative, con.Header.Cause);
+            Assert.Equal(Iec104TypeId.C_RC_NA_1, con.Header.Type);
+            Assert.Null(await client.TryReceiveAsync(300));
+            send++;
+        }
+
+        Assert.Empty(host.Control.Commands);
+        // S/E=1 (select): confirmed without operating and without termination.
+        await client.SendAsync(RawIec104Client.Information(send, send,
+            RawIec104Client.AsduBytes(Iec104TypeId.C_RC_NA_1, CauseOfTransmission.ActivationRequest, 2, (3000, [0x82]))));
+        var (selectCon, _) = await client.ReceiveAsduAsync();
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, selectCon.Header.Cause);
+        Assert.Null(await client.TryReceiveAsync(300));
+        Assert.Empty(host.Control.Commands);
+        Assert.True(HasAudit(host, "no operation until execute"));
+
+        // S/E=0 (execute): the step is operated and the activation terminates.
+        send++;
+        await client.SendAsync(RawIec104Client.Information(send, send,
+            RawIec104Client.AsduBytes(Iec104TypeId.C_RC_NA_1, CauseOfTransmission.ActivationRequest, 2, (3000, [0x02]))));
+        var responses = await CollectUntilTerminationAsync(client, firstSendSequence: send);
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, responses[0].Header.Cause);
+        Assert.Equal([GridCommandType.TapRaise], host.Control.Commands.Select(c => c.Command.Type));
+    }
+
+    [Fact]
+    public async Task EachMasterConnectionGetsItsOwnCommandActor()
+    {
+        await using var host = await Iec104TestHost.StartAsync();
+        await using var first = await StartedClientAsync(host.Port);
+        await using var second = await StartedClientAsync(host.Port);
+        await first.SendAsync(RawIec104Client.Information(0, 0, DoubleCommand(1, 2000, 0x81)));  // select open
+        await second.SendAsync(RawIec104Client.Information(0, 0, DoubleCommand(1, 2000, 0x82))); // select close
+        var (conA, _) = await first.ReceiveAsduAsync();
+        var (conB, _) = await second.ReceiveAsduAsync();
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, conA.Header.Cause);
+        Assert.Equal(CauseOfTransmission.ActivationConfirm, conB.Header.Cause);
+
+        var commands = host.Control.Commands;
+        Assert.Equal(2, commands.Count);
+        // Recording order across the two connections is not deterministic: match by command type.
+        var selectOpen = commands.Single(c => c.Command.Type == GridCommandType.SelectOpen);
+        var selectClose = commands.Single(c => c.Command.Type == GridCommandType.SelectClose);
+        // Distinct per-connection actors: {CommandActor}@{remote ip}:{port}#{connection id}, so one master
+        // cannot execute or cancel another master's selection (ownership is by actor name).
+        Assert.StartsWith("iec104-master@127.0.0.1:", selectOpen.Actor.Name, StringComparison.Ordinal);
+        Assert.EndsWith("#1", selectOpen.Actor.Name, StringComparison.Ordinal); // first client = connection #1
+        Assert.StartsWith("iec104-master@127.0.0.1:", selectClose.Actor.Name, StringComparison.Ordinal);
+        Assert.EndsWith("#2", selectClose.Actor.Name, StringComparison.Ordinal); // second client = connection #2
+        Assert.NotEqual(selectOpen.Actor.Name, selectClose.Actor.Name);
+        Assert.All(commands, c => Assert.Equal(AccessRole.Operator, c.Actor.Role));
     }
 
     [Fact]
@@ -377,12 +446,84 @@ public sealed class Iec104WireTests
     }
 
     [Fact]
+    public async Task DefinitionChangeRebuildsTheMapAndResynchronisesConnectionsWithEndOfInitialization()
+    {
+        await using var host = await Iec104TestHost.StartAsync();
+        await using var client = await StartedClientAsync(host.Port);
+        var monitor = host.Factory.Services.GetRequiredService<Iec104GridMonitor>();
+
+        // Interrogate CA 1 with the initial map: the switch double point IOA 2000 is there.
+        await client.SendAsync(RawIec104Client.Information(0, 0, Interrogation(1)));
+        var initial = await CollectUntilTerminationAsync(client, firstSendSequence: 0); // consumes server I-frames 0..4
+        var initialObjects = initial.Where(r => r.Header.Cause == CauseOfTransmission.InterrogationResponse)
+            .SelectMany(r => r.Objects).ToList();
+        Assert.Contains(initialObjects, o => o.InformationObjectAddress == 2000);
+
+        // An administrator activates a new definition version (GridStepEventKind.DefinitionActivated).
+        host.View.SetDefinition(Iec104SampleGrid.CreateDefinitionV2());
+        var t0 = new DateTimeOffset(2026, 5, 6, 7, 8, 9, TimeSpan.Zero);
+        var activated = new GridStepReport(t0, Iec104SampleGrid.CreateSnapshot(),
+            [new GridStepEvent(GridStepEventKind.DefinitionActivated, "grid", "Definition version 2 activated", "admin", GridChangeCause.System)]);
+        await monitor.OnGridStepAsync(activated, CancellationToken.None);
+
+        // Every started connection receives M_EI_NA_1 (COT 4, end of initialization) per common address of the new map.
+        var eiCommonAddresses = new List<int>();
+        for (var expectedSend = 5; expectedSend <= 6; expectedSend++)
+        {
+            var (asdu, control) = await client.ReceiveAsduAsync();
+            Assert.Equal(expectedSend, control.SendSequence);
+            Assert.Equal(Iec104TypeId.M_EI_NA_1, asdu.Header.Type);
+            Assert.Equal(CauseOfTransmission.EndOfInitialization, asdu.Header.Cause);
+            eiCommonAddresses.Add(asdu.Header.CommonAddress);
+        }
+
+        Assert.Equal([1, 2], eiCommonAddresses.Order());
+        Assert.True(HasAudit(host, "M_EI_NA_1"));
+        // The spontaneous baseline was reset: the priming step sends no data frames.
+        Assert.Null(await client.TryReceiveAsync(400));
+
+        // A new general interrogation returns the rebuilt map: IOA 2000 is gone from CA 1.
+        await client.SendAsync(RawIec104Client.Information(1, 7, Interrogation(1)));
+        var rebuilt = await CollectUntilTerminationAsync(client, firstSendSequence: 7); // consumes server I-frames 7..10
+        var rebuiltObjects = rebuilt.Where(r => r.Header.Cause == CauseOfTransmission.InterrogationResponse)
+            .SelectMany(r => r.Objects).ToList();
+        Assert.DoesNotContain(rebuiltObjects, o => o.InformationObjectAddress == 2000);
+        Assert.True(rebuiltObjects.Count < initialObjects.Count);
+
+        // A command to the stale IOA is rejected with COT 47 instead of hitting the wrong equipment.
+        await client.SendAsync(RawIec104Client.Information(2, 11, DoubleCommand(1, 2000, 0x81)));
+        var (stale, _) = await client.ReceiveAsduAsync();
+        Assert.Equal(CauseOfTransmission.UnknownInformationObjectAddress, stale.Header.Cause);
+        Assert.Empty(host.Control.Commands);
+
+        // The map endpoint exposes the current (rebuilt) map.
+        using var http = host.Factory.Client(ApiTestFactory.ViewerKey);
+        using var json = await http.GetFromJsonAsync<JsonDocument>("/api/grid/iec104/map");
+        Assert.Equal("Sample grid v2", json!.RootElement.GetProperty("definitionName").GetString());
+        var rtu1 = json.RootElement.GetProperty("rtus").EnumerateArray().Single(r => r.GetProperty("commonAddress").GetInt32() == 1);
+        Assert.DoesNotContain(rtu1.GetProperty("points").EnumerateArray(),
+            p => p.GetProperty("informationObjectAddress").GetInt32() == 2000);
+
+        // After the reset, the next step primes the baseline again and spontaneous data flows for the new map.
+        await monitor.OnGridStepAsync(new GridStepReport(t0.AddSeconds(1), Iec104SampleGrid.CreateSnapshot(lineCurrentA: 120), []),
+            CancellationToken.None);
+        Assert.Null(await client.TryReceiveAsync(400)); // priming step: no frames
+        await monitor.OnGridStepAsync(new GridStepReport(t0.AddSeconds(2), Iec104SampleGrid.CreateSnapshot(lineCurrentA: 130), []),
+            CancellationToken.None);
+        var (spontaneous, _) = await client.ReceiveAsduAsync();
+        Assert.Equal(CauseOfTransmission.Spontaneous, spontaneous.Header.Cause);
+        Assert.Equal(1000, spontaneous.Objects[0].InformationObjectAddress);
+        Assert.Equal(130f, Iec104ElementCodec.DecodeMeasurement(spontaneous.Objects[0].Data[..4]));
+    }
+
+    [Fact]
     public async Task MapEndpointReturnsTheAddressMapForViewers()
     {
         await using var host = await Iec104TestHost.StartAsync();
         using var http = host.Factory.Client(ApiTestFactory.ViewerKey);
         using var json = await http.GetFromJsonAsync<JsonDocument>("/api/grid/iec104/map");
-        var rtus = json!.RootElement.GetProperty("rtus");
+        Assert.Equal("Sample grid", json!.RootElement.GetProperty("definitionName").GetString());
+        var rtus = json.RootElement.GetProperty("rtus");
         Assert.Equal(2, rtus.GetArrayLength());
         var rtu1 = rtus[0];
         Assert.Equal(1, rtu1.GetProperty("commonAddress").GetInt32());

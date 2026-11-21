@@ -4,6 +4,7 @@ namespace Protocols.Iec104;
 public enum CauseOfTransmission : byte
 {
     Spontaneous = 3,
+    EndOfInitialization = 4,
     ActivationRequest = 6,
     ActivationConfirm = 7,
     ActivationConfirmNegative = 8,

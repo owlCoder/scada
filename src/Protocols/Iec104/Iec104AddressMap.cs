@@ -20,12 +20,16 @@ public sealed class Iec104AddressMap
     private readonly Dictionary<int, Iec104RtuMap> _byCommonAddress;
     private readonly Dictionary<(int CommonAddress, int Ioa), Iec104Point> _byIoa;
 
-    public Iec104AddressMap(IReadOnlyList<Iec104RtuMap> rtus)
+    public Iec104AddressMap(IReadOnlyList<Iec104RtuMap> rtus, string definitionName = "")
     {
         Rtus = rtus;
+        DefinitionName = definitionName;
         _byCommonAddress = rtus.ToDictionary(r => r.CommonAddress);
         _byIoa = rtus.SelectMany(r => r.Points).ToDictionary(p => (p.CommonAddress, p.InformationObjectAddress));
     }
+
+    /// <summary>Name of the <see cref="GridDefinition"/> this map was built from (empty when built directly from RTU lists).</summary>
+    public string DefinitionName { get; }
 
     public IReadOnlyList<Iec104RtuMap> Rtus { get; }
 
@@ -106,7 +110,7 @@ public sealed class Iec104AddressMap
             rtus.Add(new Iec104RtuMap(rtu.CommonAddress, rtu.Id, rtu.Name, points));
         }
 
-        return new Iec104AddressMap(rtus);
+        return new Iec104AddressMap(rtus, definition.Name);
     }
 
     private static double PowerRangeMva(double ratedCurrentA, double nominalVoltageKv) =>
