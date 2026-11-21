@@ -1,0 +1,50 @@
+/* Dispatcher design tokens shared by every display (shell, single-line diagram, docks, water P&ID).
+   Control-room dark theme; colour carries meaning only (voltage level, state, alarm priority). */
+:root {
+  --c-bg: #15181b;            /* page / shell background */
+  --c-canvas: #0e1113;        /* diagram canvas */
+  --c-panel: #1f2327;         /* docks, dialogs */
+  --c-panel-2: #2a2f34;       /* headers, selected rows */
+  --c-border: #3a4148;
+  --c-text: #dfe4e9;
+  --c-text-muted: #8f99a3;
+  --c-focus: #4fc3f7;         /* selection / keyboard focus */
+
+  /* Voltage levels (energised). De-energised equipment uses --c-dead; earthed uses --c-earthed. */
+  --c-kv-110: #e5484d;
+  --c-kv-35: #c869d6;
+  --c-kv-20: #3e8ef7;
+  --c-kv-10: #1fb5a8;
+  --c-kv-04: #b8c0c8;
+  --c-dead: #4d565f;
+  --c-earthed: #37b24d;
+
+  /* Switching devices: closed = filled with the voltage colour, open = hollow with --c-open. */
+  --c-open: #3ecf73;
+  --c-invalid: #ff4fd8;       /* bad quality / unknown state */
+
+  /* Alarm priorities (ISA-18.2). Unacknowledged alarms blink. */
+  --c-p1: #ff3b30;
+  --c-p2: #ff9500;
+  --c-p3: #ffd60a;
+  --c-p4: #64d2ff;
+
+  /* Loading heat scale */
+  --c-load-ok: #3ecf73;
+  --c-load-warn: #ffd60a;
+  --c-load-high: #ff9500;
+  --c-load-over: #ff3b30;
+
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-value: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 18px;
+
+  /* Shell geometry */
+  --h-topbar: 44px;
+  --h-alarmbar: 34px;
+  --h-statusbar: 24px;
+  --w-rail: 56px;
+  --w-dock-right: 380px;
+  --h-dock-bottom: 230px;
+}
+@keyframes blink-unack { 50% { opacity: .35; } }
