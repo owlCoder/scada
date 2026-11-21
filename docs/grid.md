@@ -72,6 +72,42 @@ and industrial (shift) curves interpolated at the simulated time of day, plus sm
 At 08:00 the default network converges in ~3 iterations with all voltages in 0.95–1.05 pu, max loading ≈ 71 % and no
 alarms; at the 19:00 evening peak it stays below 100 % loading.
 
+## Network templates
+
+`GridTemplateCatalog` (`src/Domain/Grid/Definition/Templates/`) lists the built-in starting points for the network
+editor (`/grid/editor`, Administrator → "Start from template"): the default network plus two realistic alternatives,
+each a factory returning a fresh, validator-clean `GridDefinition` (no errors, no warnings — every element is assigned
+to an RTU). All three converge at 08:00 and at the 19:00 evening peak with voltages inside 0.95–1.05 pu, no branch
+above 100 % loading and no active alarms, resolve the targets of all eight grid attack scenarios through the real
+`GridScenarioTargetResolver`, and keep every 51/50 pickup above the maximum load current of its element over a full
+simulated day.
+
+- `UrbanCableGridTemplate` (`urban-cable-20kv`): a 20 kV urban cable network fed from one 110/20 kV substation with
+  two 40 MVA transformers (uk 12.5 %, OLTC ±10 × 0.9 %, AVR target 20.6 kV) on separate 20 kV busbar sections joined by
+  a normally-closed bus coupler breaker (`BC`, 50 m coupler cable). Four cable feeders (`NA2XS(F)2Y 3x1x150`,
+  0.206+j0.122 Ω/km, 300 A, 0.4–1.0 km sections) form two open rings: each ring is two feeders tied at their far ends by
+  a tie cable with a normally-open ring point (`NOP-A`/`NOP-B`, load-break switches) for restoration. Fourteen compact
+  20/0.4 kV substations (1000/630 kVA, uk 6 %, Dyn11) carry a commercial-heavy mix (10 commercial, 4 residential loads,
+  one critical), a 2.4 Mvar 4-step capacitor bank sits on section A, and five RTUs cover the station (CA 1) and one
+  feeder each (CA 2–5). Feeder breakers carry 51 (SI, 160 A) + 50 (2500 A) + 51N (40 A); incomers and coupler carry
+  backup 51/50 and busbar undervoltage 27.
+- `RuralOverheadGridTemplate` (`rural-overhead-20kv`): a rural 20 kV overhead network fed from one 110/20 kV 20 MVA
+  transformer (uk 11 %, OLTC ±8 × 1.25 %, AVR target 20.4 kV — the long feeders need the regulator for voltage drop).
+  Three long Al/Fe 95/15 feeders (0.306+j0.365 Ω/km, 330 A; 20/21/12 km, the last FC section Al/Fe 50/8 210 A) carry
+  ten pole-mounted 20/0.4 kV transformers (100/250/400 kVA, Dyn5) with residential village loads. Two large PV parks
+  (PV1 3.0 MW at the end of feeder A, PV2 2.5 MW at the end of feeder B) cause reverse power flow at midday — the
+  deliberate exception: at 12:00 generation exceeds load and power is exported towards the 110 kV infeed, while
+  voltages stay inside 0.9–1.1 pu and no branch overloads; the AVR keeps the tap strictly inside ±8 over the whole day.
+  Feeder breakers use a reclosing-style scheme (50 1800 A / 51 SI 150 A / 51N 25 A — protection only, the engine has no
+  automatic reclose logic), plus incomer backup 51/50 and busbar 27; a 1.8 Mvar 3-step capacitor bank at the 20 kV
+  busbar covers the capacitor scenario target. Four RTUs: station (CA 1) and one per feeder (CA 2–4).
+
+Both templates use clean left-to-right diagram positions (source left, busbar, feeders as rows, substations below
+their ring node). Tests: `Tests/UnitTests/Grid/Templates/` (validation, catalog shape, convergence at 08:00/19:00,
+midday reverse power, AVR tap range, protection pickups vs maximum load currents, scenario target resolution with the
+real `GridScenarioTargetResolver`, and a full simulated day on the real `GridEngine` + real `GridDetectionEngine`);
+the editor picker is covered by `Tests/FrontendTests/Pages/GridTemplatePickerTests.cs`.
+
 ## Security model
 
 - `GridControlService` (`IGridControl`, Operator): role check → command rate limit → replay guard (sequence numbers) →
@@ -132,7 +168,7 @@ Rejections map to 403 (not authorized), 429 (rate limited) and 400 (everything e
 
 ## Source map
 
-- Definition and validator: `src/Domain/Grid/Definition/`
+- Definition, validator and editor templates: `src/Domain/Grid/Definition/`, `src/Domain/Grid/Definition/Templates/`
 - Physics: `src/Domain/Grid/Network/GridWorld.cs`, `PowerFlow/`, `Protection/`, `Profiles/`
 - Engine, coordinator, redaction: `src/Application/Grid/`
 - Control/training security: `src/Security/Grid/Control/`
