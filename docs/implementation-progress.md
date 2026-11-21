@@ -51,8 +51,8 @@ Remaining:
 - [x] Serilog, OpenTelemetry, health endpoints
 
 ## Phase G/H — HMI and real-time
-- [ ] Blazor HMI pages
-- [ ] SignalR hub and realtime broadcasting
+- [x] Blazor HMI pages
+- [x] SignalR hub and realtime broadcasting
 
 ## Phase I/J — Validation and delivery
 - [ ] Database, protocol, E2E, performance, Docker smoke tests
@@ -74,3 +74,9 @@ Remaining:
 - 2026-11-21, Step 5 (OPC UA): Release build with zero warnings and 312 passing tests (12 architecture, 178 unit,
   122 integration). Integration coverage includes subscriptions, operator redaction, command authorization and auditing,
   certificate trust, loopback binding and shutdown.
+- 2026-11-21, Steps 5–6 integrated on `feature/hmi` (review fixes, OPC UA, HMI foundation and pages): 403 .NET tests
+  (13 architecture, 190 unit, 144 integration, 30 bUnit frontend, 27 database on Testcontainers PostgreSQL) pass. OPC UA review
+  findings fixed (anonymous access and certificate auto-accept are opt-in, guarded update loop, bounded identity validation,
+  start/stop race). Live: dev-admin sign-in, every HMI page renders in a real browser, live trends, and the Command replay
+  scenario started from /scenarios through the confirmation dialog ends Detected. Found and fixed live: blazor.web.js was not
+  served (404) and the CSP blocked `<base href>`, so the HMI was blank in a browser although bUnit passed.
