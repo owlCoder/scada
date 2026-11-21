@@ -52,7 +52,11 @@ public sealed class Iec104Connection
         _time = time;
         _logger = logger;
         _onClosed = onClosed;
-        Source = $"iec104:{client.Client.RemoteEndPoint}";
+        var remote = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+        Source = $"iec104:{remote}";
+        // Select-before-operate ownership in the grid is by actor name, so every master connection gets its own
+        // command actor: {CommandActor}@{remote ip}:{port}#{connection id}. The configured role is kept.
+        CommandActorName = $"{options.CommandActor}@{remote}#{id}";
         _stream = client.GetStream();
         _acceptedAt = time.GetUtcNow();
         _lastActivity = _acceptedAt;
@@ -69,6 +73,9 @@ public sealed class Iec104Connection
 
     public int Id { get; }
     public string Source { get; }
+
+    /// <summary>Per-connection command actor name: <c>{CommandActor}@{remote ip}:{port}#{connection id}</c>.</summary>
+    public string CommandActorName { get; }
 
     /// <summary>Set when <see cref="RunAsync"/> has finished, successfully or not.</summary>
     public Task Completion => _completion.Task;
@@ -285,7 +292,7 @@ public sealed class Iec104Connection
         IReadOnlyList<Asdu> responses;
         try
         {
-            responses = await _handler.HandleAsync(asdu, Source, cancellationToken);
+            responses = await _handler.HandleAsync(asdu, Source, CommandActorName, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

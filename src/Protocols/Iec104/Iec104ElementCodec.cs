@@ -26,6 +26,7 @@ public static class Iec104ElementCodec
         Iec104TypeId.M_SP_TB_1 or Iec104TypeId.M_DP_TB_1 or Iec104TypeId.M_ST_TB_1 => 1 + Cp56Time2a.Size,
         Iec104TypeId.M_ME_TF_1 => 5 + Cp56Time2a.Size, // short float + QDP + CP56Time2a
         Iec104TypeId.C_DC_NA_1 or Iec104TypeId.C_RC_NA_1 or Iec104TypeId.C_IC_NA_1 => 1,
+        Iec104TypeId.M_EI_NA_1 => 1, // local parameter change octet
         Iec104TypeId.C_CS_NA_1 => Cp56Time2a.Size,
         Iec104TypeId.C_DC_TA_1 => 1 + Cp56Time2a.Size,
         _ => null

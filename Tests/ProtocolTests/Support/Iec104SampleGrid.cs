@@ -70,6 +70,18 @@ public static class Iec104SampleGrid
                     [TransformerId, Load2Id, GeneratorId, CapacitorId, ProtectionId])
             ]);
 
+    /// <summary>
+    /// Version 2 of the sample definition: RTU 1 no longer lists the switch, so its double point IOA 2000 disappears
+    /// from the address map (used by the definition-change / map-rebuild tests).
+    /// </summary>
+    public static GridDefinition CreateDefinitionV2()
+    {
+        var definition = CreateDefinition() with { Name = "Sample grid v2" };
+        var rtu1 = definition.Rtus.Single(r => r.Id == Rtu1Id);
+        var withoutSwitch = rtu1 with { ElementIds = [.. rtu1.ElementIds.Where(e => e != SwitchId)] };
+        return definition with { Rtus = [.. definition.Rtus.Select(r => r.Id == rtu1.Id ? withoutSwitch : r)] };
+    }
+
     public static GridSnapshot CreateSnapshot(double lineCurrentA = 120, double busVoltageKv = 10.2, bool switchClosed = true,
         int tap = 3, bool tripped = false)
     {

@@ -15,5 +15,6 @@ public enum Iec104TypeId : byte
     C_RC_NA_1 = 47,  // regulating step command
     C_DC_TA_1 = 59,  // double command with CP56Time2a
     C_IC_NA_1 = 100, // interrogation command
-    C_CS_NA_1 = 103  // clock synchronisation command
+    C_CS_NA_1 = 103, // clock synchronisation command
+    M_EI_NA_1 = 70   // end of initialization, slave->master, COT 4 (sent after an address-map rebuild)
 }

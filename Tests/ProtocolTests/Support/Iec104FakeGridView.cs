@@ -4,13 +4,17 @@ using Domain.Grid.Snapshots;
 
 namespace ProtocolTests.Support;
 
-/// <summary>Fake <see cref="IGridView"/> with a fixed definition and a replaceable snapshot.</summary>
+/// <summary>Fake <see cref="IGridView"/> with a replaceable definition and snapshot.</summary>
 public sealed class Iec104FakeGridView : IGridView
 {
     private readonly Lock _sync = new();
+    private GridDefinition _definition = Iec104SampleGrid.CreateDefinition();
     private GridSnapshot _snapshot = Iec104SampleGrid.CreateSnapshot();
 
-    public GridDefinition Definition { get; } = Iec104SampleGrid.CreateDefinition();
+    public GridDefinition Definition
+    {
+        get { lock (_sync) return _definition; }
+    }
 
     public GridStatus Status { get; } = new(false, TimeSpan.FromSeconds(1), 1, 1, 1, "Sample grid", 1);
 
@@ -18,6 +22,13 @@ public sealed class Iec104FakeGridView : IGridView
     {
         lock (_sync)
             return _snapshot;
+    }
+
+    public bool SetDefinition(GridDefinition definition)
+    {
+        lock (_sync)
+            _definition = definition;
+        return true;
     }
 
     public bool SetSnapshot(GridSnapshot snapshot)
