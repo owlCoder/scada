@@ -3,6 +3,7 @@
     <Project Path="src/Api/Api.csproj" />
     <Project Path="src/Application/Application.csproj" />
     <Project Path="src/Domain/Domain.csproj" />
+    <Project Path="src/Hmi/Hmi.csproj" />
     <Project Path="src/Infrastructure/Infrastructure.csproj" />
     <Project Path="src/Security/Security.csproj" />
     <Project Path="src/Protocols/Protocols.csproj" />
@@ -11,6 +12,7 @@
   <Folder Name="/Tests/">
     <Project Path="Tests/UnitTests/UnitTests.csproj" />
     <Project Path="Tests/DatabaseTests/DatabaseTests.csproj" />
+    <Project Path="Tests/FrontendTests/FrontendTests.csproj" />
     <Project Path="Tests/IntegrationTests/IntegrationTests.csproj" />
     <Project Path="Tests/ArchitectureTests/ArchitectureTests.csproj" />
   </Folder>

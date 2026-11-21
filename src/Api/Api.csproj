@@ -6,6 +6,7 @@
     <ProjectReference Include="../Simulation/Simulation.csproj" />
     <ProjectReference Include="../Security/Security.csproj" />
     <ProjectReference Include="../Protocols/Protocols.csproj" />
+    <ProjectReference Include="../Hmi/Hmi.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />

@@ -1,0 +1,21 @@
+@page "/identity"
+@inherits RealtimeComponentBase
+
+<PageTitle>My account · SCADA</PageTitle>
+<h1>My account</h1>
+<section class="panel">
+    <dl class="facts">
+        <dt>User</dt><dd>@Session.Actor.Name</dd>
+        <dt>Role</dt><dd>@Session.Actor.Role</dd>
+        <dt>Plant view</dt><dd>@(Session.IsInstructor ? "Ground truth (instructor)" : "Field instrument readings")</dd>
+        <dt>May operate devices</dt><dd>@(Session.CanOperate ? "Yes" : "No")</dd>
+    </dl>
+    <form method="post" action="/account/logout" data-enhance="false">
+        <AntiforgeryToken />
+        <button class="btn" type="submit">Sign out</button>
+    </form>
+</section>
+
+@code {
+    protected override bool Refresh() => true;
+}

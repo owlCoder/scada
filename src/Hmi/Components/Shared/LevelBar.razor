@@ -1,0 +1,17 @@
+<div class="level" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent.ToString("0", CultureInfo.InvariantCulture)" aria-label="@Label">
+    <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="level-svg">
+        <rect x="0" y="0" width="100" height="8" class="level-track" />
+        <rect x="0" y="0" width="@Clamped.ToString("0.#", CultureInfo.InvariantCulture)" height="8" class="@FillClass" />
+    </svg>
+    <span>@Percent.ToString("0.0", CultureInfo.InvariantCulture) %</span>
+</div>
+
+@code {
+    [Parameter] public double Percent { get; set; }
+    [Parameter] public string Label { get; set; } = "Level";
+    [Parameter] public double? High { get; set; }
+    [Parameter] public double? Low { get; set; }
+
+    private double Clamped => Math.Clamp(Percent, 0, 100);
+    private string FillClass => (High is { } high && Percent >= high) || (Low is { } low && Percent <= low) ? "level-fill-alarm" : "level-fill";
+}

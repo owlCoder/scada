@@ -30,13 +30,12 @@ await app.Services.GetRequiredService<AccountSeeder>().SeedAsync(CancellationTok
 await app.Services.GetRequiredService<DevelopmentAccountGenerator>().EnsureAsync(CancellationToken.None);
 app.UseScadaObservability();
 app.UseScadaSecurityHeaders();
-app.UseDefaultFiles();
-app.UseStaticFiles();
 app.UseAuthentication();
 app.UseMiddleware<CookieAntiforgeryMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseAntiforgery();
+app.MapStaticAssets();
 
 HealthEndpoints.Map(app);
 SignInEndpoints.Map(app);
@@ -53,6 +52,7 @@ IncidentEndpoints.Map(app);
 ScenarioEndpoints.Map(app);
 DetectionEndpoints.Map(app);
 AccountEndpoints.Map(app);
+app.MapScadaHmi();
 
 app.Run();
 

@@ -3,6 +3,15 @@
 Read this first in a new session. It records exactly where the previous session stopped.
 The original task is the "MASTER IMPLEMENTATION PROMPT — COMPLETE SCADA PROJECT" (paste it again in the new session together with this file).
 
+## 0. Team setup (from 2026-11-21, after Step 4)
+- `main` on GitHub (owlCoder/scada) contains Steps 1–4 (fast-forward from feature/full-scada-platform, normal push).
+- The lead (Claude) coordinates. Codex CLI (`codex exec -m gpt-6.2-sol -c model_reasoning_effort=high`, workspace-write sandbox with network)
+  implements Step 5 in the worktree `../scada-opcua` on branch `feature/opcua` (brief: `.scada/agents/opcua-brief.md`).
+  Mistral (`vibe --model mistral-large-4 --enabled-tools read_file --enabled-tools grep`) reviews diffs read-only
+  (prompts and results in `.scada/review/`). The lead builds Step 6 on `feature/hmi`, merges the branches and runs every test,
+  including the Docker-based DatabaseTests.
+- Disk: the Docker build cache was pruned on 2026-11-21 (from 1.8 GB to 28 GB free). Do not prune volumes; they belong to other projects.
+
 ## 1. Environment facts (verified)
 
 | Item | Value |

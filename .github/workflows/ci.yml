@@ -35,7 +35,3 @@ jobs:
         run: dotnet build scada.slnx -c Release --no-restore
       - name: Test
         run: dotnet test scada.slnx -c Release --no-build
-      - name: Frontend tests
-        run: |
-          node --check src/Api/wwwroot/app.js
-          node --test Tests/FrontendTests/*.test.cjs

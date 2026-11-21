@@ -1,0 +1,14 @@
+<span class="pill @Css">@Text</span>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+    [Parameter] public string Kind { get; set; } = "neutral";
+
+    private string Css => Kind switch
+    {
+        "ok" => "pill-ok",
+        "warn" => "pill-warn",
+        "alarm" => "pill-alarm",
+        _ => "pill-neutral"
+    };
+}

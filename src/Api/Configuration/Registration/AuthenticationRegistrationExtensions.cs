@@ -14,7 +14,7 @@ namespace Api.Configuration.Registration;
 
 /// <summary>
 /// Authentication (session cookie, legacy X-Api-Key, optional OIDC), role policies, antiforgery and rate limiting.
-/// API paths answer 401/403 instead of redirecting to the login page.
+/// API and hub paths answer 401/403 instead of redirecting to the login page.
 /// </summary>
 public static class AuthenticationRegistrationExtensions
 {
@@ -82,7 +82,8 @@ public static class AuthenticationRegistrationExtensions
 
     private static Task ApiStatusOrRedirect(RedirectContext<CookieAuthenticationOptions> context, int status)
     {
-        if (context.Request.Path.StartsWithSegments("/api"))
+        // Machine endpoints (REST and SignalR) answer with a status code; browser pages are redirected to sign-in.
+        if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/hubs"))
             context.Response.StatusCode = status;
         else
             context.Response.Redirect(context.RedirectUri);

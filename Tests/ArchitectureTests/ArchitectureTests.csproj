@@ -15,5 +15,6 @@
     <ProjectReference Include="../../src/Security/Security.csproj" />
     <ProjectReference Include="../../src/Protocols/Protocols.csproj" />
     <ProjectReference Include="../../src/Simulation/Simulation.csproj" />
+    <ProjectReference Include="../../src/Hmi/Hmi.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,129 @@
+@page "/diagram"
+@inherits RealtimeComponentBase
+
+<PageTitle>Plant diagram · SCADA</PageTitle>
+<h1>Plant diagram</h1>
+<p class="muted">@(Session.IsInstructor ? "Instructor view: true process values." : "Values as reported by the field instruments.")
+    Select a device for details.</p>
+
+<div class="diagram-layout">
+    <svg class="diagram" viewBox="0 0 @N(_layout.Width) @N(_layout.Height)" role="img" aria-label="Live plant diagram">
+        @foreach (var pump in _plant.Pumps)
+        {
+            var (px, py) = _layout.Position(pump.Id);
+            var from = _layout.TankCenter(pump.SourceTankId);
+            var to = _layout.TankCenter(pump.TargetTankId);
+            var bottom = PlantLayout.TankTop + PlantLayout.TankHeight;
+            <polyline class="pipe @(pump.FlowRate > 0.001 ? "pipe-flow" : "")"
+                      points="@N(from),@N(bottom) @N(from),@N(py) @N(px),@N(py) @N(to),@N(py) @N(to),@N(bottom)" />
+        }
+        @foreach (var valve in _plant.Valves.Where(v => v.Role != ValveRole.Discharge))
+        {
+            var (vx, vy) = _layout.Position(valve.Id);
+            var tankEdge = valve.Role == ValveRole.Inlet ? PlantLayout.TankTop : PlantLayout.TankTop + PlantLayout.TankHeight;
+            <line class="pipe @(valve.FlowRate > 0.001 ? "pipe-flow" : "")" x1="@N(vx)" y1="@N(vy)" x2="@N(vx)" y2="@N(tankEdge)" />
+        }
+
+        @foreach (var tank in _plant.Tanks)
+        {
+            var (tx, ty) = _layout.Position(tank.Id);
+            var fill = PlantLayout.TankHeight * Math.Clamp(tank.LevelPercent, 0, 100) / 100;
+            <g class="device @(Selected(tank.Id))" @onclick="() => Select(tank.Id)" tabindex="0" role="button" aria-label="@tank.Name">
+                <rect class="tank" x="@N(tx)" y="@N(ty)" width="@N(PlantLayout.TankWidth)" height="@N(PlantLayout.TankHeight)" rx="6" />
+                <rect class="@(tank.LevelPercent >= tank.Thresholds.High || tank.LevelPercent <= tank.Thresholds.Low ? "liquid liquid-alarm" : "liquid")"
+                      x="@N(tx + 3)" y="@N(ty + PlantLayout.TankHeight - fill)" width="@N(PlantLayout.TankWidth - 6)" height="@N(Math.Max(0, fill - 3))" rx="4" />
+                <text class="label" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty - 10)">@tank.Id</text>
+                <text class="value" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty + PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text>
+            </g>
+        }
+
+        @foreach (var pump in _plant.Pumps)
+        {
+            var (px, py) = _layout.Position(pump.Id);
+            <g class="device @(Selected(pump.Id))" @onclick="() => Select(pump.Id)" tabindex="0" role="button" aria-label="@pump.Name">
+                <circle class="pump @PumpClass(pump)" cx="@N(px)" cy="@N(py)" r="20" />
+                <polygon class="pump-arrow" points="@N(px - 8),@N(py - 10) @N(px + 12),@N(py) @N(px - 8),@N(py + 10)" />
+                <text class="label" x="@N(px)" y="@N(py + 38)">@pump.Id</text>
+            </g>
+        }
+
+        @foreach (var valve in _plant.Valves)
+        {
+            var (vx, vy) = _layout.Position(valve.Id);
+            <g class="device @(Selected(valve.Id))" @onclick="() => Select(valve.Id)" tabindex="0" role="button" aria-label="@valve.Name">
+                <polygon class="valve @(valve.Position > 0.5 ? "valve-open" : "valve-closed") @(valve.Health != DeviceHealth.Healthy ? "faulted" : "")"
+                         points="@N(vx - 14),@N(vy - 10) @N(vx + 14),@N(vy + 10) @N(vx + 14),@N(vy - 10) @N(vx - 14),@N(vy + 10)" />
+                <text class="label small" x="@N(vx)" y="@N(vy - 16)">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
+            </g>
+        }
+    </svg>
+
+    <aside class="panel detail">
+        @if (_selected is null)
+        {
+            <p class="muted">No device selected.</p>
+        }
+        else if (_plant.Tank(_selected) is { } tank)
+        {
+            <h2>@tank.Name</h2>
+            <dl class="facts">
+                <dt>Level</dt><dd>@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</dd>
+                <dt>Volume</dt><dd>@tank.Volume.ToString("0.0", CultureInfo.InvariantCulture) / @tank.Capacity.ToString("0", CultureInfo.InvariantCulture) m³</dd>
+                <dt>Alarm limits</dt><dd>LL @tank.Thresholds.LowLow · L @tank.Thresholds.Low · H @tank.Thresholds.High · HH @tank.Thresholds.HighHigh</dd>
+                <dt>Overflow</dt><dd>@(tank.IsOverflowing ? "OVERFLOWING" : "No")</dd>
+            </dl>
+            <a href="tanks">All tanks</a>
+        }
+        else if (_plant.Pump(_selected) is { } pump)
+        {
+            <h2>@pump.Name</h2>
+            <dl class="facts">
+                <dt>State</dt><dd>@pump.State · @pump.Mode</dd>
+                <dt>Flow</dt><dd>@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</dd>
+                <dt>Pressure</dt><dd>@pump.DischargePressure.ToString("0.0", CultureInfo.InvariantCulture) bar</dd>
+                <dt>Health</dt><dd>@pump.Health @(pump.Fault != PumpFault.None ? $"({pump.Fault})" : "")</dd>
+                <dt>Last change</dt><dd>@pump.LastChangeCause @(pump.LastChangedBy is null ? "" : $"by {pump.LastChangedBy}")</dd>
+            </dl>
+            <a href="pumps">Operate pumps</a>
+        }
+        else if (_plant.Valve(_selected) is { } valve)
+        {
+            <h2>@valve.Name</h2>
+            <dl class="facts">
+                <dt>Position</dt><dd>@valve.Position.ToString("0", CultureInfo.InvariantCulture) % (setpoint @valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %)</dd>
+                <dt>Mode</dt><dd>@valve.Mode</dd>
+                <dt>Flow</dt><dd>@valve.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</dd>
+                <dt>Health</dt><dd>@valve.Health @(valve.Fault != ValveFault.None ? $"({valve.Fault})" : "")</dd>
+            </dl>
+            <a href="valves">Operate valves</a>
+        }
+    </aside>
+</div>
+
+@code {
+    private PlantSnapshot _plant = default!;
+    private PlantLayout _layout = default!;
+    private string? _selected;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant];
+
+    protected override bool Refresh()
+    {
+        _plant = Session.Plant();
+        _layout = new PlantLayout(_plant);
+        return true;
+    }
+
+    private bool Select(string id)
+    {
+        _selected = id;
+        return true;
+    }
+
+    private string Selected(string id) => id == _selected ? "selected" : "";
+
+    private static string PumpClass(PumpSnapshot pump) =>
+        pump.Health == DeviceHealth.Faulted ? "faulted" : pump.State == PumpState.Running ? "running" : "stopped";
+
+    private static string N(double value) => PlantLayout.Number(value);
+}

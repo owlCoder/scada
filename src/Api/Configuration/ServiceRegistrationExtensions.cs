@@ -15,6 +15,7 @@ public static class ServiceRegistrationExtensions
             .AddApplicationServices()
             .AddSecurityServices()
             .AddScadaAuthentication()
+            .AddScadaHmi()
             .AddProtocolServices()
             .AddHostedWorkers();
     }

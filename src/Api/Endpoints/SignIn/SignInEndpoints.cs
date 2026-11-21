@@ -32,9 +32,10 @@ public static class SignInEndpoints
             if (result is not { Status: AuthenticationStatus.Succeeded, User: { } user })
                 return Page(http, antiforgery, oidc, form.ReturnUrl, GenericFailure, StatusCodes.Status401Unauthorized);
 
-            var principal = ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password);
+            var issued = time.GetUtcNow();
+            var principal = ScadaPrincipalFactory.Create(user, ScadaSignInSources.Password, ScadaSignInSources.Password, issued);
             await http.SignInAsync(ScadaAuthenticationSchemes.Cookie, principal,
-                new AuthenticationProperties { IsPersistent = false, IssuedUtc = time.GetUtcNow() });
+                new AuthenticationProperties { IsPersistent = false, IssuedUtc = issued });
             return Results.LocalRedirect(SafeReturnUrl(form.ReturnUrl));
         }).RequireRateLimiting(RateLimitSettings.LoginPolicy);
 

@@ -1,0 +1,93 @@
+@page "/valves"
+@inherits RealtimeComponentBase
+@inject ControlCommandService Commands
+
+<PageTitle>Valves · SCADA</PageTitle>
+<h1>Valves</h1>
+<OutcomeBanner Outcome="_outcome" />
+
+<table class="grid">
+    <thead>
+        <tr><th>Valve</th><th>Role</th><th>Position</th><th>Setpoint</th><th>Mode</th><th>Flow</th><th>Health</th><th>Interlock</th>
+            @if (Session.CanOperate) { <th>Commands</th> }</tr>
+    </thead>
+    <tbody>
+        @foreach (var valve in _plant.Valves)
+        {
+            <tr>
+                <td><strong class="cell-title">@valve.Id</strong> @valve.Name</td>
+                <td>@valve.Role</td>
+                <td><LevelBar Percent="valve.Position" Label="@($"{valve.Id} position")" /></td>
+                <td>@valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %</td>
+                <td>@valve.Mode</td>
+                <td>@valve.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</td>
+                <td><StatusPill Text="@(valve.Fault == ValveFault.None ? valve.Health.ToString() : valve.Fault.ToString())"
+                                Kind="@(valve.Health == DeviceHealth.Healthy ? "ok" : valve.Health == DeviceHealth.Warning ? "warn" : "alarm")" /></td>
+                <td>@(valve.InterlockReason ?? "—")</td>
+                @if (Session.CanOperate)
+                {
+                    <td class="actions-cell">
+                        <input class="input-small" type="number" min="0" max="100" step="5" aria-label="@($"New position for {valve.Id}")"
+                               value="@Target(valve)" @onchange="e => SetTarget(valve.Id, e.Value)" />
+                        <button class="btn" @onclick="() => AskPosition(valve)">Set %</button>
+                        <button class="btn" @onclick="() => AskMode(valve)">@(valve.Mode == ControlMode.Manual ? "Automatic" : "Manual")</button>
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+<p class="muted">Positions can only be set in manual mode. The valve travels to the new position at its stroke rate.</p>
+<ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
+
+@code {
+    private readonly Dictionary<string, double> _targets = new(StringComparer.Ordinal);
+    private PlantSnapshot _plant = default!;
+    private PendingAction? _pending;
+    private ActionOutcome? _outcome;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant];
+
+    protected override bool Refresh()
+    {
+        _plant = Session.Plant();
+        return true;
+    }
+
+    private string Target(ValveSnapshot valve) =>
+        (_targets.TryGetValue(valve.Id, out var target) ? target : valve.Setpoint).ToString("0", CultureInfo.InvariantCulture);
+
+    private bool SetTarget(string id, object? value)
+    {
+        if (double.TryParse(value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+            _targets[id] = Math.Clamp(parsed, 0, 100);
+        return true;
+    }
+
+    private bool AskPosition(ValveSnapshot valve)
+    {
+        var target = _targets.TryGetValue(valve.Id, out var t) ? t : valve.Setpoint;
+        _pending = new PendingAction($"Move {valve.Id} to {target:0} %?", $"{valve.Name} goes from {valve.Position:0} % to {target:0} %.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(
+                new OperatorCommand(valve.Id, OperatorCommandType.SetValvePosition, target, CommandSource.Hmi), Session.Actor))));
+        return true;
+    }
+
+    private bool AskMode(ValveSnapshot valve)
+    {
+        var type = valve.Mode == ControlMode.Manual ? OperatorCommandType.SetAutomatic : OperatorCommandType.SetManual;
+        _pending = new PendingAction($"Switch {valve.Id} to {(type == OperatorCommandType.SetManual ? "manual" : "automatic")}?",
+            type == OperatorCommandType.SetManual ? "The controller stops driving this valve until it is switched back."
+                : "The controller takes over this valve again.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(new OperatorCommand(valve.Id, type, null, CommandSource.Hmi), Session.Actor))),
+            Dangerous: false);
+        return true;
+    }
+
+    private async Task OnCompletedAsync(ActionOutcome? outcome)
+    {
+        _pending = null;
+        _outcome = outcome ?? _outcome;
+        await RefreshNowAsync();
+    }
+}

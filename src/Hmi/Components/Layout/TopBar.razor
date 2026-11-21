@@ -1,0 +1,27 @@
+@inherits RealtimeComponentBase
+@inject Application.Simulation.SimulationEngine Engine
+
+<header class="topbar">
+    <span class="pill @(_paused ? "pill-warn" : "pill-ok")">@(_paused ? "Simulation paused" : "Simulation running")</span>
+    <span class="muted">Sim time @_simTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</span>
+    <span class="pill @(_activeAlarms > 0 ? "pill-alarm" : "pill-ok")">@_activeAlarms active alarm(s)</span>
+    <span class="spacer"></span>
+    <span class="muted">@Session.Actor.Name · @Session.Actor.Role</span>
+</header>
+
+@code {
+    private bool _paused;
+    private TimeSpan _simTime;
+    private int _activeAlarms;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Simulation, RealtimeTopics.Plant];
+
+    protected override bool Refresh()
+    {
+        var status = Engine.Status;
+        _paused = status.IsPaused;
+        _simTime = status.SimulationTime;
+        _activeAlarms = Session.Plant().Alarms.Count(a => a.IsActive);
+        return true;
+    }
+}

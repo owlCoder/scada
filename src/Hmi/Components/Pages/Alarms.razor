@@ -1,0 +1,86 @@
+@page "/alarms"
+@inherits RealtimeComponentBase
+@inject Application.Alarms.AlarmService AlarmService
+
+<PageTitle>Alarms · SCADA</PageTitle>
+<h1>Alarms</h1>
+<OutcomeBanner Outcome="_outcome" />
+
+<section class="panel">
+    <h2>Current</h2>
+    @if (_current.Count == 0)
+    {
+        <p class="muted">No alarms.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead><tr><th>Severity</th><th>Source</th><th>Alarm</th><th>Raised</th><th>State</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var alarm in _current)
+                {
+                    <tr class="@(alarm.IsActive && !alarm.IsAcknowledged ? "row-alarm" : "")">
+                        <td><StatusPill Text="@alarm.Severity.ToString()" Kind="@(alarm.Severity >= AlarmSeverity.High ? "alarm" : "warn")" /></td>
+                        <td>@alarm.SourceId</td>
+                        <td>@alarm.Message</td>
+                        <td>@alarm.RaisedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                        <td>@(alarm.IsActive ? "Active" : "Cleared")@(alarm.IsAcknowledged ? $" · acknowledged by {alarm.AcknowledgedBy}" : "")</td>
+                        <td>
+                            @if (Session.CanOperate && !alarm.IsAcknowledged)
+                            {
+                                <button class="btn" @onclick="() => AcknowledgeAsync(alarm.Key)">Acknowledge</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="panel">
+    <h2>History</h2>
+    <table class="grid">
+        <thead><tr><th>Time</th><th>Alarm</th><th>Transition</th><th>By</th></tr></thead>
+        <tbody>
+            @foreach (var record in _history)
+            {
+                <tr>
+                    <td>@record.Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                    <td>@record.Message</td>
+                    <td>@record.Transition</td>
+                    <td>@(record.Actor ?? "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyList<ProcessAlarm> _current = [];
+    private IReadOnlyList<Application.Alarms.AlarmHistoryRecord> _history = [];
+    private ActionOutcome? _outcome;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Alarms];
+    protected override TimeSpan MinimumRefreshInterval => TimeSpan.FromSeconds(1);
+
+    protected override bool Refresh()
+    {
+        _current = AlarmService.GetCurrent().OrderByDescending(a => a.IsActive).ThenByDescending(a => a.Severity).ThenByDescending(a => a.RaisedAt).ToArray();
+        _ = LoadHistoryAsync();
+        return true;
+    }
+
+    private async Task<bool> LoadHistoryAsync()
+    {
+        _history = await AlarmService.GetHistoryAsync(50, CancellationToken.None);
+        await InvokeAsync(StateHasChanged);
+        return true;
+    }
+
+    private async Task AcknowledgeAsync(string key)
+    {
+        _outcome = AlarmService.Acknowledge(key, Session.Actor) ? ActionOutcome.Done("Alarm acknowledged.") : ActionOutcome.Failed("The alarm no longer exists.");
+        await RefreshNowAsync();
+    }
+}

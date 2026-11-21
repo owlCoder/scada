@@ -1,0 +1,41 @@
+@* Confirmation for critical commands. The parent sets Pending; Completed reports the outcome. *@
+@if (Pending is not null)
+{
+    <div class="dialog-backdrop">
+        <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h2 id="confirm-title">@Pending.Title</h2>
+            <p>@Pending.Description</p>
+            <div class="dialog-actions">
+                <button class="btn" @onclick="CancelAsync" disabled="@_busy">Cancel</button>
+                <button class="btn @(Pending.Dangerous ? "btn-danger" : "btn-primary")" @onclick="ConfirmAsync" disabled="@_busy">Confirm</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _busy;
+
+    [Parameter] public PendingAction? Pending { get; set; }
+    [Parameter] public EventCallback<ActionOutcome?> Completed { get; set; }
+
+    private async Task ConfirmAsync()
+    {
+        if (Pending is null)
+            return;
+        _busy = true;
+        ActionOutcome outcome;
+        try
+        {
+            outcome = await Pending.Run();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            outcome = ActionOutcome.Failed("The action failed: " + exception.Message);
+        }
+        _busy = false;
+        await Completed.InvokeAsync(outcome);
+    }
+
+    private Task CancelAsync() => Completed.InvokeAsync(null);
+}

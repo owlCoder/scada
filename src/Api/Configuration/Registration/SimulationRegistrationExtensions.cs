@@ -28,7 +28,9 @@ public static class SimulationRegistrationExtensions
         services.AddSingleton<TelemetryHistorian>(_ => new TelemetryHistorian());
         services.AddSingleton<RecentEventBuffer>(_ => new RecentEventBuffer());
         services.AddSingleton<IEventPublisher, EventPublisher>();
-        services.AddSingleton<IRealtimePublisher, NullRealtimePublisher>();
+        services.AddSingleton<RealtimeBroadcaster>();
+        services.AddSingleton<IRealtimePublisher>(sp => sp.GetRequiredService<RealtimeBroadcaster>());
+        services.AddSingleton<IRealtimeFeed>(sp => sp.GetRequiredService<RealtimeBroadcaster>());
 
         // Order matters: scenario actions run before detection evaluates the same step.
         services.AddSingleton<ISimulationObserver>(sp => sp.GetRequiredService<ScenarioEngine>());

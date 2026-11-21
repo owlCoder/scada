@@ -5,13 +5,17 @@ namespace Api.Authentication;
 
 public static class ScadaPrincipalFactory
 {
-    public static ClaimsPrincipal Create(AuthenticatedUser user, string source, string authenticationType) =>
-        new(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role.ToString()),
-                new Claim(ScadaClaimTypes.Credential, user.CredentialId),
-                new Claim(ScadaClaimTypes.Source, source)
-            ],
-            authenticationType, ClaimTypes.Name, ClaimTypes.Role));
+    public static ClaimsPrincipal Create(AuthenticatedUser user, string source, string authenticationType, DateTimeOffset? issuedAt = null)
+    {
+        List<Claim> claims =
+        [
+            new(ClaimTypes.Name, user.Username),
+            new(ClaimTypes.Role, user.Role.ToString()),
+            new(ScadaClaimTypes.Credential, user.CredentialId),
+            new(ScadaClaimTypes.Source, source)
+        ];
+        if (issuedAt is { } issued)
+            claims.Add(new Claim(ScadaClaimTypes.Issued, issued.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType, ClaimTypes.Name, ClaimTypes.Role));
+    }
 }

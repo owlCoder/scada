@@ -7,4 +7,7 @@ public static class ScadaClaimTypes
 
     /// <summary>How the caller signed in: <see cref="ScadaSignInSources"/>.</summary>
     public const string Source = "scada:source";
+
+    /// <summary>Sign-in time (Unix seconds), so long-lived HMI circuits can detect a password change after sign-in.</summary>
+    public const string Issued = "scada:issued";
 }

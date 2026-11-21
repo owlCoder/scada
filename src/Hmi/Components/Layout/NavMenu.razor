@@ -1,0 +1,25 @@
+<nav class="nav" aria-label="Main">
+    <div class="brand">SCADA <span>training plant</span></div>
+    <NavLink href="" Match="NavLinkMatch.All">Overview</NavLink>
+    <NavLink href="diagram">Plant diagram</NavLink>
+    <p class="nav-group">Process</p>
+    <NavLink href="tanks">Tanks</NavLink>
+    <NavLink href="pumps">Pumps</NavLink>
+    <NavLink href="valves">Valves</NavLink>
+    <NavLink href="sensors">Sensors</NavLink>
+    <NavLink href="controllers">PLC / RTU</NavLink>
+    <NavLink href="trends">Trends</NavLink>
+    <p class="nav-group">Operations</p>
+    <NavLink href="alarms">Alarms</NavLink>
+    <NavLink href="events">Events</NavLink>
+    <NavLink href="incidents">Incidents</NavLink>
+    <NavLink href="scenarios">Scenarios</NavLink>
+    <p class="nav-group">System</p>
+    <NavLink href="communications">Communications</NavLink>
+    <NavLink href="registers">Registers</NavLink>
+    <NavLink href="health">System health</NavLink>
+    <NavLink href="identity">My account</NavLink>
+    <AuthorizeView Policy="Administrator">
+        <NavLink href="accounts">Accounts &amp; rules</NavLink>
+    </AuthorizeView>
+</nav>

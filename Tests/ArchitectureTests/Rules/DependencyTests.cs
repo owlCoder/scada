@@ -3,10 +3,10 @@ using Xunit;
 
 namespace ArchitectureTests.Rules;
 
-/// <summary>Layering: Domain ← Application ← (Security, Protocols, Infrastructure) ← Simulation ← Api.</summary>
+/// <summary>Layering: Domain ← Application ← (Security, Protocols, Infrastructure) ← (Simulation, Hmi) ← Api.</summary>
 public sealed class DependencyTests
 {
-    private static readonly string[] Modules = ["Domain", "Application", "Infrastructure", "Security", "Protocols", "Simulation", "Api"];
+    private static readonly string[] Modules = ["Domain", "Application", "Infrastructure", "Security", "Protocols", "Simulation", "Hmi", "Api"];
 
     public static TheoryData<string, string[]> AllowedDependencies => new()
     {
@@ -15,7 +15,8 @@ public sealed class DependencyTests
         { "Security", ["Domain", "Application"] },
         { "Protocols", ["Domain", "Application"] },
         { "Infrastructure", ["Domain", "Application"] },
-        { "Simulation", ["Domain", "Application", "Security"] }
+        { "Simulation", ["Domain", "Application", "Security"] },
+        { "Hmi", ["Domain", "Application", "Security"] }
     };
 
     [Theory]

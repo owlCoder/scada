@@ -10,8 +10,3 @@ dotnet --version
 dotnet restore scada.slnx
 dotnet build scada.slnx --configuration Release --no-restore
 dotnet test scada.slnx --configuration Release --no-build
-
-if command -v node >/dev/null 2>&1; then
-  node --check src/Api/wwwroot/app.js
-  node --test Tests/FrontendTests/*.test.cjs
-fi

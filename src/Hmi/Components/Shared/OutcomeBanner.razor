@@ -1,0 +1,8 @@
+@if (Outcome is not null)
+{
+    <p class="banner @(Outcome.Succeeded ? "banner-ok" : "banner-error")" role="status">@Outcome.Message</p>
+}
+
+@code {
+    [Parameter] public ActionOutcome? Outcome { get; set; }
+}

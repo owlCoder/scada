@@ -1,0 +1,111 @@
+@page "/"
+@inherits RealtimeComponentBase
+@inject Application.Simulation.SimulationEngine Engine
+@inject Application.Simulation.SimulationCoordinator Coordinator
+@inject Security.Scenarios.ScenarioEngine Scenarios
+@inject Application.Incidents.IncidentService Incidents
+
+<PageTitle>Overview · SCADA</PageTitle>
+<h1>Overview</h1>
+
+<section class="metrics">
+    @foreach (var tank in _plant.Tanks)
+    {
+        <article class="panel metric">
+            <h2>@tank.Name</h2>
+            <strong>@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</strong>
+            <LevelBar Percent="tank.LevelPercent" Label="@tank.Name" High="tank.Thresholds.High" Low="tank.Thresholds.Low" />
+        </article>
+    }
+    <article class="panel metric">
+        <h2>Active alarms</h2>
+        <strong>@_plant.Alarms.Count(a => a.IsActive)</strong>
+        <a href="alarms">Open alarm list</a>
+    </article>
+    <article class="panel metric">
+        <h2>Open incidents</h2>
+        <strong>@_openIncidents</strong>
+        <a href="incidents">Open incident list</a>
+    </article>
+</section>
+
+<section class="columns">
+    <article class="panel">
+        <h2>Simulation</h2>
+        <p>Step @_status?.StepCount · simulated @_status?.SimulationTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)
+            · interlocks @(_plant.InterlocksBypassed ? "BYPASSED" : "active")</p>
+        @if (Session.CanOperate)
+        {
+            <div class="actions">
+                @if (_status?.IsPaused == true)
+                {
+                    <button class="btn btn-primary" @onclick="() => SetPausedAsync(false)">Resume</button>
+                }
+                else
+                {
+                    <button class="btn" @onclick="() => SetPausedAsync(true)">Pause</button>
+                }
+            </div>
+        }
+    </article>
+    <article class="panel">
+        <h2>Scenario</h2>
+        @if (_scenario is { } run)
+        {
+            <p>@run.ScenarioName · @run.State · @run.ProgressPercent.ToString("0", CultureInfo.InvariantCulture) %</p>
+        }
+        else
+        {
+            <p class="muted">No scenario is running.</p>
+        }
+        <a href="scenarios">Scenarios and results</a>
+    </article>
+</section>
+<OutcomeBanner Outcome="_outcome" />
+
+@code {
+    private PlantSnapshot _plant = default!;
+    private Application.Simulation.SimulationStatus? _status;
+    private Application.Scenarios.ScenarioRunRecord? _scenario;
+    private int _openIncidents;
+    private ActionOutcome? _outcome;
+
+    protected override IReadOnlyCollection<string> Topics =>
+        [RealtimeTopics.Plant, RealtimeTopics.Simulation, RealtimeTopics.Scenarios, RealtimeTopics.Incidents];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await LoadIncidentsAsync();
+    }
+
+    protected override bool Refresh()
+    {
+        _plant = Session.Plant();
+        _status = Engine.Status;
+        _scenario = Scenarios.Current is { State: Application.Scenarios.ScenarioRunState.Running or Application.Scenarios.ScenarioRunState.Paused } current
+            ? current : null;
+        return true;
+    }
+
+    protected override bool OnMessage(RealtimeMessage message)
+    {
+        if (message.Topic == RealtimeTopics.Incidents)
+            _ = InvokeAsync(LoadIncidentsAsync);
+        return true;
+    }
+
+    private async Task LoadIncidentsAsync()
+    {
+        var page = await Incidents.QueryAsync(new Application.Incidents.IncidentQuery(ActiveOnly: true, PageSize: 1), CancellationToken.None);
+        _openIncidents = page.TotalCount;
+        StateHasChanged();
+    }
+
+    private async Task SetPausedAsync(bool paused)
+    {
+        Coordinator.SetPaused(paused, Session.Actor.Name);
+        _outcome = ActionOutcome.Done(paused ? "Simulation paused." : "Simulation resumed.");
+        await RefreshNowAsync();
+    }
+}

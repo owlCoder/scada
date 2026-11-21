@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <title>SCADA training plant</title>
+    <link rel="stylesheet" href="_content/Hmi/hmi.css" />
+    <HeadOutlet @rendermode="Mode" />
+</head>
+<body>
+    <Routes @rendermode="Mode" />
+    <div id="components-reconnect-modal" class="reconnect" role="status">
+        <p class="reconnect-show">Connection to the server lost. Reconnecting…</p>
+        <p class="reconnect-failed">Could not reconnect. <a href="">Reload the page</a>.</p>
+        <p class="reconnect-rejected">The session ended. <a href="/account/login">Sign in again</a>.</p>
+    </div>
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>
+
+@code {
+    // No prerendering: every page needs the authenticated circuit and live services, and a single render keeps
+    // subscriptions from being created twice.
+    private static readonly IComponentRenderMode Mode = new InteractiveServerRenderMode(prerender: false);
+}
