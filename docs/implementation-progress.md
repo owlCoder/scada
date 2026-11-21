@@ -55,9 +55,9 @@ Remaining:
 - [x] SignalR hub and realtime broadcasting
 
 ## Phase I/J — Validation and delivery
-- [ ] Database, protocol, E2E, performance, Docker smoke tests
-- [ ] Documentation
-- [ ] CI green, pushed
+- [x] Database, protocol, E2E, performance, Docker smoke tests
+- [x] Documentation
+- [x] CI green, pushed
 
 ## Verification log
 - 2026-11-21, first commit (Phase B-D): `dotnet build scada.slnx -c Release` with 0 warnings; 246 .NET tests (12 architecture,
@@ -80,3 +80,8 @@ Remaining:
   start/stop race). Live: dev-admin sign-in, every HMI page renders in a real browser, live trends, and the Command replay
   scenario started from /scenarios through the confirmation dialog ends Detected. Found and fixed live: blazor.web.js was not
   served (404) and the CSP blocked `<base href>`, so the HMI was blank in a browser although bUnit passed.
+- 2026-11-21, Step 7 and the Steps 3–6 review fixes: Release build with zero warnings; 520 .NET tests (13 architecture, 223 unit,
+  149 integration, 40 bUnit, 30 database, 51 protocol, 6 performance, 8 Playwright E2E) pass on macOS; `dotnet format
+  --verify-no-changes` is clean; `scripts/smoke.sh` passes against the compose PostgreSQL stack (scenario Detected).
+  Measured (Linux container): 2,000 simulation steps in 1.02 s, detection 45.8 µs/step, Modbus p95 0.72 ms for
+  50 clients x 200 reads, REST reads about 7,000 requests/s.

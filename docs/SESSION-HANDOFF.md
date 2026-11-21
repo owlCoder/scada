@@ -282,7 +282,7 @@ cd ~/Desktop/scada && git status && git branch --show-current
 dotnet build src/Security/Security.csproj -c Release
 ```
 
-Steps 1–4 are done; start with **Step 5** above. Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.
+All seven steps are done and merged to `main` (see section 6). Tick `docs/implementation-progress.md` items only after the solution builds and tests pass. `dotnet test scada.slnx` needs a working Docker engine for `Tests/DatabaseTests`.
 
 
 ## 5. Steps 3–6 review resolution (`fix/review-step6`)
@@ -308,4 +308,17 @@ Validation for this review fix:
 - Browser command used `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright SCADA_E2E_REQUIRED=1 dotnet test Tests/EndToEndTests -c Release --no-build`. The Linux container used a separate host cache subdirectory to avoid treating macOS Chromium installation markers as Linux binaries.
 - One unchanged protocol stalled-client timing test timed out on the first Linux run; the complete protocol suite passed on the next run. No assertion or timeout was weakened.
 - `git diff --check`: passed. No push, merge, rebase or other worktree changes.
-- Commit attempt: sandbox denied creating `/Users/danijel/Desktop/scada/.git/worktrees/scada-review6/index.lock` during both staging and commit. Changes are deliberately left uncommitted for the lead, per the task instructions.
+- The lead committed this work as 39b7058 (the Codex sandbox cannot write the main repository's `.git`).
+
+## 6. Completion (2026-11-21)
+
+- Step 7 was split across four Codex runs (worktrees `../scada-infra`, `../scada-validation`, `../scada-e2e`, `../scada-docs`)
+  and one review-fix run (`../scada-review6`). The lead committed each (the sandbox cannot write `.git`), merged them into
+  `feature/hmi`, reconciled the docs and CI, and applied `dotnet format`.
+- Found live and fixed by the lead: the HMI was blank in a real browser (`blazor.web.js` 404 because the API host has no
+  `.razor` files, and CSP `base-uri 'none'` blocked `<base href>`); `RequiresAspNetWebAssets` and `base-uri 'self'` fix it.
+- Final verification on macOS: Release build with zero warnings; 520 tests (13 architecture, 223 unit, 149 integration,
+  40 bUnit, 30 database, 51 protocol, 6 performance, 8 Playwright E2E with `SCADA_E2E_REQUIRED=1`);
+  `dotnet format --verify-no-changes` clean; `scripts/smoke.sh` passed (image on ASP.NET Core 10.0.15, PostgreSQL,
+  scenario Detected, cleanup).
+- Not run live: Keycloak (covered by OIDC challenge and role-mapping tests) and the Aspire dashboard.
