@@ -8,7 +8,7 @@ The solution is a modular .NET 10 monolith. Each class, interface, record and en
 | Application | Services, abstractions, event and telemetry models |
 | Infrastructure | In-memory and PostgreSQL persistence |
 | Security | Authorization, identities, command monitoring and training scenarios |
-| Protocols | Virtual registers and optional read-only Modbus TCP |
+| Protocols | Virtual registers and optional loopback Modbus TCP and OPC UA servers |
 | Simulation | Background simulation and incident monitoring |
 | Api | Composition root, endpoint groups, request contracts and static dashboard |
 | Tests | Unit, integration and architecture tests |
@@ -19,6 +19,6 @@ The application retains existing top-level namespaces for the domain libraries. 
 
 ## Known limitations
 
-Synchronous PostgreSQL writes may delay simulation. Plant state is not persisted. Static API keys are not a replacement for OIDC or TLS. OPC UA is not implemented. The optional Modbus TCP listener is loopback-only and read-only.
+Synchronous PostgreSQL writes may delay simulation. Plant state is not persisted. Static API keys are not a replacement for OIDC or TLS. The protocol listeners bind only to loopback.
 
 GitHub Actions CI runs restore, Release build, unit/integration/architecture tests, and Node.js frontend tests on relevant changes. The workflow cancels superseded runs and has a 15-minute job timeout. Run `bash scripts/verify.sh` locally for equivalent checks.

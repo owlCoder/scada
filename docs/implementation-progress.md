@@ -10,8 +10,9 @@ Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `
 Steps 1–4 of the 7-step plan in `docs/SESSION-HANDOFF.md` are done and merged to `main` (about 60 % of the work):
 scenario engine, simulation/detection/incidents/Modbus/API, PostgreSQL persistence, authentication and observability.
 
+Step 5 adds the loopback OPC UA server on `feature/opcua`.
+
 Remaining:
-- Step 5: OPC UA server.
 - Step 6: Blazor HMI and SignalR. This is the largest remaining step.
 - Step 7: E2E, performance and protocol tests, Docker smoke test, CI, documentation, PR.
 
@@ -32,7 +33,7 @@ Remaining:
 - [x] Virtual PLC / RTU with scan cycles, I/O maps, registers, safe state
 - [x] Virtual network: links, latency, loss, segmentation, metrics
 - [x] Modbus TCP (MBAP validation, FC03/FC04, exceptions, multi-unit maps)
-- [ ] OPC UA server simulator
+- [x] OPC UA server simulator
 
 ## Phase D — Cybersecurity engine
 - [x] Scenario framework and 14 behavioural scenarios
@@ -70,3 +71,6 @@ Remaining:
 - 2026-11-21, Step 4 (auth and observability): 322 .NET tests (12 architecture, 172 unit, 118 integration, 20 database) and 3 frontend
   tests pass. Live: dev-account form sign-in, CSRF enforcement, 403 for low roles, correlation ids, no secrets in logs, 14/14 scenarios
   Detected. Keycloak and the Aspire dashboard were not started (low disk).
+- 2026-11-21, Step 5 (OPC UA): Release build with zero warnings and 312 passing tests (12 architecture, 178 unit,
+  122 integration). Integration coverage includes subscriptions, operator redaction, command authorization and auditing,
+  certificate trust, loopback binding and shutdown.

@@ -1,6 +1,7 @@
 using Infrastructure.Persistence.Queue;
 using Infrastructure.Persistence.Retention;
 using Protocols.Modbus;
+using Protocols.OpcUa;
 using Simulation.HostedServices;
 
 namespace Api.Configuration.Registration;
@@ -15,6 +16,8 @@ public static class HostedWorkerRegistrationExtensions
         services.AddHostedService(sp => sp.GetRequiredService<RetentionWorker>());
         services.AddHostedService<DetectionSettingsRecoveryService>();
         services.AddHostedService<SimulationRecoveryService>();
+        if (services.Any(d => d.ServiceType == typeof(OpcUaServerHost)))
+            services.AddHostedService(sp => sp.GetRequiredService<OpcUaServerHost>());
         services.AddHostedService<SimulationService>();
         services.AddHostedService<InitialScenarioService>();
         if (services.Any(d => d.ServiceType == typeof(ModbusTcpServer)))

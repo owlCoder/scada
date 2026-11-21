@@ -1,6 +1,6 @@
 # SCADA — Industrial Control Simulation
 
-A modular .NET 10 educational simulator for a water treatment plant, telemetry, process alarms, security events, incidents and local read-only Modbus TCP.
+A modular .NET 10 educational simulator for a water treatment plant, telemetry, process alarms, security events, incidents, Modbus TCP and OPC UA.
 
 **Simulation only. Do not connect to physical industrial equipment.**
 
@@ -20,6 +20,8 @@ dotnet run --project src/Api --urls http://127.0.0.1:5080
 ```
 
 Dashboard: http://127.0.0.1:5080/
+
+Set `Protocols__OpcUa__Enabled=true` to enable the local OPC UA server at `opc.tcp://localhost:4840`. Browse and subscribe as a Viewer, or sign in as an Operator on a secure endpoint to issue commands. [OPC UA configuration](docs/protocols.md#opc-ua)
 
 **GitHub Actions CI is enabled** for source and test changes, with cancellation of superseded runs and a 15-minute job timeout. Run `bash scripts/verify.sh` locally for restore, Release build, .NET tests, JavaScript syntax validation, and Node.js dashboard regression tests. This script requires the .NET 10 SDK.
 
@@ -45,6 +47,7 @@ src/
     Models/
     Services/
     Modbus/
+    OpcUa/
   Simulation/
     HostedServices/
   Api/
@@ -111,4 +114,4 @@ Protected endpoints accept a browser session (`/account/login`), an `X-Api-Key` 
 
 ## Limitations
 
-The simulator is not production SCADA software. There is no OPC UA implementation or TLS termination yet. PostgreSQL persistence (EF Core, with migrations and retention) is optional; with it, plant state, incidents, events, telemetry and accounts survive restarts.
+The simulator is not production SCADA software. PostgreSQL persistence (EF Core, with migrations and retention) is optional. With it, plant state, incidents, events, telemetry and accounts survive restarts.
