@@ -6,10 +6,12 @@
 
 <PageTitle>Communications · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Communications</h1>
+<header class="page-head">
+    <h1>Communications</h1>
+    <p class="page-sub muted">Link state, latency, packet loss and lost/timed-out counters. Blocked connection attempts: @_blockedAttempts</p>
+</header>
 <OutcomeBanner Outcome="Outcome" />
 
-<p class="muted">Blocked connection attempts: @_blockedAttempts</p>
 <div class="table-scroll">
     <table class="grid">
         <thead><tr><th>Link</th><th>Path</th><th>State</th><th>Latency</th><th>Packet loss</th><th>Lost / timed out</th>

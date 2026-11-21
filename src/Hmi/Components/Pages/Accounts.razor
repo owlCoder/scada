@@ -12,13 +12,16 @@
 <RefreshErrorBanner Error="@RefreshError" />
 @if (Session.IsInstructor)
 {
-    <h1>Accounts &amp; rules</h1>
+    <header class="page-head">
+        <h1>Accounts &amp; rules</h1>
+        <p class="page-sub muted">Local accounts and detection rule settings. Changes need confirmation.</p>
+    </header>
     <OutcomeBanner Outcome="Outcome" />
     <section class="panel">
         <h2>Accounts</h2>
         @if (_accounts.Count == 0)
         {
-            <p class="muted">No local accounts.</p>
+            <EmptyState Message="No local accounts." />
         }
         else
         {

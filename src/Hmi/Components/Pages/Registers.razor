@@ -7,7 +7,10 @@
 
 <PageTitle>Registers · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Registers</h1>
+<header class="page-head">
+    <h1>Registers</h1>
+    <p class="page-sub muted">Holding and input register images per controller unit with tags, values and forced flags.</p>
+</header>
 <OutcomeBanner Outcome="Outcome" />
 
 <div class="form-row">
@@ -68,7 +71,7 @@
 }
 else
 {
-    <p class="muted">No controller units are available.</p>
+    <EmptyState Message="No controller units are available." />
 }
 
 <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />

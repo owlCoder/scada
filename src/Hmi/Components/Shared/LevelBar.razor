@@ -1,7 +1,20 @@
+@* Analog bar indicator with limit and setpoint marks (ISA-101: grey fill, red only when outside limits). *@
 <div class="level" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent.ToString("0", CultureInfo.InvariantCulture)" aria-label="@Label">
-    <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="level-svg">
+    <svg viewBox="0 0 100 8" preserveAspectRatio="none" class="level-svg" aria-hidden="true">
         <rect x="0" y="0" width="100" height="8" class="level-track" />
         <rect x="0" y="0" width="@Clamped.ToString("0.#", CultureInfo.InvariantCulture)" height="8" class="@FillClass" />
+        @if (Low is { } low)
+        {
+            <line x1="@Mark(low)" y1="0" x2="@Mark(low)" y2="8" class="level-mark" />
+        }
+        @if (High is { } high)
+        {
+            <line x1="@Mark(high)" y1="0" x2="@Mark(high)" y2="8" class="level-mark level-mark-high" />
+        }
+        @if (Setpoint is { } setpoint)
+        {
+            <line x1="@Mark(setpoint)" y1="0" x2="@Mark(setpoint)" y2="8" class="level-setpoint" />
+        }
     </svg>
     <span>@Percent.ToString("0.0", CultureInfo.InvariantCulture) %</span>
 </div>
@@ -11,7 +24,9 @@
     [Parameter] public string Label { get; set; } = "Level";
     [Parameter] public double? High { get; set; }
     [Parameter] public double? Low { get; set; }
+    [Parameter] public double? Setpoint { get; set; }
 
     private double Clamped => Math.Clamp(Percent, 0, 100);
     private string FillClass => (High is { } high && Percent >= high) || (Low is { } low && Percent <= low) ? "level-fill-alarm" : "level-fill";
+    private static string Mark(double percent) => Math.Clamp(percent, 0, 100).ToString("0.#", CultureInfo.InvariantCulture);
 }

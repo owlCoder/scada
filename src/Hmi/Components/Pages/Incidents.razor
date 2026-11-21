@@ -7,7 +7,10 @@
 
 <PageTitle>Incidents · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Incidents</h1>
+<header class="page-head">
+    <h1>Incidents</h1>
+    <p class="page-sub muted">Paged incident list with status, severity, priority, assignee and filters.</p>
+</header>
 
 <form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
     <label>Status
@@ -51,7 +54,7 @@
 {
     @if (result.Items.Count == 0)
     {
-        <p class="muted">No matching incidents.</p>
+        <EmptyState Message="No matching incidents." />
     }
     else
     {

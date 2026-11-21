@@ -3,12 +3,14 @@
 
 <PageTitle>Plant diagram · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Plant diagram</h1>
-<p class="muted">@(Session.IsInstructor ? "Instructor view: true process values." : "Values as reported by the field instruments.")
-    Select a device for details.</p>
+<header class="page-head">
+    <h1>Plant diagram</h1>
+    <p class="page-sub muted">@(Session.IsInstructor ? "Instructor view: true process values." : "Values as reported by the field instruments.")
+        Select a device for its faceplate. Grey lines are process piping; red marks abnormal states only.</p>
+</header>
 
 <div class="diagram-layout">
-    <svg class="diagram" viewBox="0 0 @N(_layout.Width) @N(_layout.Height)" role="img" aria-label="Live plant diagram">
+    <svg class="diagram" viewBox="0 0 @N(_layout.Width) @N(_layout.Height)" role="img" aria-label="Live plant diagram (P&ID)">
         @foreach (var pump in _plant.Pumps)
         {
             var (px, py) = _layout.Position(pump.Id);
@@ -29,76 +31,83 @@
         {
             var (tx, ty) = _layout.Position(tank.Id);
             var fill = PlantLayout.TankHeight * Math.Clamp(tank.LevelPercent, 0, 100) / 100;
-            <g class="device @(Selected(tank.Id))" @onclick="() => Select(tank.Id)" tabindex="0" role="button" aria-label="@tank.Name">
+            <g class="device @(Selected(tank.Id))" @onclick="() => Select(tank.Id)" @onkeydown="e => SelectKey(e, tank.Id)"
+               tabindex="0" role="button" aria-label="@tank.Name">
+                <title>@tank.Name</title>
                 <rect class="tank" x="@N(tx)" y="@N(ty)" width="@N(PlantLayout.TankWidth)" height="@N(PlantLayout.TankHeight)" rx="6" />
                 <rect class="@(tank.LevelPercent >= tank.Thresholds.High || tank.LevelPercent <= tank.Thresholds.Low ? "liquid liquid-alarm" : "liquid")"
                       x="@N(tx + 3)" y="@N(ty + PlantLayout.TankHeight - fill)" width="@N(PlantLayout.TankWidth - 6)" height="@N(Math.Max(0, fill - 3))" rx="4" />
+                <line class="tank-limit tank-limit-critical" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.LowLow))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.LowLow))" />
+                <line class="tank-limit" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.Low))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.Low))" />
+                <line class="tank-limit" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.High))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.High))" />
+                <line class="tank-limit tank-limit-critical" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.HighHigh))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.HighHigh))" />
                 <text class="label" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty - 10)">@tank.Id</text>
                 <text class="value" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty + PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text>
+                @if (Quality(tank.Id, SensorKind.Level) is { } levelQuality && levelQuality != MeasurementQuality.Good)
+                {
+                    @:<text class="device-quality" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty + PlantLayout.TankHeight + 16)">quality: @levelQuality</text>
+                }
             </g>
         }
 
         @foreach (var pump in _plant.Pumps)
         {
             var (px, py) = _layout.Position(pump.Id);
-            <g class="device @(Selected(pump.Id))" @onclick="() => Select(pump.Id)" tabindex="0" role="button" aria-label="@pump.Name">
+            <g class="device @(Selected(pump.Id))" @onclick="() => Select(pump.Id)" @onkeydown="e => SelectKey(e, pump.Id)"
+               tabindex="0" role="button" aria-label="@pump.Name">
+                <title>@pump.Name</title>
                 <circle class="pump @PumpClass(pump)" cx="@N(px)" cy="@N(py)" r="20" />
-                <polygon class="pump-arrow" points="@N(px - 8),@N(py - 10) @N(px + 12),@N(py) @N(px - 8),@N(py + 10)" />
+                @if (pump.Health == DeviceHealth.Faulted)
+                {
+                    @:<text class="pump-fault-mark" x="@N(px)" y="@N(py + 8)">!</text>
+                }
+                else if (pump.State == PumpState.Running)
+                {
+                    <polygon class="pump-arrow" points="@N(px - 8),@N(py - 10) @N(px + 12),@N(py) @N(px - 8),@N(py + 10)" />
+                }
+                else
+                {
+                    <path class="pump-stop" d="M@N(px - 6),@N(py - 8) L@N(px - 6),@N(py + 8) M@N(px + 6),@N(py - 8) L@N(px + 6),@N(py + 8)" />
+                }
                 <text class="label" x="@N(px)" y="@N(py + 38)">@pump.Id</text>
+                <text class="label small" x="@N(px)" y="@N(py + 52)">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text>
+                @if (Quality(pump.Id, SensorKind.Flow) is { } flowQuality && flowQuality != MeasurementQuality.Good)
+                {
+                    @:<text class="device-quality" x="@N(px)" y="@N(py + 66)">quality: @flowQuality</text>
+                }
             </g>
         }
 
         @foreach (var valve in _plant.Valves)
         {
             var (vx, vy) = _layout.Position(valve.Id);
-            <g class="device @(Selected(valve.Id))" @onclick="() => Select(valve.Id)" tabindex="0" role="button" aria-label="@valve.Name">
+            <g class="device @(Selected(valve.Id))" @onclick="() => Select(valve.Id)" @onkeydown="e => SelectKey(e, valve.Id)"
+               tabindex="0" role="button" aria-label="@valve.Name">
+                <title>@valve.Name</title>
+                <line class="valve-stem" x1="@N(vx)" y1="@N(vy - 10)" x2="@N(vx)" y2="@N(vy - 18)" />
                 <polygon class="valve @(valve.Position > 0.5 ? "valve-open" : "valve-closed") @(valve.Health != DeviceHealth.Healthy ? "faulted" : "")"
                          points="@N(vx - 14),@N(vy - 10) @N(vx + 14),@N(vy + 10) @N(vx + 14),@N(vy - 10) @N(vx - 14),@N(vy + 10)" />
-                <text class="label small" x="@N(vx)" y="@N(vy - 16)">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
+                <text class="label small" x="@N(vx)" y="@N(vy - 24)">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
+                @if (Quality(valve.Id, SensorKind.Flow) is { } valveQuality && valveQuality != MeasurementQuality.Good)
+                {
+                    @:<text class="device-quality" x="@N(vx)" y="@N(vy + 26)">quality: @valveQuality</text>
+                }
             </g>
         }
     </svg>
 
-    <aside class="panel detail">
-        @if (_selected is null)
-        {
-            <p class="muted">No device selected.</p>
-        }
-        else if (_plant.Tank(_selected) is { } tank)
-        {
-            <h2>@tank.Name</h2>
-            <dl class="facts">
-                <dt>Level</dt><dd>@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</dd>
-                <dt>Volume</dt><dd>@tank.Volume.ToString("0.0", CultureInfo.InvariantCulture) / @tank.Capacity.ToString("0", CultureInfo.InvariantCulture) m³</dd>
-                <dt>Alarm limits</dt><dd>LL @tank.Thresholds.LowLow · L @tank.Thresholds.Low · H @tank.Thresholds.High · HH @tank.Thresholds.HighHigh</dd>
-                <dt>Overflow</dt><dd>@(tank.IsOverflowing ? "OVERFLOWING" : "No")</dd>
-            </dl>
-            <a href="tanks">All tanks</a>
-        }
-        else if (_plant.Pump(_selected) is { } pump)
-        {
-            <h2>@pump.Name</h2>
-            <dl class="facts">
-                <dt>State</dt><dd>@pump.State · @pump.Mode</dd>
-                <dt>Flow</dt><dd>@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</dd>
-                <dt>Pressure</dt><dd>@pump.DischargePressure.ToString("0.0", CultureInfo.InvariantCulture) bar</dd>
-                <dt>Health</dt><dd>@pump.Health @(pump.Fault != PumpFault.None ? $"({pump.Fault})" : "")</dd>
-                <dt>Last change</dt><dd>@pump.LastChangeCause @(pump.LastChangedBy is null ? "" : $"by {pump.LastChangedBy}")</dd>
-            </dl>
-            <a href="pumps">Operate pumps</a>
-        }
-        else if (_plant.Valve(_selected) is { } valve)
-        {
-            <h2>@valve.Name</h2>
-            <dl class="facts">
-                <dt>Position</dt><dd>@valve.Position.ToString("0", CultureInfo.InvariantCulture) % (setpoint @valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %)</dd>
-                <dt>Mode</dt><dd>@valve.Mode</dd>
-                <dt>Flow</dt><dd>@valve.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</dd>
-                <dt>Health</dt><dd>@valve.Health @(valve.Fault != ValveFault.None ? $"({valve.Fault})" : "")</dd>
-            </dl>
-            <a href="valves">Operate valves</a>
-        }
-    </aside>
+    @if (_selected is null)
+    {
+        <aside class="panel detail">
+            <h2>Faceplate</h2>
+            <p>Select a tank, pump or valve to inspect and operate it.</p>
+            <p class="muted">Filled pump circle with arrow: running. Stop bars: stopped. "!": faulted. Filled valve bowtie: open.</p>
+        </aside>
+    }
+    else
+    {
+        <PlantFaceplate @key="_selected" DeviceId="@_selected" />
+    }
 </div>
 
 @code {
@@ -121,7 +130,15 @@
         return true;
     }
 
+    private bool SelectKey(KeyboardEventArgs e, string id) => e.Key is "Enter" or " " && Select(id);
+
     private string Selected(string id) => id == _selected ? "selected" : "";
+
+    private MeasurementQuality? Quality(string deviceId, SensorKind kind) =>
+        _plant.Sensors.FirstOrDefault(s => s.DeviceId == deviceId && s.Kind == kind)?.Quality;
+
+    private static double LimitY(double tankTop, double limit) =>
+        tankTop + PlantLayout.TankHeight * (1 - Math.Clamp(limit, 0, 100) / 100);
 
     private static string PumpClass(PumpSnapshot pump) =>
         pump.Health == DeviceHealth.Faulted ? "faulted" : pump.State == PumpState.Running ? "running" : "stopped";

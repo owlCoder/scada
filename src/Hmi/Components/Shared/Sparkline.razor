@@ -1,0 +1,50 @@
+@using Application.Telemetry
+
+@* Inline SVG sparkline: no JavaScript, scales to the card width. *@
+<svg class="sparkline @(Alarm ? "sparkline-alarm" : "") @(Points.Count == 0 ? "sparkline-empty" : "")"
+     viewBox="0 0 @Num(Width) @Num(Height)" preserveAspectRatio="none" role="img" aria-label="@Label">
+    <title>@Label</title>
+    @if (Points.Count == 1)
+    {
+        <circle class="sparkline-point" cx="@Num(Width / 2)" cy="@Num(Height / 2)" r="2" />
+    }
+    else if (Points.Count > 1)
+    {
+        <polyline class="sparkline-line" points="@Coordinates" />
+    }
+</svg>
+
+@code {
+    [Parameter] public IReadOnlyList<TelemetryPoint> Points { get; set; } = [];
+    [Parameter] public string Label { get; set; } = "Trend";
+    [Parameter] public bool Alarm { get; set; }
+    [Parameter] public double Width { get; set; } = 120;
+    [Parameter] public double Height { get; set; } = 28;
+
+    private const double Pad = 2;
+
+    private string Coordinates
+    {
+        get
+        {
+            var values = Points.Select(point => point.Value).Where(double.IsFinite).ToArray();
+            if (values.Length < 2)
+                return "";
+            var min = values.Min();
+            var max = values.Max();
+            var span = max - min;
+            var coordinates = new List<string>(Points.Count);
+            for (var index = 0; index < Points.Count; index++)
+            {
+                if (!double.IsFinite(Points[index].Value))
+                    continue;
+                var x = Points.Count == 1 ? Width / 2 : Pad + (Width - 2 * Pad) * index / (Points.Count - 1);
+                var y = span == 0 ? Height / 2 : Height - Pad - (Height - 2 * Pad) * (Points[index].Value - min) / span;
+                coordinates.Add($"{Num(x)},{Num(y)}");
+            }
+            return string.Join(' ', coordinates);
+        }
+    }
+
+    private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

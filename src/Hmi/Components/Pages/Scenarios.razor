@@ -6,7 +6,10 @@
 
 <PageTitle>Scenarios · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Scenarios</h1>
+<header class="page-head">
+    <h1>Scenarios</h1>
+    <p class="page-sub muted">Training scenario catalog, current run and run history with expected and observed detections.</p>
+</header>
 <OutcomeBanner Outcome="Outcome" />
 
 <section class="panel">
@@ -48,7 +51,7 @@
     }
     else
     {
-        <p class="muted">No current run.</p>
+        <EmptyState Message="No current run." />
     }
     @if (Session.IsInstructor)
     {
@@ -84,7 +87,7 @@
     <h2>Run history</h2>
     @if (_history.Count == 0)
     {
-        <p class="muted">No runs recorded.</p>
+        <EmptyState Message="No runs recorded." />
     }
     else
     {

@@ -4,46 +4,58 @@
 
 <PageTitle>Pumps · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Pumps</h1>
+<header class="page-head">
+    <h1>Pumps</h1>
+    <p class="page-sub muted">Run/stop state, mode, speed, flow, pressure, health and interlock reason. Commands need confirmation.</p>
+</header>
 <OutcomeBanner Outcome="_outcome" />
 
-<table class="grid">
-    <thead>
-        <tr><th>Pump</th><th>State</th><th>Mode</th><th>Speed</th><th>Flow</th><th>Pressure</th><th>Health</th><th>Interlock</th>
-            @if (Session.CanOperate) { <th>Commands</th> }</tr>
-    </thead>
-    <tbody>
-        @foreach (var pump in _plant.Pumps)
-        {
-            <tr>
-                <td><strong class="cell-title">@pump.Id</strong> @pump.Name</td>
-                <td><StatusPill Text="@pump.State.ToString()" Kind="@(pump.State == PumpState.Running ? "ok" : "neutral")" /></td>
-                <td>@pump.Mode</td>
-                <td>@pump.Speed.ToString("0", CultureInfo.InvariantCulture) %</td>
-                <td>@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</td>
-                <td>@pump.DischargePressure.ToString("0.0", CultureInfo.InvariantCulture) bar</td>
-                <td><StatusPill Text="@(pump.Fault == PumpFault.None ? pump.Health.ToString() : pump.Fault.ToString())"
-                                Kind="@HealthKind(pump.Health)" /></td>
-                <td>@(pump.InterlockReason ?? "—")</td>
-                @if (Session.CanOperate)
+@if (_plant.Pumps.Count == 0)
+{
+    <EmptyState Message="No pumps in the current plant snapshot." />
+}
+else
+{
+    <div class="table-scroll">
+        <table class="grid">
+            <thead>
+                <tr><th>Pump</th><th>State</th><th>Mode</th><th>Speed</th><th>Flow</th><th>Pressure</th><th>Health</th><th>Interlock</th>
+                    @if (Session.CanOperate) { <th>Commands</th> }</tr>
+            </thead>
+            <tbody>
+                @foreach (var pump in _plant.Pumps)
                 {
-                    <td class="actions-cell">
-                        <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.StartPump)">Start</button>
-                        <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.StopPump)">Stop</button>
-                        <button class="btn" @onclick="() => Ask(pump, pump.Mode == ControlMode.Manual
-                            ? OperatorCommandType.SetAutomatic : OperatorCommandType.SetManual)">
-                            @(pump.Mode == ControlMode.Manual ? "Automatic" : "Manual")
-                        </button>
-                        @if (pump.InterlockReason is not null)
+                    <tr @key="pump.Id">
+                        <td><strong class="cell-title">@pump.Id</strong> @pump.Name</td>
+                        <td><StatusPill Text="@pump.State.ToString()" Kind="@(pump.State == PumpState.Running ? "ok" : "neutral")" /></td>
+                        <td>@pump.Mode</td>
+                        <td>@pump.Speed.ToString("0", CultureInfo.InvariantCulture) %</td>
+                        <td>@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</td>
+                        <td>@pump.DischargePressure.ToString("0.0", CultureInfo.InvariantCulture) bar</td>
+                        <td><StatusPill Text="@(pump.Fault == PumpFault.None ? pump.Health.ToString() : pump.Fault.ToString())"
+                                        Kind="@HealthKind(pump.Health)" /></td>
+                        <td>@(pump.InterlockReason ?? "—")</td>
+                        @if (Session.CanOperate)
                         {
-                            <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.ResetInterlock)">Reset interlock</button>
+                            <td class="actions-cell">
+                                <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.StartPump)">Start</button>
+                                <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.StopPump)">Stop</button>
+                                <button class="btn" @onclick="() => Ask(pump, pump.Mode == ControlMode.Manual
+                                    ? OperatorCommandType.SetAutomatic : OperatorCommandType.SetManual)">
+                                    @(pump.Mode == ControlMode.Manual ? "Automatic" : "Manual")
+                                </button>
+                                @if (pump.InterlockReason is not null)
+                                {
+                                    <button class="btn" @onclick="() => Ask(pump, OperatorCommandType.ResetInterlock)">Reset interlock</button>
+                                }
+                            </td>
                         }
-                    </td>
+                    </tr>
                 }
-            </tr>
-        }
-    </tbody>
-</table>
+            </tbody>
+        </table>
+    </div>
+}
 <p class="muted">Commands in automatic mode are rejected: switch the pump to manual first.</p>
 <ConfirmDialog Pending="_pending" Completed="OnCompletedAsync" />
 

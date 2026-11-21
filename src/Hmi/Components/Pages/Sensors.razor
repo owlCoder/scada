@@ -3,40 +3,50 @@
 
 <PageTitle>Sensors · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Sensors</h1>
+<header class="page-head">
+    <h1>Sensors</h1>
+    <p class="page-sub muted">Reported value with unit, quality and health of every field instrument.</p>
+</header>
 
-<div class="table-scroll">
-    <table class="grid">
-        <thead>
-            <tr>
-                <th>Sensor</th><th>Device</th><th>Reported</th><th>Quality</th><th>Health</th><th>Fault</th>
-                @if (Session.IsInstructor)
-                {
-                    <th>True value</th><th>Spoofing</th><th>Drift</th>
-                }
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var sensor in _sensors)
-            {
-                <tr @key="sensor.Id">
-                    <th scope="row"><strong class="cell-title">@sensor.Id</strong> @sensor.Name</th>
-                    <td>@sensor.DeviceId</td>
-                    <td class="reported-value">@Number(sensor.ReportedValue) @sensor.Unit</td>
-                    <td><StatusPill Text="@sensor.Quality.ToString()" Kind="@(sensor.Quality == MeasurementQuality.Good ? "ok" : "warn")" /></td>
-                    <td>@sensor.Health</td>
-                    <td>@(Session.IsInstructor ? sensor.Fault.ToString() : "—")</td>
+@if (_sensors.Count == 0)
+{
+    <EmptyState Message="No sensors in the current plant snapshot." />
+}
+else
+{
+    <div class="table-scroll">
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>Sensor</th><th>Device</th><th>Reported</th><th>Quality</th><th>Health</th><th>Fault</th>
                     @if (Session.IsInstructor)
                     {
-                        <td class="true-value">@Number(sensor.TrueValue) @sensor.Unit</td>
-                        <td>@(sensor.IsSpoofed ? $"Active ({Number(sensor.SpoofedValue ?? sensor.ReportedValue)} {sensor.Unit})" : "Off")</td>
-                        <td>@Number(sensor.DriftOffset) @sensor.Unit</td>
+                        <th>True value</th><th>Spoofing</th><th>Drift</th>
                     }
                 </tr>
-            }
-        </tbody>
-    </table>
-</div>
+            </thead>
+            <tbody>
+                @foreach (var sensor in _sensors)
+                {
+                    <tr @key="sensor.Id">
+                        <th scope="row"><strong class="cell-title">@sensor.Id</strong> @sensor.Name</th>
+                        <td>@sensor.DeviceId</td>
+                        <td class="reported-value">@Number(sensor.ReportedValue) @sensor.Unit</td>
+                        <td><StatusPill Text="@sensor.Quality.ToString()" Kind="@(sensor.Quality == MeasurementQuality.Good ? "ok" : "warn")" /></td>
+                        <td><StatusPill Text="@sensor.Health.ToString()" Kind="@(sensor.Health == DeviceHealth.Healthy ? "ok" : sensor.Health == DeviceHealth.Warning ? "warn" : "alarm")" /></td>
+                        <td>@(Session.IsInstructor ? sensor.Fault.ToString() : "—")</td>
+                        @if (Session.IsInstructor)
+                        {
+                            <td class="true-value">@Number(sensor.TrueValue) @sensor.Unit</td>
+                            <td>@(sensor.IsSpoofed ? $"Active ({Number(sensor.SpoofedValue ?? sensor.ReportedValue)} {sensor.Unit})" : "Off")</td>
+                            <td>@Number(sensor.DriftOffset) @sensor.Unit</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 @code {
     private IReadOnlyList<SensorSnapshot> _sensors = [];

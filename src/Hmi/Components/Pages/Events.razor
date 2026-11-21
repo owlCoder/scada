@@ -6,7 +6,10 @@
 
 <PageTitle>Events · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>Events</h1>
+<header class="page-head">
+    <h1>Events</h1>
+    <p class="page-sub muted">Paged audit and process events with category, severity, source, actor, device, message and correlation ID.</p>
+</header>
 
 <form class="form-row" @onsubmit="ApplyFilterAsync" @onsubmit:preventDefault>
     <label>Category<input type="search" maxlength="@QueryText.MaxLength" @bind="_category" /></label>
@@ -19,7 +22,7 @@
 {
     @if (result.Items.Count == 0)
     {
-        <p class="muted">No matching events.</p>
+        <EmptyState Message="No matching events." />
     }
     else
     {

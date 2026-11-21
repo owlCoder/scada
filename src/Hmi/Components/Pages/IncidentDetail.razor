@@ -6,11 +6,14 @@
 
 <PageTitle>Incident · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<p><a href="incidents">Back to incidents</a></p>
+<p class="page-back"><a href="incidents">Back to incidents</a></p>
 @if (_details is { } details)
 {
     var incident = details.Incident;
-    <h1>@incident.DisplayId · @incident.Title</h1>
+    <header class="page-head">
+        <h1>@incident.DisplayId · @incident.Title</h1>
+        <p class="page-sub muted">Details, evidence, timeline and comments.</p>
+    </header>
     <OutcomeBanner Outcome="Outcome" />
     <section class="panel">
         <p class="preserve-lines">@incident.Description</p>
@@ -78,7 +81,7 @@
         <h2>Evidence</h2>
         @if (incident.Evidence.Count == 0)
         {
-            <p class="muted">No evidence recorded.</p>
+            <EmptyState Message="No evidence recorded." />
         }
         <ul class="record-list">
             @foreach (var evidence in incident.Evidence)
@@ -104,7 +107,7 @@
         <h2>Comments</h2>
         @if (details.Comments.Count == 0)
         {
-            <p class="muted">No comments yet.</p>
+            <EmptyState Message="No comments yet." />
         }
         <ul class="record-list">
             @foreach (var comment in details.Comments)

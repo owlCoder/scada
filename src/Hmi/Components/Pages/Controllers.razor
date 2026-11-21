@@ -7,9 +7,16 @@
 
 <PageTitle>PLC / RTU · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<h1>PLC / RTU</h1>
+<header class="page-head">
+    <h1>PLC / RTU</h1>
+    <p class="page-sub muted">Controller state, communications, scan and failure counters, errors and forced registers.</p>
+</header>
 <OutcomeBanner Outcome="Outcome" />
 
+@if (_controllers.Count == 0)
+{
+    <EmptyState Message="No controllers in the current simulation." />
+}
 @foreach (var controller in _controllers)
 {
     <section class="panel" @key="controller.Id">
