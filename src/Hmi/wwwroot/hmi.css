@@ -9,16 +9,7 @@ a { color: var(--accent); }
 h1 { font-size: clamp(22px, 3vw, 32px); margin: 0 0 16px; }
 h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; }
 .muted { color: var(--muted); }
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-.nav { background: #26282b; border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; }
-.nav a { color: var(--text); text-decoration: none; padding: 8px 10px; border-radius: 8px; font-size: 14px; }
-.nav a:hover { background: var(--panel); }
-.nav a.active { background: var(--panel-2); color: var(--accent); }
-.nav-group { margin: 14px 10px 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-.brand { font-weight: 700; padding: 4px 10px 12px; } .brand span { color: var(--muted); font-weight: 400; }
-.content { padding: 18px 26px 40px; min-width: 0; }
-.topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; font-size: 13px; }
-.spacer { flex: 1; }
+/* Shell chrome (top bar, alarm bar, icon rail, status bar, content frame) lives in css/shell.css. */
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; min-width: 0; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .metric strong { display: block; font-size: 28px; margin-bottom: 10px; }
@@ -66,7 +57,7 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .reconnect p { display: none; margin: 0; }
 .reconnect.components-reconnect-show, .reconnect.components-reconnect-failed, .reconnect.components-reconnect-rejected { display: block; }
 .components-reconnect-show .reconnect-show, .components-reconnect-failed .reconnect-failed, .components-reconnect-rejected .reconnect-rejected { display: block; }
-@media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .nav { flex-direction: row; flex-wrap: wrap; } .nav-group { display: none; } .diagram-layout { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .diagram-layout { grid-template-columns: 1fr; } }
 .table-scroll { overflow-x: auto; }
 .form-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; margin: 0 0 14px; }
 .form-row > label { display: grid; gap: 5px; font-size: 13px; }
@@ -88,11 +79,8 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .run-progress progress { accent-color: var(--accent); }
 .secret-value { width: 100%; font-family: ui-monospace, monospace; }
 
-/* Grid and shared high-performance HMI surfaces. Colour is reserved for alarms. */
-.topbar { position: sticky; top: 0; background: var(--bg); z-index: 4; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.alarm-banner { flex-basis: 100%; display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 12px; background: var(--panel); min-height: 34px; }
-.alarm-banner a { color: var(--alarm); }
-.mode-switch { margin: 0; }
+/* Grid and shared high-performance HMI surfaces. Colour is reserved for alarms.
+   The shell bars (.topbar, .alarm-banner, .mode-switch) are styled in css/shell.css. */
 .grid th { position: sticky; top: 0; background: var(--panel-2); }
 .grid td { font-variant-numeric: tabular-nums; padding: 11px 10px; }
 .grid tbody tr:hover { background: var(--panel); }
@@ -118,7 +106,7 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .validation { font-size: 13px; }.validation li { margin-bottom: 6px; }
 .selected { border-color: white; }
 @media (max-width: 1200px) { .editor-layout { grid-template-columns: 150px minmax(300px, 1fr); }.editor-properties { grid-column: 1 / -1; max-height: none; } }
-@media (max-width: 700px) { .content { padding: 12px; }.editor-layout { grid-template-columns: 1fr; }.palette { display: flex; flex-wrap: wrap; max-height: 260px; }.grid { display: block; overflow-x: auto; }.facts { grid-template-columns: 1fr; }.grid-diagram { min-height: 360px; } }
+@media (max-width: 700px) { .editor-layout { grid-template-columns: 1fr; }.palette { display: flex; flex-wrap: wrap; max-height: 260px; }.grid { display: block; overflow-x: auto; }.facts { grid-template-columns: 1fr; }.grid-diagram { min-height: 360px; } }
 
 /* ==========================================================================
    WATER HMI — ISA-101 refresh (branch ui/water-isa101)

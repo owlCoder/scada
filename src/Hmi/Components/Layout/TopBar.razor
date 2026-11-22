@@ -1,60 +1,57 @@
 @inherits RealtimeComponentBase
 @inject Application.Simulation.SimulationEngine Engine
+@inject ShellAlarmMonitor Alarms
+@inject TimeProvider Clock
+@using Hmi.Services.Shell
 
 <header class="topbar">
-    <span class="pill">@(_paused ? "Simulation paused" : "Simulation running")</span>
-    <span class="muted">Sim time @_simTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</span>
-    <a class="pill @(_activeAlarms > 0 ? "pill-alarm" : "pill-neutral")" href="@AlarmPath">@_activeAlarms active alarm(s)</a>
-    <span class="spacer"></span>
-    <span class="muted">@Session.Actor.Name · @Session.Actor.Role</span>
+    <span class="topbar-brand">SCADA<span class="topbar-plant">@_plantName</span></span>
+    <span class="chip chip-mode" title="Simulation mode of this session">@Session.Mode</span>
     <form method="post" action="/account/mode" data-enhance="false" class="mode-switch">
         <AntiforgeryToken />
-        <button type="submit" class="btn">Switch to @(Session.Mode == Application.Common.SimulationMode.Grid ? "Water treatment plant" : "Electrical distribution grid")</button>
+        <button type="submit" class="btn btn-mode" title="Switch the simulation mode of this session">Switch to @(Session.Mode == Application.Common.SimulationMode.Grid ? "Water treatment plant" : "Electrical distribution grid")</button>
     </form>
-    <div class="alarm-banner" role="status" aria-live="polite">
-        @if (_newest.Length == 0)
-        {
-            <span class="muted">No unacknowledged alarms</span>
-        }
-        @foreach (var alarm in _newest)
-        {
-            <a href="@AlarmPath">@alarm</a>
-        }
-    </div>
+    <span class="chip @(_paused ? "chip-warn" : "chip-ok")" title="Simulation state">@(_paused ? "Paused" : "Running")</span>
+    <span class="topbar-clock" title="Simulated clock">sim @_simTime.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</span>
+    <span class="topbar-clock topbar-clock-wall" title="Wall clock (local time)">@_wall.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</span>
+    <span class="chip @(_comm.AllHealthy ? "chip-ok" : "chip-warn")" title="@(_comm.Kind)s healthy of @_comm.Total modelled">@_comm.Kind @_comm.Healthy/@_comm.Total</span>
+    <span class="spacer"></span>
+    <span class="topbar-user" title="Signed-in user and role">@Session.Actor.Name · @Session.Actor.Role</span>
+    <form method="post" action="/account/logout" data-enhance="false" class="signout">
+        <AntiforgeryToken />
+        <button type="submit" class="btn">Sign out</button>
+    </form>
 </header>
 
 @code {
+    private string _plantName = "";
     private bool _paused;
     private TimeSpan _simTime;
-    private int _activeAlarms;
-    private string[] _newest = [];
-    private string AlarmPath => Session.Mode == Application.Common.SimulationMode.Grid ? "/grid/alarms" : "/alarms";
+    private DateTimeOffset _wall;
+    private ShellCommStatus _comm = new("Link", 0, 0);
 
     protected override IReadOnlyCollection<string> Topics =>
-        [RealtimeTopics.Simulation, RealtimeTopics.Plant, RealtimeTopics.Alarms, RealtimeTopics.Grid, RealtimeTopics.GridAlarms, RealtimeTopics.GridStatus];
+        [RealtimeTopics.Simulation, RealtimeTopics.Plant, RealtimeTopics.Grid, RealtimeTopics.GridStatus, RealtimeTopics.Network];
 
     protected override bool Refresh()
     {
         if (Session.Mode == Application.Common.SimulationMode.Grid)
         {
-            if (Session.GridView is not { } grid)
-                return true;
-            _paused = grid.Status.Paused;
-            _simTime = grid.Status.SimulationTime;
-            var alarms = Session.GridSnapshot().Alarms;
-            _activeAlarms = alarms.Count(a => a.Active);
-            _newest = alarms.Where(a => !a.Acknowledged).OrderByDescending(a => a.RaisedAt).Take(3)
-                .Select(a => $"{a.Severity} · {a.SourceId} · {a.Message}").ToArray();
+            if (Session.GridView is { } grid)
+            {
+                _paused = grid.Status.Paused;
+                _simTime = grid.Status.SimulationTime;
+                _plantName = grid.Status.DefinitionName;
+            }
         }
         else
         {
             _paused = Engine.Status.IsPaused;
             _simTime = Engine.Status.SimulationTime;
-            var alarms = Session.Plant().Alarms;
-            _activeAlarms = alarms.Count(a => a.IsActive);
-            _newest = alarms.Where(a => !a.IsAcknowledged).OrderByDescending(a => a.RaisedAt).Take(3)
-                .Select(a => $"{a.Severity} · {a.SourceId} · {a.Message}").ToArray();
+            _plantName = Session.Plant().PlantName;
         }
+        _wall = Clock.GetUtcNow();
+        _comm = Alarms.Communication();
         return true;
     }
 }

@@ -1,0 +1,40 @@
+@inherits RealtimeComponentBase
+@inject ShellState Shell
+@inject TimeProvider Clock
+@using Hmi.Services.Shell
+
+<footer class="statusbar">
+    <span class="status-item @(Shell.Connection == "Connected" ? "status-ok" : "status-warn")" title="Blazor circuit connection, reported by the browser">Circuit @Shell.Connection.ToLowerInvariant()</span>
+    <span class="status-item" title="Age of the last realtime update">updated @Age()</span>
+    <span class="status-item status-selected" title="Element selected on the current display">selected @(Shell.Selected ?? "—")</span>
+    <span class="spacer"></span>
+    <span class="status-hints" title="Keyboard shortcuts — press ? for help">Ctrl+K displays · F2 alarms · F3 diagram · Ctrl+Shift+A ack · ? help</span>
+    <button type="button" class="btn btn-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" @onclick="() => Shell.RequestHelp()">?</button>
+</footer>
+
+@code {
+    private Action _onChanged = static () => { };
+
+    protected override bool Refresh() => true;
+
+    protected override void OnInitialized()
+    {
+        _onChanged = () => InvokeAsync(StateHasChanged);
+        Shell.Changed += _onChanged;
+        base.OnInitialized();
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        Shell.Changed -= _onChanged;
+        await base.DisposeAsync();
+    }
+
+    private string Age()
+    {
+        var age = Clock.GetUtcNow() - Shell.LastUpdateAt;
+        if (age < TimeSpan.Zero)
+            age = TimeSpan.Zero;
+        return age.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + " s ago";
+    }
+}

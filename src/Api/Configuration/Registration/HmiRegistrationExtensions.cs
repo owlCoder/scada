@@ -21,6 +21,7 @@ public static class HmiRegistrationExtensions
         services.AddCascadingAuthenticationState();
         services.AddScoped<AuthenticationStateProvider, ScadaRevalidatingAuthenticationStateProvider>();
         services.AddScoped<HmiSession>();
+        services.AddScadaShellHmi();
         services.AddSingleton<MatcherPolicy, HealthFormatPolicy>();
         services.AddSignalR();
         services.AddSingleton<RealtimeHubForwarder>();

@@ -1,0 +1,24 @@
+<div class="dialog-backdrop help-backdrop" @onclick="() => CloseAsync()">
+    <div class="dialog shortcut-help" role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" @onclick:stopPropagation="true">
+        <h2 id="shortcut-help-title">Keyboard shortcuts</h2>
+        <table class="help-table">
+            <tbody>
+                <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">K</span></td><td>Quick switcher: jump to a display or, in grid mode, an element id</td></tr>
+                <tr><td><span class="kbd">F2</span></td><td>Open the alarm list</td></tr>
+                <tr><td><span class="kbd">F3</span></td><td>Open the diagram workspace</td></tr>
+                <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">Shift</span>+<span class="kbd">A</span></td><td>Acknowledge the selected alarm (Operator, with confirmation)</td></tr>
+                <tr><td><span class="kbd">Esc</span></td><td>Close overlays</td></tr>
+                <tr><td><span class="kbd">?</span></td><td>Toggle this help</td></tr>
+            </tbody>
+        </table>
+        <div class="dialog-actions">
+            <button type="button" class="btn btn-primary" @onclick="() => CloseAsync()">Close</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+}

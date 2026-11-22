@@ -1,0 +1,133 @@
+@inject HmiSession Session
+@inject ShellState Shell
+@inject NavigationManager Navigation
+@using Application.Common
+@using Domain.Grid.Definition
+@using Hmi.Services.Shell
+
+<div class="dialog-backdrop quick-backdrop" @onclick="() => CloseAsync()">
+    <div class="dialog quick-switch" role="dialog" aria-modal="true" aria-label="Quick switcher" @onclick:stopPropagation="true">
+        <input class="quick-input" type="text" autofocus placeholder="Jump to a display or, in grid mode, an element id…"
+               aria-label="Quick switcher query" @oninput="e => OnQueryInput(e)" @onkeydown="e => OnInputKey(e)" />
+        <ul class="quick-list" role="listbox" aria-label="Matches">
+            @if (_hits.Count == 0)
+            {
+                <li class="quick-empty">No matches.</li>
+            }
+            @foreach (var pair in _hits.Select((hit, index) => (hit, index)))
+            {
+                <li role="option" aria-selected="@(pair.index == _active)">
+                    <button type="button"
+                            class="quick-item @(pair.index == _active ? "active" : "") @(pair.hit.ElementId is not null ? "quick-element" : "")"
+                            @onclick="() => Choose(pair.hit)">
+                        <span class="quick-title">@pair.hit.Title</span>
+                        <span class="quick-sub">@pair.hit.Subtitle</span>
+                    </button>
+                </li>
+            }
+        </ul>
+    </div>
+</div>
+
+@code {
+    private sealed record Hit(string Title, string Subtitle, string? Href, string? ElementId);
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private IReadOnlyList<Hit> _hits = [];
+    private string _query = "";
+    private int _active;
+
+    private string DiagramPath => Session.Mode == SimulationMode.Grid ? "/grid/diagram" : "/diagram";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitializeAsync();
+        Rebuild();
+    }
+
+    private IEnumerable<Hit> AllEntries()
+    {
+        foreach (var entry in DisplayCatalog.For(Session.Mode))
+        {
+            if (entry.AdminOnly && !Session.IsInstructor)
+                continue;
+            yield return new Hit(entry.Title, entry.Group, entry.Href, null);
+        }
+        if (Session.Mode == SimulationMode.Grid && Session.GridView is { } grid)
+        {
+            foreach (var (id, name) in Elements(grid.Definition))
+                yield return new Hit($"{id} · {name}", "Grid element", null, id);
+        }
+    }
+
+    private static IEnumerable<(string Id, string Name)> Elements(GridDefinition definition) =>
+        definition.Buses.Select(b => (b.Id, b.Name))
+            .Concat(definition.Sources.Select(s => (s.Id, s.Name)))
+            .Concat(definition.Lines.Select(l => (l.Id, l.Name)))
+            .Concat(definition.Transformers.Select(t => (t.Id, t.Name)))
+            .Concat(definition.Switches.Select(s => (s.Id, s.Name)))
+            .Concat(definition.Loads.Select(l => (l.Id, l.Name)))
+            .Concat(definition.Generators.Select(g => (g.Id, g.Name)))
+            .Concat(definition.Capacitors.Select(c => (c.Id, c.Name)))
+            .Concat(definition.Protections.Select(p => (p.Id, p.Name)));
+
+    private bool Rebuild()
+    {
+        var query = _query.Trim();
+        _hits = AllEntries()
+            .Where(h => query.Length == 0
+                || h.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || (h.Href?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (h.ElementId?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+            .Take(12)
+            .ToArray();
+        _active = _hits.Count == 0 ? 0 : Math.Clamp(_active, 0, _hits.Count - 1);
+        return true;
+    }
+
+    private bool OnQueryInput(ChangeEventArgs e)
+    {
+        _query = e.Value?.ToString() ?? string.Empty;
+        _active = 0;
+        return Rebuild();
+    }
+
+    private bool OnInputKey(KeyboardEventArgs e) => e.Key switch
+    {
+        "Enter" when _hits.Count > 0 => Choose(_hits[Math.Clamp(_active, 0, _hits.Count - 1)]),
+        "ArrowDown" when _hits.Count > 0 => Move(1),
+        "ArrowUp" when _hits.Count > 0 => Move(-1),
+        "Escape" => Close(),
+        _ => false,
+    };
+
+    private bool Move(int delta)
+    {
+        if (_hits.Count > 0)
+            _active = (_active + delta + _hits.Count) % _hits.Count;
+        return true;
+    }
+
+    private bool Choose(Hit hit)
+    {
+        if (hit.ElementId is { } elementId)
+        {
+            Shell.RequestFocus(elementId);
+            Navigation.NavigateTo(DiagramPath);
+        }
+        else if (hit.Href is { } href)
+        {
+            Navigation.NavigateTo(href);
+        }
+        return Close();
+    }
+
+    private bool Close()
+    {
+        OnClose.InvokeAsync();
+        return true;
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+}
