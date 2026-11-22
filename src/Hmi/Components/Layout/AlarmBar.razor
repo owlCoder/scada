@@ -1,0 +1,79 @@
+@inherits ConfirmedComponentBase
+@inject ShellAlarmMonitor Alarms
+@inject ShellState Shell
+@inject NavigationManager Navigation
+@using Hmi.Services.Shell
+
+<div class="alarm-banner" role="status" aria-live="polite" aria-label="Unacknowledged alarms">
+    <span class="alarm-counts" aria-label="Unacknowledged alarm counts per priority">
+        @foreach (var (severity, count) in _counts)
+        {
+            <span class="alarm-count @ShellAlarmItem.PriorityLabel(severity).ToLowerInvariant() @(count == 0 ? "zero" : "")" title="@severity: @count unacknowledged">@ShellAlarmItem.PriorityLabel(severity) @count</span>
+        }
+    </span>
+    <span class="alarm-items">
+        @if (_items.Count == 0)
+        {
+            <span class="alarm-empty">No unacknowledged alarms</span>
+        }
+        @foreach (var item in _items)
+        {
+            <span class="alarm-item @item.PriorityClass @(item.Acknowledged ? "" : "unack")">
+                <button type="button" class="alarm-item-btn" title="Open the alarm list" @onclick="() => Open(item)">@item.RaisedAt · @item.SourceId · @item.Message</button>
+                @if (Session.CanOperate)
+                {
+                    <button type="button" class="btn alarm-ack" @onclick="() => AskAcknowledge(item.Key)">Acknowledge</button>
+                }
+            </span>
+        }
+    </span>
+    @if (Session.CanOperate && _items.Count > 0)
+    {
+        <button type="button" class="btn alarm-ack-all" @onclick="() => AskAcknowledgeAll()">Acknowledge all visible</button>
+    }
+</div>
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private const int MaxItems = 4;
+    private IReadOnlyList<ShellAlarmItem> _items = [];
+    private IReadOnlyList<(Domain.Process.Alarms.AlarmSeverity Severity, int Count)> _counts = [];
+
+    protected override IReadOnlyCollection<string> Topics =>
+        [RealtimeTopics.Alarms, RealtimeTopics.GridAlarms, RealtimeTopics.Grid, RealtimeTopics.Plant];
+
+    protected override bool Refresh()
+    {
+        _items = Alarms.UnacknowledgedNewest(MaxItems);
+        _counts = Alarms.UnacknowledgedCounts();
+        Shell.Touch();
+        if (_items.Count > 0 && _items.All(i => i.Key != Shell.SelectedAlarmKey))
+            Shell.SelectedAlarmKey = _items[0].Key;
+        return true;
+    }
+
+    private bool Open(ShellAlarmItem item)
+    {
+        Shell.SelectedAlarmKey = item.Key;
+        Navigation.NavigateTo(Session.Mode == Application.Common.SimulationMode.Grid ? "/grid/alarms" : "/alarms");
+        return true;
+    }
+
+    private bool AskAcknowledge(string key) =>
+        Ask("Acknowledge alarm?", "Record your acknowledgement of this alarm.", () => Alarms.AcknowledgeAsync(key, StoppingToken));
+
+    private bool AskAcknowledgeAll() =>
+        Ask("Acknowledge all visible alarms?", "Record your acknowledgement of every alarm shown in the alarm bar.", async () =>
+        {
+            var failed = 0;
+            foreach (var item in _items)
+            {
+                var outcome = await Alarms.AcknowledgeAsync(item.Key, StoppingToken);
+                if (!outcome.Succeeded)
+                    failed++;
+            }
+            return failed == 0
+                ? ActionOutcome.Done("All visible alarms acknowledged.")
+                : ActionOutcome.Failed($"{failed} alarm(s) could not be acknowledged.");
+        });
+}

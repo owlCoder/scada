@@ -19,7 +19,7 @@ public sealed class HmiModeTests
     public async Task ModeClaimSelectsNavigation(SimulationMode mode, string present, string absent)
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: mode);
-        var page = host.Context.Render<NavMenu>();
+        var page = host.Context.Render<Rail>();
         Assert.Contains(present, page.Markup); Assert.DoesNotContain(absent, page.Markup);
         Assert.Contains("Events", page.Markup); Assert.Contains("Scenarios", page.Markup); Assert.Contains("My account", page.Markup);
         Assert.Equal(mode, host.Context.Services.GetRequiredService<HmiSession>().Mode);
@@ -36,13 +36,22 @@ public sealed class HmiModeTests
     [Theory]
     [InlineData(SimulationMode.Water, "Electrical distribution grid")]
     [InlineData(SimulationMode.Grid, "Water treatment plant")]
-    public async Task TopBarPostsModeSwitchAndShowsCurrentModeAlarms(SimulationMode mode, string next)
+    public async Task TopBarPostsModeSwitch(SimulationMode mode, string next)
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: mode);
         var page = host.Context.Render<TopBar>();
         Assert.Equal("/account/mode", page.Find("form.mode-switch").GetAttribute("action"));
         Assert.Equal("post", page.Find("form.mode-switch").GetAttribute("method"));
         Assert.Contains(next, page.Find("form.mode-switch").TextContent);
-        Assert.Equal(mode == SimulationMode.Grid, page.Find(".alarm-banner").TextContent.Contains("Bus voltage low", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(SimulationMode.Water, false)]
+    [InlineData(SimulationMode.Grid, true)]
+    public async Task AlarmBarShowsCurrentModeAlarms(SimulationMode mode, bool gridAlarm)
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: mode);
+        var page = host.Context.Render<AlarmBar>();
+        Assert.Equal(gridAlarm, page.Find(".alarm-banner").TextContent.Contains("Bus voltage low", StringComparison.Ordinal));
     }
 }

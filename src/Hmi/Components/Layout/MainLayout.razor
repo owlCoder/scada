@@ -1,9 +1,191 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
+@using Microsoft.Extensions.Logging
+@inject ILogger<MainLayout> Logger
+@inject HmiSession Session
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ShellState Shell
+@inject ShellAlarmMonitor Alarms
+@using Hmi.Services.Shell
+@using Microsoft.JSInterop
 
 <div class="shell">
-    <NavMenu />
-    <main class="content">
-        <TopBar />
-        @Body
-    </main>
+    <TopBar />
+    <AlarmBar />
+    <div class="shell-body">
+        <Rail />
+        <main id="main-content" class="content @(_workspace ? "content-workspace" : "")">@Body</main>
+    </div>
+    <StatusBar />
+    @if (_quickSwitchOpen)
+    {
+        <QuickSwitch OnClose="CloseOverlaysAsync" />
+    }
+    @if (_helpOpen)
+    {
+        <ShortcutHelp OnClose="CloseOverlaysAsync" />
+    }
+    <ConfirmDialog Pending="_pending" Completed="OnConfirmCompletedAsync" />
 </div>
+
+@code {
+    private IJSObjectReference? _shellJs;
+    private DotNetObjectReference<MainLayout>? _selfRef;
+    private PendingAction? _pending;
+    private bool _quickSwitchOpen;
+    private bool _helpOpen;
+    private bool _workspace;
+    private EventHandler<Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs> _onLocation = static (_, _) => { };
+    private Action _onHelp = static () => { };
+
+    private string AlarmPath => Session.Mode == Application.Common.SimulationMode.Grid ? "/grid/alarms" : "/alarms";
+    private string DiagramPath => Session.Mode == Application.Common.SimulationMode.Grid ? "/grid/diagram" : "/diagram";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitializeAsync();
+        _workspace = IsWorkspace(Navigation.ToBaseRelativePath(Navigation.Uri));
+        _onLocation = (_, e) => _ = OnLocationChanged(e.Location);
+        Navigation.LocationChanged += _onLocation;
+        _onHelp = () =>
+        {
+            _helpOpen = true;
+            _quickSwitchOpen = false;
+            InvokeAsync(StateHasChanged);
+        };
+        Shell.HelpRequested += _onHelp;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        try
+        {
+            _shellJs = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Hmi/js/shell.js");
+            _selfRef = DotNetObjectReference.Create(this);
+            await _shellJs.InvokeAsync<bool>("registerKeys", _selfRef);
+            await _shellJs.InvokeAsync<bool>("watchConnection", _selfRef);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Keyboard forwarding and the connection watch need JS (also absent in some test hosts);
+            // the shell itself keeps working without them.
+            Logger.LogWarning(exception, "Shell JS module unavailable; keyboard shortcuts and the connection watch are disabled.");
+        }
+    }
+
+    /// <summary>Dispatches one key press forwarded by shell.js. Public so tests drive the same path as the module.</summary>
+    public bool HandleKey(ShellKeyPress key)
+    {
+        var ctrl = key.Ctrl || key.Meta;
+        bool handled;
+        if (ctrl && key.Key.Equals("k", StringComparison.OrdinalIgnoreCase))
+        {
+            _quickSwitchOpen = !_quickSwitchOpen;
+            _helpOpen = false;
+            handled = true;
+        }
+        else if (ctrl && key.Shift && key.Key.Equals("a", StringComparison.OrdinalIgnoreCase))
+            handled = AcknowledgeSelectedAlarm();
+        else if (!ctrl && !key.Alt && key.Key is "F2")
+        {
+            Navigation.NavigateTo(AlarmPath);
+            handled = true;
+        }
+        else if (!ctrl && !key.Alt && key.Key is "F3")
+        {
+            Navigation.NavigateTo(DiagramPath);
+            handled = true;
+        }
+        else if (!ctrl && !key.Alt && key.Key is "Escape")
+            handled = CloseOverlays();
+        else if (!ctrl && !key.Alt && key.Key is "?")
+        {
+            _helpOpen = !_helpOpen;
+            _quickSwitchOpen = false;
+            handled = true;
+        }
+        else
+            handled = false;
+        if (handled)
+            StateHasChanged();
+        return handled;
+    }
+
+    [JSInvokable]
+    public Task OnKeyAsync(ShellKeyPress key)
+    {
+        HandleKey(key);
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnConnectionAsync(bool online)
+    {
+        Shell.Connection = online ? "Connected" : "Offline";
+        return Task.CompletedTask;
+    }
+
+    private bool AcknowledgeSelectedAlarm()
+    {
+        if (Shell.SelectedAlarmKey is not { } key || !Session.CanOperate)
+            return false;
+        _pending = new PendingAction("Acknowledge alarm?", "Record your acknowledgement of the selected alarm.",
+            () => Alarms.AcknowledgeAsync(key, CancellationToken.None), Dangerous: true);
+        return true;
+    }
+
+    private async Task OnConfirmCompletedAsync(ActionOutcome? outcome)
+    {
+        _pending = null;
+        if (outcome is not null)
+            await InvokeAsync(StateHasChanged);
+    }
+
+    private bool CloseOverlays()
+    {
+        _quickSwitchOpen = false;
+        _helpOpen = false;
+        return true;
+    }
+
+    private Task CloseOverlaysAsync()
+    {
+        CloseOverlays();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private bool OnLocationChanged(string uri)
+    {
+        _workspace = IsWorkspace(Navigation.ToBaseRelativePath(uri));
+        InvokeAsync(StateHasChanged);
+        return true;
+    }
+
+    private static bool IsWorkspace(string relativePath)
+    {
+        var path = relativePath.TrimEnd('/');
+        return path is "diagram" or "grid/diagram";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= _onLocation;
+        Shell.HelpRequested -= _onHelp;
+        _selfRef?.Dispose();
+        if (_shellJs is not null)
+        {
+            try
+            {
+                await _shellJs.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is already gone.
+            }
+        }
+    }
+}

@@ -88,6 +88,8 @@ public sealed class HmiTestHost : IAsyncDisposable
         services.AddSingleton(new GridDetectionRuleAdministrationService(GridDetection, gridRuleSettings, Rig.Events, Rig.Time,
             NullLogger<GridDetectionRuleAdministrationService>.Instance));
         services.AddScoped<HmiSession>();
+        services.AddScoped<Hmi.Services.Shell.ShellState>();
+        services.AddScoped<Hmi.Services.Shell.ShellAlarmMonitor>();
     }
 
     public HmiFakeGridView Grid { get; } = new();

@@ -1,0 +1,65 @@
+@inherits RealtimeComponentBase
+@using Hmi.Services.Shell
+
+<nav class="rail" aria-label="Displays">
+    @foreach (var group in DisplayCatalog.For(Session.Mode).GroupBy(e => e.Group).OrderBy(g => Array.IndexOf(DisplayEntry.GroupOrder, g.Key)))
+    {
+        @if (group.Key == DisplayEntry.AdministrationGroup)
+        {
+            <AuthorizeView Policy="Administrator">
+                <p class="rail-group" title="@group.Key">@group.Key</p>
+                @foreach (var entry in group)
+                {
+                    @Link(entry)
+                }
+            </AuthorizeView>
+        }
+        else
+        {
+            <p class="rail-group" title="@group.Key">@group.Key</p>
+            @foreach (var entry in group)
+            {
+                @Link(entry)
+            }
+        }
+    }
+</nav>
+
+@code {
+    protected override bool Refresh() => true;
+
+    private static NavLinkMatch MatchFor(DisplayEntry entry) => entry.Href is "" or "grid" ? NavLinkMatch.All : NavLinkMatch.Prefix;
+
+    private RenderFragment Link(DisplayEntry entry) => @<NavLink href="@entry.Href" Match="@MatchFor(entry)" class="rail-item" title="@entry.Title" aria-label="@entry.Title">@Icon(entry.Icon)<span class="rail-label">@entry.Title</span></NavLink>;
+
+    private static MarkupString Icon(string name) => new(name switch
+    {
+        "overview" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"1.5\" y=\"1.5\" width=\"5.5\" height=\"5.5\" rx=\"1\"/><rect x=\"9\" y=\"1.5\" width=\"5.5\" height=\"5.5\" rx=\"1\"/><rect x=\"1.5\" y=\"9\" width=\"5.5\" height=\"5.5\" rx=\"1\"/><rect x=\"9\" y=\"9\" width=\"5.5\" height=\"5.5\" rx=\"1\"/></svg>",
+        "diagram" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 13 L6 13 L6 6 L14 6\"/><circle cx=\"2\" cy=\"13\" r=\"1.6\"/><circle cx=\"14\" cy=\"6\" r=\"1.6\"/><rect x=\"5\" y=\"5\" width=\"2.4\" height=\"2.4\"/></svg>",
+        "sld" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M1 4 L15 4\"/><path d=\"M4 4 L4 12 M8 4 L8 9 M12 4 L12 12\"/><circle cx=\"4\" cy=\"12\" r=\"1.4\"/><rect x=\"7\" y=\"8\" width=\"2.4\" height=\"2.4\"/><circle cx=\"12\" cy=\"12\" r=\"1.4\"/></svg>",
+        "tank" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"3\" y=\"2\" width=\"10\" height=\"12\" rx=\"1.5\"/><path d=\"M3 9 Q5.5 7.5 8 9 T13 9\"/></svg>",
+        "pump" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"6\"/><path d=\"M8 8 L12 5 M8 8 L5 12\"/></svg>",
+        "valve" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 5 L8 11 L14 5 Z M2 11 L8 5 L14 11 Z\"/></svg>",
+        "sensor" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"6\"/><circle cx=\"8\" cy=\"8\" r=\"1.6\"/><path d=\"M8 2 L8 4 M8 12 L8 14 M2 8 L4 8 M12 8 L14 8\"/></svg>",
+        "controller" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"10\" height=\"10\" rx=\"1\"/><path d=\"M6 6 L10 10 M10 6 L6 10\"/></svg>",
+        "trend" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M1.5 13.5 L1.5 2.5 L14.5 2.5\"/><path d=\"M3 11 L6 7 L9 9 L13 4\"/></svg>",
+        "alarm" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 2 L14.5 13 L1.5 13 Z\"/><path d=\"M8 6.5 L8 10\"/><circle cx=\"8\" cy=\"11.6\" r=\".9\"/></svg>",
+        "events" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 4 L14 4 M2 8 L14 8 M2 12 L9 12\"/></svg>",
+        "incident" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 14 L3 2 L13 4.5 L3 7\"/></svg>",
+        "scenario" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"6.2\"/><path d=\"M6.5 5.5 L11 8 L6.5 10.5 Z\"/></svg>",
+        "comm" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"11\" r=\"1.6\"/><path d=\"M4.5 7.5 A5 5 0 0 1 11.5 7.5 M2.5 5 A8 8 0 0 1 13.5 5\"/></svg>",
+        "register" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"2\" y=\"2.5\" width=\"12\" height=\"11\" rx=\"1\"/><path d=\"M2 6.5 L14 6.5 M2 10.5 L14 10.5 M8 2.5 L8 13.5\"/></svg>",
+        "health" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M1.5 8 L4.5 8 L6 4.5 L9 11.5 L11 8 L14.5 8\"/></svg>",
+        "account" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"5\" r=\"2.8\"/><path d=\"M2.5 14 A5.5 5.5 0 0 1 13.5 14\"/></svg>",
+        "admin" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 1.5 L14 4 L14 8 C14 12 11 14 8 14.5 C5 14 2 12 2 8 L2 4 Z\"/><path d=\"M5.5 8 L7.5 10 L10.5 6\"/></svg>",
+        "instructor" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M1.5 6 L8 3 L14.5 6 L8 9 Z\"/><path d=\"M4.5 7.5 L4.5 10.5 C4.5 11.5 11.5 11.5 11.5 10.5 L11.5 7.5 M13.5 6.5 L13.5 10\"/></svg>",
+        "editor" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 13 L3.8 10.2 L11 3 A1.4 1.4 0 0 1 13 5 L5.8 12.2 Z\"/><path d=\"M10 4 L12 6\"/></svg>",
+        "rules" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 5 L14 5 M2 11 L14 11\"/><circle cx=\"6\" cy=\"5\" r=\"1.8\"/><circle cx=\"10\" cy=\"11\" r=\"1.8\"/></svg>",
+        "feeder" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 3 L14 3 L14 13 L2 13\"/><path d=\"M5 3 L5 13 M8 6 L8 13 M11 9 L11 13\"/></svg>",
+        "transformer" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"5\" r=\"3.2\"/><circle cx=\"8\" cy=\"11\" r=\"3.2\"/></svg>",
+        "switch" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"2.5\" y=\"2.5\" width=\"11\" height=\"11\" rx=\"1\"/><path d=\"M5 11 L11 5\"/></svg>",
+        "load" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 1.5 L8 9 M5 6.5 L8 9.5 L11 6.5\"/><path d=\"M3 11 L13 11 L13 14.5 L3 14.5 Z\"/></svg>",
+        "protection" => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M8 1.5 L13.5 3.5 L13.5 8 C13.5 11.5 11 13.5 8 14.5 C5 13.5 2.5 11.5 2.5 8 L2.5 3.5 Z\"/><path d=\"M8 5 L8 9 M8 11 L8 11.2\"/></svg>",
+        _ => "<svg class=\"rail-icon\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"2.5\" y=\"2.5\" width=\"11\" height=\"11\" rx=\"2\"/></svg>",
+    });
+}
