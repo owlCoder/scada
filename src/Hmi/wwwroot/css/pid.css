@@ -99,11 +99,20 @@
 
 .pid-device-label { fill: var(--c-text); font-size: var(--fs-sm); font-family: var(--font-ui); text-anchor: middle; }
 .pid-label-small { fill: var(--c-text-muted); font-size: var(--fs-xs); font-family: var(--font-value); font-variant-numeric: tabular-nums; text-anchor: middle; }
+
+/* Placed labels (fixed slot per symbol, collision-free via the shared placer): canvas halo keeps them
+   legible over pipes and fills; never intercept the pointer (the symbol below stays clickable). */
+.pid-label { pointer-events: none; }
+.pid-label text {
+    paint-order: stroke;
+    stroke: var(--c-canvas);
+    stroke-width: 3px;
+}
 .pid-value {
     fill: var(--c-text); font-family: var(--font-value); font-variant-numeric: tabular-nums;
     font-size: var(--fs-lg); font-weight: 700; text-anchor: middle;
 }
-.pid-quality { fill: var(--c-invalid); font-size: var(--fs-xs); font-family: var(--font-value); text-anchor: middle; }
+.pid-quality { fill: var(--c-invalid); font-size: var(--fs-xs); font-family: var(--font-value); text-anchor: middle; paint-order: stroke; stroke: var(--c-canvas); stroke-width: 3px; }
 
 .pid-pump { fill: var(--c-canvas); stroke: var(--c-text); stroke-width: 2; }
 .pid-pump.pid-running { fill: var(--c-load-ok); stroke: var(--c-load-ok); }
@@ -125,6 +134,7 @@
 .pid-bubble-value {
     fill: var(--c-text); font-size: var(--fs-xs); text-anchor: middle;
     font-family: var(--font-value); font-variant-numeric: tabular-nums;
+    paint-order: stroke; stroke: var(--c-canvas); stroke-width: 3px;
 }
 
 /* Controller (PLC/RTU) station boxes */

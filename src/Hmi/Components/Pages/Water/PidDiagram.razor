@@ -1,5 +1,7 @@
 @* The ISA-101 / ISA-5.1 style P&ID canvas content: process lines with flow arrows, tanks, pumps, valves,
-   instrument bubbles, controller stations and alarm bells. All styling lives in css/pid.css (pid- classes). *@
+   instrument bubbles, controller stations and alarm bells. All styling lives in css/pid.css (pid- classes).
+   Device labels and value texts are placed by the shared LabelPlacer (fixed slot per symbol + collision
+   avoidance against every symbol box), rendered in the label layer at the end so they sit on top. *@
 @inherits ComponentBase
 
 @* Process piping: pump transfer lines and tank inlet/outlet/drain lines, with direction arrows while flowing. *@
@@ -61,14 +63,9 @@
             <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.High) + 3)" text-anchor="end">H</text></g>
             <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.HighHigh) + 3)" text-anchor="end">HH</text></g>
         }
-        <text class="pid-device-label" x="@N(PlantLayout.TankWidth / 2)" y="-10">@tank.Id</text>
         @if (Detail != PidDetail.Symbols)
         {
             <g><text class="pid-value" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text></g>
-        }
-        @if (Detail == PidDetail.Full && Quality(tank.Id, SensorKind.Level) is { } levelQuality && levelQuality != MeasurementQuality.Good)
-        {
-            <g><text class="pid-quality" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight + 16)">quality: @levelQuality</text></g>
         }
     </g>
 }
@@ -94,19 +91,10 @@
         {
             <path class="pid-pump-stop" d="M -6,-8 L -6,8 M 6,-8 L 6,8" />
         }
-        <text class="pid-device-label" y="-30">@pump.Id</text>
-        @if (Detail != PidDetail.Symbols)
-        {
-            <g><text class="pid-label-small" y="38">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text></g>
-        }
-        @if (Detail == PidDetail.Full && Quality(pump.Id, SensorKind.Flow) is { } flowQuality && flowQuality != MeasurementQuality.Good)
-        {
-            <g><text class="pid-quality" y="52">quality: @flowQuality</text></g>
-        }
     </g>
 }
 
-@* Valves: bow-tie with stem, open = filled, plus the position in %. *@
+@* Valves: bow-tie with stem, open = filled. *@
 @foreach (var valve in Plant.Valves)
 {
     var (vx, vy) = Layout.Position(valve.Id);
@@ -117,15 +105,11 @@
         <line class="pid-valve-stem" x1="0" y1="-10" x2="0" y2="-18" />
         <polygon class="pid-valve @(valve.Position > 0.5 ? "pid-valve-open" : "pid-valve-closed") @(valve.Health != DeviceHealth.Healthy ? "pid-faulted" : "")"
                  points="-14,-10 14,10 14,-10 -14,10" />
-        <text class="pid-device-label" y="-24">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
-        @if (Detail == PidDetail.Full && Quality(valve.Id, SensorKind.Flow) is { } valveQuality && valveQuality != MeasurementQuality.Good)
-        {
-            <g><text class="pid-quality" y="26">quality: @valveQuality</text></g>
-        }
     </g>
 }
 
-@* ISA instrument bubbles (LT/FT/PT) connected to their process point, with reported value, unit and quality. *@
+@* ISA instrument bubbles (LT/FT/PT) connected to their process point; the reported value text is placed
+   BESIDE the bubble (label layer below), never on top of another symbol. *@
 @if (Detail != PidDetail.Symbols)
 {
     @foreach (var sensor in Plant.Sensors)
@@ -138,14 +122,6 @@
             <line class="pid-instrument-line" x1="0" y1="0" x2="@N(cx - bx)" y2="@N(cy - by)" />
             <circle class="pid-bubble" r="@N(PlantLayout.BubbleRadius)" />
             <text class="pid-bubble-tag" y="3">@sensor.Id</text>
-            @if (Detail == PidDetail.Full)
-            {
-                <g><text class="pid-bubble-value" y="@N(PlantLayout.BubbleRadius + 14)">@sensor.ReportedValue.ToString("0.##", CultureInfo.InvariantCulture) @sensor.Unit</text></g>
-                @if (sensor.Quality != MeasurementQuality.Good)
-                {
-                    <g><text class="pid-quality" y="@N(PlantLayout.BubbleRadius + 28)">@sensor.Quality</text></g>
-                }
-            }
         </g>
     }
 }
@@ -165,18 +141,26 @@
     </g>
 }
 
-@* Alarm bells on active alarms, priority coloured, blinking while unacknowledged. *@
-@{
-    var bellSlots = new Dictionary<string, int>(StringComparer.Ordinal);
-}
-@foreach (var alarm in Plant.Alarms.Where(a => a.IsActive))
+@* Alarm bells on active alarms, priority coloured, blinking while unacknowledged (fixed slots from the layout). *@
+@foreach (var bell in Layout.AlarmBells)
 {
-    var (bx, by) = BellPosition(alarm.SourceId, bellSlots);
-    <g class="pid-alarm-bell pid-@PriorityClass(alarm.Severity) @(alarm.IsAcknowledged ? "" : "pid-blink")"
-       transform="translate(@N(bx),@N(by))" role="img" aria-label="@($"{alarm.Severity} alarm: {alarm.Message}")">
-        <title>@alarm.Message</title>
+    <g class="pid-alarm-bell pid-@PriorityClass(bell.Severity) @(bell.Acknowledged ? "" : "pid-blink")"
+       transform="translate(@N(bell.X),@N(bell.Y))" role="img" aria-label="@($"{bell.Severity} alarm: {bell.Message}")">
+        <title>@bell.Message</title>
         <path class="pid-bell-shape" d="M -7 3 A 7 7 0 0 1 7 3 L 9 8 L -9 8 Z" />
         <circle class="pid-bell-shape" cx="0" cy="10.5" r="2" />
+    </g>
+}
+
+@* Placed labels: every symbol has a fixed preferred slot; the shared placer moves a label only when its slot
+   is taken, and drops the least important one when no free slot exists — labels never cover a symbol or each
+   other (the P-103 / V-103 / value-text pile-up from the live review). *@
+@foreach (var label in _labels)
+{
+    if (_placements.GetValueOrDefault(label.Id) is not { } placement)
+        continue; // dropped: no free slot at this detail level
+    <g class="pid-label" transform="translate(@N(placement.X),@N(placement.Y))">
+        <text class="@label.Css" x="@N(label.Width / 2)" y="@N(label.Height / 2 + 4)" text-anchor="middle">@label.Text</text>
     </g>
 }
 
@@ -190,6 +174,15 @@
     [Parameter] public EventCallback<string> OnMenu { get; set; }
     [Parameter] public EventCallback<string> OnOpen { get; set; }
 
+    private List<PidLabel> _labels = [];
+    private IReadOnlyDictionary<string, LabelPlacement> _placements = new Dictionary<string, LabelPlacement>();
+
+    protected override void OnParametersSet()
+    {
+        _labels = Layout.Labels(Detail).ToList();
+        _placements = Layout.PlaceLabels(_labels);
+    }
+
     private string Selected(string id) => id == SelectedId ? "pid-selected" : "";
 
     private Task SelectAsync(string id) => OnSelect.InvokeAsync(id);
@@ -198,9 +191,6 @@
 
     private Task SelectKeyAsync(KeyboardEventArgs e, string id) =>
         e.Key is "Enter" or " " ? OnSelect.InvokeAsync(id) : Task.CompletedTask;
-
-    private MeasurementQuality? Quality(string deviceId, SensorKind kind) =>
-        Plant.Sensors.FirstOrDefault(s => s.DeviceId == deviceId && s.Kind == kind)?.Quality;
 
     private static double LimitY(double limit) =>
         PlantLayout.TankHeight * (1 - Math.Clamp(limit, 0, 100) / 100);
@@ -223,28 +213,6 @@
         AlarmSeverity.Medium => "p3",
         _ => "p4"
     };
-
-    private (double X, double Y) BellPosition(string sourceId, Dictionary<string, int> slots)
-    {
-        var index = slots[sourceId] = slots.GetValueOrDefault(sourceId) + 1;
-        var device = Layout.Position(sourceId);
-        if (Plant.Tank(sourceId) is { } tank)
-        {
-            var (tx, ty) = Layout.Position(tank.Id);
-            return (tx + PlantLayout.TankWidth / 2 + (index - 1) * 22, ty - 26);
-        }
-        if (Plant.Sensor(sourceId) is not null)
-        {
-            var (bx, by, _, _) = Layout.SensorSlot(sourceId);
-            return (bx + (index - 1) * 22, by - 26);
-        }
-        if (Controllers.FirstOrDefault(c => c.Id == sourceId) is not null)
-        {
-            var (cx, cy) = Layout.ControllerPosition(sourceId);
-            return (cx + PlantLayout.ControllerBoxWidth / 2 + (index - 1) * 22, cy - 12);
-        }
-        return (device.X + (index - 1) * 22, device.Y - 56);
-    }
 
     private static string Points(IReadOnlyList<(double X, double Y)> points) =>
         string.Join(' ', points.Select(p => $"{N(p.X)},{N(p.Y)}"));

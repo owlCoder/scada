@@ -3,7 +3,7 @@ using Domain.Grid.Definition;
 namespace Hmi.Services.Grid.Sld;
 
 /// <summary>
-/// One static diagram element. All coordinates are SVG units (one grid unit = <see cref="GridDiagramGeometry.Unit"/>).
+/// One static diagram element. All coordinates are SVG units (one grid unit = <see cref="SldModelBuilder.UnitX"/> × <see cref="SldModelBuilder.UnitY"/> on the SLD; the editor keeps its own <see cref="GridDiagramGeometry.Unit"/> grid).
 /// <see cref="Anchor"/> is where the symbol and labels sit; <see cref="Wires"/> are the polylines the element owns
 /// (a line owns its full path, a transformer two stubs, a stub element one bus-to-element path, a bus none).
 /// </summary>

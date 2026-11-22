@@ -76,6 +76,12 @@
     </g>
     @if (Lod == SldLod.High && Placement is not null && State?.ValueText is { } value)
     {
+        @* Thin leader line back to the element when the box had to be displaced from its symbol. *@
+        @if (Placement.Displaced)
+        {
+            <line class="sld-leader" x1="@N(Element.Anchor.X)" y1="@N(Element.Anchor.Y)"
+                  x2="@N(Placement.X + ValueWidth * Scales.Value / 2)" y2="@N(Placement.Y + 9 * Scales.Value)" />
+        }
         <g class="sld-value" transform="translate(@N(Placement.X) @N(Placement.Y)) scale(@N(Scales.Value))">
             <rect width="@N(ValueWidth)" height="18" rx="3" />
             <text x="6" y="13">@value</text>
@@ -88,6 +94,11 @@
     else if (Lod < SldLod.High && Placement is not null && State?.KeyText is { } key)
     {
         @* Compact key value (bus kV, branch A·%) at a constant on-screen size, placed collision-free. *@
+        @if (Placement.Displaced)
+        {
+            <line class="sld-leader" x1="@N(Element.Anchor.X)" y1="@N(Element.Anchor.Y)"
+                  x2="@N(Placement.X + KeyWidth * Scales.Value / 2)" y2="@N(Placement.Y + 9 * Scales.Value)" />
+        }
         <g class="sld-key" transform="translate(@N(Placement.X) @N(Placement.Y)) scale(@N(Scales.Value))">
             <text x="3" y="13">@key</text>
         </g>
@@ -95,6 +106,11 @@
     @if (Lod == SldLod.High && TapPlacement is not null && Tap is { } tap)
     {
         @* Tap position to the right of the transformer symbol, in the same value-box style, placed collision-free. *@
+        @if (TapPlacement.Displaced)
+        {
+            <line class="sld-leader" x1="@N(Element.Anchor.X)" y1="@N(Element.Anchor.Y)"
+                  x2="@N(TapPlacement.X + TapWidth * Scales.Value / 2)" y2="@N(TapPlacement.Y + 9 * Scales.Value)" />
+        }
         <g class="sld-value sld-tap-box" transform="translate(@N(TapPlacement.X) @N(TapPlacement.Y)) scale(@N(Scales.Value))">
             <rect width="@N(TapWidth)" height="18" rx="3" />
             <text x="6" y="13">tap @tap</text>
@@ -177,6 +193,7 @@
         ? $"{Element.Name}, {Element.Kind}, {Element.Id}"
         : $"{Element.Name}, {Element.Kind}, {Element.Id}, {(State.Closed is { } c ? (c ? "closed" : "open") : State.Energized ? "energized" : "de-energised")}, {State.ValueText ?? "no value"}";
     private double ValueWidth => SldLabelPlacer.BoxSize(State?.ValueText, State?.QualityFlag).Width;
+    private double KeyWidth => SldLabelPlacer.BoxSize(State?.KeyText, null).Width;
     private double TapWidth => SldLabelPlacer.BoxSize(Tap is { } t ? $"tap {t}" : null, null).Width;
 
     private static string Points(IReadOnlyList<DiagramPosition> wire) => string.Join(' ', wire.Select(p => $"{N(p.X)},{N(p.Y)}"));

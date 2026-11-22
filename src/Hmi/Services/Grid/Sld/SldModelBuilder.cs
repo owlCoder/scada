@@ -6,10 +6,17 @@ namespace Hmi.Services.Grid.Sld;
 /// Builds the static single-line-diagram model from a network definition: element anchors, wire polylines
 /// (bus → element switches → element, or the full line path through waypoints and inline switches) and one
 /// dashed substation frame per RTU. Pure geometry — no snapshot state.
+/// The SLD maps definition grid units with its own, larger spacing than the editor
+/// (<see cref="GridDiagramGeometry.Unit"/> = 40 stays the editor geometry): <see cref="UnitX"/> per unit
+/// horizontally and <see cref="UnitY"/> vertically, so value boxes fit between the elements at fit zoom.
 /// </summary>
 public static class SldModelBuilder
 {
-    private const double Unit = GridDiagramGeometry.Unit;
+    /// <summary>SVG units per definition grid unit, horizontally, on the SLD canvas.</summary>
+    public const double UnitX = 64;
+
+    /// <summary>SVG units per definition grid unit, vertically, on the SLD canvas.</summary>
+    public const double UnitY = 56;
 
     /// <summary>Small inset around the member anchors only — large padding (or wire endpoints that run to a shared
     /// bus) would swallow neighbouring feeders into one RTU frame.</summary>
@@ -17,29 +24,31 @@ public static class SldModelBuilder
 
     public static SldStaticModel Build(GridDefinition definition)
     {
+        var render = RenderPositions(definition);
+
         var elements = new List<SldElement>();
         elements.AddRange(definition.Buses.Select(b => new SldElement(
-            b.Id, b.Name, SldElementKind.Bus, At(b.Position), b.NominalVoltageKv, [], null, b.Id, null)));
+            b.Id, b.Name, SldElementKind.Bus, render[b.Id], b.NominalVoltageKv, [], null, b.Id, null)));
         elements.AddRange(definition.Lines.Select(l => new SldElement(
-            l.Id, l.Name, SldElementKind.Line, Midpoint(LinePoints(definition, l)), BusVoltage(definition, l.FromBusId),
-            [LinePoints(definition, l)], null, l.FromBusId, null)));
+            l.Id, l.Name, SldElementKind.Line, render[l.Id], BusVoltage(definition, l.FromBusId),
+            [LinePoints(definition, l, render)], null, l.FromBusId, null)));
         elements.AddRange(definition.Transformers.Select(t => new SldElement(
-            t.Id, t.Name, SldElementKind.Transformer, At(t.Position), t.HvRatedKv,
-            [Stub(definition, t.HvBusId, t.Id, t.Position), Stub(definition, t.LvBusId, t.Id, t.Position)], null, t.HvBusId, null)));
+            t.Id, t.Name, SldElementKind.Transformer, render[t.Id], t.HvRatedKv,
+            [Stub(definition, t.HvBusId, t.Id, render), Stub(definition, t.LvBusId, t.Id, render)], null, t.HvBusId, null)));
         elements.AddRange(definition.Sources.Select(s => new SldElement(
-            s.Id, s.Name, SldElementKind.Source, At(s.Position), BusVoltage(definition, s.BusId),
-            [Stub(definition, s.BusId, s.Id, s.Position)], null, s.BusId, null)));
+            s.Id, s.Name, SldElementKind.Source, render[s.Id], BusVoltage(definition, s.BusId),
+            [Stub(definition, s.BusId, s.Id, render)], null, s.BusId, null)));
         elements.AddRange(definition.Loads.Select(l => new SldElement(
-            l.Id, l.Name, SldElementKind.Load, At(l.Position), BusVoltage(definition, l.BusId),
-            [Stub(definition, l.BusId, l.Id, l.Position)], null, l.BusId, null)));
+            l.Id, l.Name, SldElementKind.Load, render[l.Id], BusVoltage(definition, l.BusId),
+            [Stub(definition, l.BusId, l.Id, render)], null, l.BusId, null)));
         elements.AddRange(definition.Generators.Select(g => new SldElement(
-            g.Id, g.Name, SldElementKind.Generator, At(g.Position), BusVoltage(definition, g.BusId),
-            [Stub(definition, g.BusId, g.Id, g.Position)], null, g.BusId, null)));
+            g.Id, g.Name, SldElementKind.Generator, render[g.Id], BusVoltage(definition, g.BusId),
+            [Stub(definition, g.BusId, g.Id, render)], null, g.BusId, null)));
         elements.AddRange(definition.Capacitors.Select(c => new SldElement(
-            c.Id, c.Name, SldElementKind.Capacitor, At(c.Position), BusVoltage(definition, c.BusId),
-            [Stub(definition, c.BusId, c.Id, c.Position)], null, c.BusId, null)));
+            c.Id, c.Name, SldElementKind.Capacitor, render[c.Id], BusVoltage(definition, c.BusId),
+            [Stub(definition, c.BusId, c.Id, render)], null, c.BusId, null)));
         elements.AddRange(definition.Switches.Select(s => new SldElement(
-            s.Id, s.Name, SldElementKind.Switch, At(s.Position), BusVoltage(definition, s.BusId),
+            s.Id, s.Name, SldElementKind.Switch, render[s.Id], BusVoltage(definition, s.BusId),
             [], s.Kind, s.BusId, s.ElementId)));
 
         var byId = elements.ToDictionary(e => e.Id);
@@ -48,37 +57,86 @@ public static class SldModelBuilder
         return new SldStaticModel(elements, frames, SldBounds.Of(points, 90), byId);
     }
 
-    /// <summary>Full line path: from bus → from-side switches → waypoints → to-side switches → to bus.</summary>
-    public static IReadOnlyList<DiagramPosition> LinePoints(GridDefinition definition, GridLineDefinition line)
+    /// <summary>
+    /// SVG positions of every definition element, with the distribution-substation stacks applied
+    /// (<see cref="SldStackLayout"/>): anchors and wire endpoints all read from this map, so a stacked substation
+    /// moves as one aligned group.
+    /// </summary>
+    public static IReadOnlyDictionary<string, DiagramPosition> RenderPositions(GridDefinition definition)
     {
-        var from = definition.Buses.FirstOrDefault(b => b.Id == line.FromBusId)?.Position;
-        var to = definition.Buses.FirstOrDefault(b => b.Id == line.ToBusId)?.Position;
+        var render = new Dictionary<string, DiagramPosition>(StringComparer.Ordinal);
+        foreach (var b in definition.Buses)
+            render[b.Id] = At(b.Position);
+        foreach (var s in definition.Sources)
+            render[s.Id] = At(s.Position);
+        foreach (var t in definition.Transformers)
+            render[t.Id] = At(t.Position);
+        foreach (var s in definition.Switches)
+            render[s.Id] = At(s.Position);
+        foreach (var l in definition.Loads)
+            render[l.Id] = At(l.Position);
+        foreach (var g in definition.Generators)
+            render[g.Id] = At(g.Position);
+        foreach (var c in definition.Capacitors)
+            render[c.Id] = At(c.Position);
+        foreach (var overridePosition in SldStackLayout.Overrides(definition, render))
+            render[overridePosition.Key] = overridePosition.Value;
+        foreach (var l in definition.Lines)
+            render[l.Id] = Midpoint(LinePoints(definition, l, render)); // LinePoints already maps to SVG units
+        return render;
+    }
+
+    /// <summary>Full line path: from bus → from-side switches → waypoints → to-side switches → to bus.</summary>
+    public static IReadOnlyList<DiagramPosition> LinePoints(
+        GridDefinition definition, GridLineDefinition line, IReadOnlyDictionary<string, DiagramPosition>? render = null)
+    {
+        var from = BusPoint(definition, line.FromBusId, render);
+        var to = BusPoint(definition, line.ToBusId, render);
         if (from is null || to is null)
             return [];
         return Dedupe(new[] { from }
-            .Concat(definition.Switches.Where(s => s.BusId == line.FromBusId && s.ElementId == line.Id).Select(s => s.Position))
-            .Concat(line.Waypoints)
-            .Concat(definition.Switches.Where(s => s.BusId == line.ToBusId && s.ElementId == line.Id).Select(s => s.Position).Reverse())
-            .Append(to)
-            .Select(At));
+            .Concat(definition.Switches.Where(s => s.BusId == line.FromBusId && s.ElementId == line.Id)
+                .Select(s => Pos(s.Id, s.Position, render)))
+            .Concat(line.Waypoints.Select(At))
+            .Concat(definition.Switches.Where(s => s.BusId == line.ToBusId && s.ElementId == line.Id)
+                .Select(s => Pos(s.Id, s.Position, render)).Reverse())
+            .Append(to));
     }
 
     /// <summary>Stub path from a bus through the element's switches to the element itself.</summary>
-    public static IReadOnlyList<DiagramPosition> Stub(GridDefinition definition, string busId, string elementId, DiagramPosition elementPosition)
+    public static IReadOnlyList<DiagramPosition> Stub(
+        GridDefinition definition, string busId, string elementId, IReadOnlyDictionary<string, DiagramPosition>? render = null)
     {
-        var bus = definition.Buses.FirstOrDefault(b => b.Id == busId)?.Position;
+        var bus = BusPoint(definition, busId, render);
+        var element = render is not null && render.TryGetValue(elementId, out var p) ? p : At(ElementPosition(definition, elementId));
         if (bus is null)
-            return [At(elementPosition)];
+            return [element];
         return Dedupe(new[] { bus }
-            .Concat(definition.Switches.Where(s => s.BusId == busId && s.ElementId == elementId).Select(s => s.Position))
-            .Append(elementPosition)
-            .Select(At));
+            .Concat(definition.Switches.Where(s => s.BusId == busId && s.ElementId == elementId)
+                .Select(s => Pos(s.Id, s.Position, render)))
+            .Append(element));
     }
 
-    public static DiagramPosition At(DiagramPosition grid) => new(grid.X * Unit, grid.Y * Unit);
+    public static DiagramPosition At(DiagramPosition grid) => new(grid.X * UnitX, grid.Y * UnitY);
 
     public static double BusVoltage(GridDefinition definition, string? busId) =>
         busId is null ? 0 : definition.Buses.FirstOrDefault(b => b.Id == busId)?.NominalVoltageKv ?? 0;
+
+    private static DiagramPosition? BusPoint(GridDefinition definition, string busId, IReadOnlyDictionary<string, DiagramPosition>? render) =>
+        render is not null && render.TryGetValue(busId, out var p) ? p : At(definition.Buses.FirstOrDefault(b => b.Id == busId)?.Position ?? new DiagramPosition(0, 0));
+
+    private static DiagramPosition Pos(string id, DiagramPosition grid, IReadOnlyDictionary<string, DiagramPosition>? render) =>
+        render is not null && render.TryGetValue(id, out var p) ? p : At(grid);
+
+    private static DiagramPosition ElementPosition(GridDefinition definition, string elementId) =>
+        definition.Buses.FirstOrDefault(b => b.Id == elementId)?.Position
+        ?? definition.Sources.FirstOrDefault(s => s.Id == elementId)?.Position
+        ?? definition.Transformers.FirstOrDefault(t => t.Id == elementId)?.Position
+        ?? definition.Switches.FirstOrDefault(s => s.Id == elementId)?.Position
+        ?? definition.Loads.FirstOrDefault(l => l.Id == elementId)?.Position
+        ?? definition.Generators.FirstOrDefault(g => g.Id == elementId)?.Position
+        ?? definition.Capacitors.FirstOrDefault(c => c.Id == elementId)?.Position
+        ?? new DiagramPosition(0, 0);
 
     private static SldFrame? Frame(GridRtuDefinition rtu, IReadOnlyList<SldElement> elements)
     {

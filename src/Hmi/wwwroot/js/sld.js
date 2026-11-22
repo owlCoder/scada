@@ -43,7 +43,9 @@ export function observeSize(dotNetRef, el) {
     if (observers.has(el)) return true;
     const observer = new ResizeObserver(entries => {
         const r = entries[0].contentRect;
-        dotNetRef.invokeMethodAsync('OnResize', r.width, r.height);
+        // 0x0 means the element was hidden or removed (e.g. navigating away): nothing to report.
+        if (r.width > 0 && r.height > 0)
+            dotNetRef.invokeMethodAsync('OnResize', r.width, r.height);
     });
     observer.observe(el);
     observers.set(el, observer);
