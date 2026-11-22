@@ -36,7 +36,7 @@
                 <line class="trend-axis" x1="40" y1="200" x2="630" y2="200" />
                 @foreach (var tick in TimeTicks)
                 {
-                    @:<text class="trend-tick" x="@tick.X" y="218">@tick.Label</text>
+                    <g><text class="trend-tick" x="@tick.X" y="218">@tick.Label</text></g>
                 }
                 @foreach (var series in Series)
                 {

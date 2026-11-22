@@ -24,7 +24,7 @@
             <SldSymbol Kind="Element.Kind" SwitchKind="Element.SwitchKind" Closed="State?.Closed" />
             @if (State?.Invalid == true)
             {
-                @:<text class="sld-qmark" x="16" y="-12">?</text>
+                <g><text class="sld-qmark" x="16" y="-12">?</text></g>
             }
             @if (State?.HasFlow == true && Element.Wires.Count > 0)
             {
@@ -59,7 +59,7 @@
                         }
                         else
                         {
-                            @:<text x="17" y="12" text-anchor="middle">@TagText(tag.Kind)</text>
+                            <g><text x="17" y="12" text-anchor="middle">@TagText(tag.Kind)</text></g>
                         }
                     </g>
                 }
@@ -81,7 +81,7 @@
             <text x="6" y="13">@value</text>
             @if (State.QualityFlag is { } flag)
             {
-                @:<text class="sld-qflag q-@flag.ToLowerInvariant()" x="@N(ValueWidth - 12)" y="13">@flag</text>
+                <g><text class="sld-qflag q-@flag.ToLowerInvariant()" x="@N(ValueWidth - 12)" y="13">@flag</text></g>
             }
         </g>
     }

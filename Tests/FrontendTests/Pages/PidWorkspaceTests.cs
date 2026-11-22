@@ -62,6 +62,18 @@ public sealed class PidWorkspaceTests
     }
 
     [Fact]
+    public async Task TankLevelsAndLimitLabelsAreRealSvgTextElements()
+    {
+        // Regression: Razor emitted "@:<text x=\"@...\">" lines as escaped text, so values were invisible in a browser.
+        await using var host = HmiTestHost.Create(AccessRole.Operator);
+        var page = host.Context.Render<Diagram>();
+
+        Assert.Equal(host.Rig.Engine.Read(w => w.Plant.CaptureSnapshot()).Tanks.Count, page.FindAll("text.pid-value").Count(t => t.TextContent.EndsWith('%')));
+        Assert.NotEmpty(page.FindAll("text.pid-tank-limit-label"));
+        Assert.DoesNotContain("text-anchor=&quot;", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ZoomButtonsFitAndZoomLabelFollowTheViewBox()
     {
         await using var host = HmiTestHost.Create(AccessRole.Viewer);

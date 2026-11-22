@@ -44,7 +44,7 @@ public sealed class GridHmiBrowserTests(ITestOutputHelper output)
         await Assertions.Expect(faceplate).ToContainTextAsync("Open");
         await faceplate.GetByRole(AriaRole.Button, new() { Name = "Execute", Exact = true }).ClickAsync();
         await BrowserTestSession.ConfirmAsync(page);
-        await Assertions.Expect(faceplate.Locator("dl.facts")).ToContainTextAsync("Open");
+        await Assertions.Expect(faceplate.Locator("dl.facts").First).ToContainTextAsync("Open");
 
         // Customers supplied drop and a loss-of-supply alarm appears.
         await NavigateGridOverviewAsync(page);
@@ -61,13 +61,13 @@ public sealed class GridHmiBrowserTests(ITestOutputHelper output)
         await BrowserTestSession.ConfirmAsync(page);
         await faceplate.GetByRole(AriaRole.Button, new() { Name = "Execute", Exact = true }).ClickAsync();
         await BrowserTestSession.ConfirmAsync(page);
-        await Assertions.Expect(faceplate.Locator("dl.facts")).ToContainTextAsync("Closed");
+        await Assertions.Expect(faceplate.Locator("dl.facts").First).ToContainTextAsync("Closed");
         await NavigateGridOverviewAsync(page);
         await Assertions.Expect(page.Locator(".metric strong").Nth(4)).ToHaveTextAsync(customers);
         await NavigateGridAlarmsAsync(page);
-        // The loss-of-supply alarms returned to normal (still listed as returned) and the top bar counts no active alarm.
+        // The loss-of-supply alarms returned to normal (still listed, unacknowledged) and none is active any more.
         await Assertions.Expect(page.Locator("tbody")).ToContainTextAsync("Returned to normal");
-        await Assertions.Expect(page.Locator(".topbar").GetByText("active alarm(s)")).ToHaveTextAsync("0 active alarm(s)");
+        await Assertions.Expect(page.Locator("tbody")).Not.ToContainTextAsync("Active");
 
         // The network editor loads for an administrator and denies an operator.
         var admin = await session.NewPageAsync();
@@ -79,7 +79,8 @@ public sealed class GridHmiBrowserTests(ITestOutputHelper output)
         await SignInGridAsync(op, "operator");
         await op.EvaluateAsync("() => Blazor.navigateTo('/grid/editor')");
         await Assertions.Expect(op.GetByRole(AriaRole.Heading, new() { Name = "Access denied" })).ToBeVisibleAsync();
-        await Assertions.Expect(op.Locator("svg")).ToHaveCountAsync(0);
+        // No editor canvas in the page content (the shell rail uses SVG icons).
+        await Assertions.Expect(op.Locator("#main-content svg")).ToHaveCountAsync(0);
     }, output);
 
     private static async Task NavigateGridAlarmsAsync(IPage page)

@@ -23,7 +23,8 @@ public sealed class HmiBrowserTests(ITestOutputHelper output)
         await BrowserTestSession.LoginAsync(page, "operator");
         await Assertions.Expect(page.Locator(".topbar")).ToContainTextAsync("operator · Operator");
         await BrowserTestSession.NavigateAsync(page, "My account");
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign out" }).ClickAsync();
+        // The shell banner carries the canonical sign-out button (the account page repeats it).
+        await page.GetByRole(AriaRole.Banner).GetByRole(AriaRole.Button, new() { Name = "Sign out" }).ClickAsync();
         await Assertions.Expect(page).ToHaveURLAsync(new Regex("/account/login$"));
         Assert.DoesNotContain(await page.Context.CookiesAsync(), cookie => cookie.Name == "scada.session");
         await page.GotoAsync("/");
@@ -58,7 +59,7 @@ public sealed class HmiBrowserTests(ITestOutputHelper output)
         var first = await overview.InnerTextAsync();
         await Assertions.Expect(overview).Not.ToHaveTextAsync(first);
         await BrowserTestSession.NavigateAsync(page, "Plant diagram");
-        var level = page.Locator("svg.diagram text.value").First;
+        var level = page.Locator("text.pid-value").First;
         first = (await level.TextContentAsync())!;
         await Assertions.Expect(level).Not.ToHaveTextAsync(first);
         Assert.True(session.Factory.Services.GetRequiredService<SimulationEngine>().Status.StepCount > 1);

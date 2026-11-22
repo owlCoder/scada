@@ -56,19 +56,19 @@
         <line class="pid-tank-limit pid-tank-limit-critical" x1="@N(PlantLayout.TankWidth - 12)" y1="@N(LimitY(tank.Thresholds.HighHigh))" x2="@N(PlantLayout.TankWidth - 2)" y2="@N(LimitY(tank.Thresholds.HighHigh))" />
         @if (Detail == PidDetail.Full)
         {
-            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.LowLow) + 3)" text-anchor="end">LL</text>
-            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.Low) + 3)" text-anchor="end">L</text>
-            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.High) + 3)" text-anchor="end">H</text>
-            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.HighHigh) + 3)" text-anchor="end">HH</text>
+            <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.LowLow) + 3)" text-anchor="end">LL</text></g>
+            <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.Low) + 3)" text-anchor="end">L</text></g>
+            <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.High) + 3)" text-anchor="end">H</text></g>
+            <g><text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.HighHigh) + 3)" text-anchor="end">HH</text></g>
         }
         <text class="pid-device-label" x="@N(PlantLayout.TankWidth / 2)" y="-10">@tank.Id</text>
         @if (Detail != PidDetail.Symbols)
         {
-            @:<text class="pid-value" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text>
+            <g><text class="pid-value" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text></g>
         }
         @if (Detail == PidDetail.Full && Quality(tank.Id, SensorKind.Level) is { } levelQuality && levelQuality != MeasurementQuality.Good)
         {
-            @:<text class="pid-quality" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight + 16)">quality: @levelQuality</text>
+            <g><text class="pid-quality" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight + 16)">quality: @levelQuality</text></g>
         }
     </g>
 }
@@ -84,7 +84,7 @@
         <circle class="pid-pump @PumpClass(pump)" r="20" />
         @if (pump.Health == DeviceHealth.Faulted)
         {
-            @:<text class="pid-pump-fault-mark" y="8">!</text>
+            <g><text class="pid-pump-fault-mark" y="8">!</text></g>
         }
         else if (pump.State == PumpState.Running)
         {
@@ -97,11 +97,11 @@
         <text class="pid-device-label" y="-30">@pump.Id</text>
         @if (Detail != PidDetail.Symbols)
         {
-            @:<text class="pid-label-small" y="38">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text>
+            <g><text class="pid-label-small" y="38">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text></g>
         }
         @if (Detail == PidDetail.Full && Quality(pump.Id, SensorKind.Flow) is { } flowQuality && flowQuality != MeasurementQuality.Good)
         {
-            @:<text class="pid-quality" y="52">quality: @flowQuality</text>
+            <g><text class="pid-quality" y="52">quality: @flowQuality</text></g>
         }
     </g>
 }
@@ -120,7 +120,7 @@
         <text class="pid-device-label" y="-24">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
         @if (Detail == PidDetail.Full && Quality(valve.Id, SensorKind.Flow) is { } valveQuality && valveQuality != MeasurementQuality.Good)
         {
-            @:<text class="pid-quality" y="26">quality: @valveQuality</text>
+            <g><text class="pid-quality" y="26">quality: @valveQuality</text></g>
         }
     </g>
 }
@@ -140,10 +140,10 @@
             <text class="pid-bubble-tag" y="3">@sensor.Id</text>
             @if (Detail == PidDetail.Full)
             {
-                @:<text class="pid-bubble-value" y="@N(PlantLayout.BubbleRadius + 14)">@sensor.ReportedValue.ToString("0.##", CultureInfo.InvariantCulture) @sensor.Unit</text>
+                <g><text class="pid-bubble-value" y="@N(PlantLayout.BubbleRadius + 14)">@sensor.ReportedValue.ToString("0.##", CultureInfo.InvariantCulture) @sensor.Unit</text></g>
                 @if (sensor.Quality != MeasurementQuality.Good)
                 {
-                    @:<text class="pid-quality" y="@N(PlantLayout.BubbleRadius + 28)">@sensor.Quality</text>
+                    <g><text class="pid-quality" y="@N(PlantLayout.BubbleRadius + 28)">@sensor.Quality</text></g>
                 }
             }
         </g>
