@@ -35,18 +35,18 @@ dotnet test Tests/IntegrationTests -c Release --no-build --filter FullyQualified
 
 Use `--logger 'trx;LogFileName=results.trx'` when collecting machine-readable results. Do not store credential files, PKI private keys or secret-bearing logs in test artifacts.
 
-## Current counts (grid integration branch, Release)
+## Current counts (`main`, Release, 2026-11-22)
 
 | Project | Tests | Result |
 | --- | --- | --- |
 | ArchitectureTests | 13 | pass |
-| UnitTests | 453 | pass (incl. 11 real-engine grid security tests, 3 redactor-total tests, 2 IEC 104 evaluator tests) |
-| IntegrationTests | 190 | pass (incl. real-engine full-day + 8 scenario runs through the grid REST API) |
-| FrontendTests | 89 | pass (incl. 6 grid scenarios/rules page tests, 2 new grid pages) |
-| ProtocolTests | 69 | pass (incl. 2 new IEC 104 operator-view wire tests) |
+| UnitTests | 558 | pass |
+| IntegrationTests | 198 | pass |
+| FrontendTests | 271 | pass (bUnit, incl. both dispatcher workspaces) |
+| ProtocolTests | 73 | pass |
 | PerformanceTests | 6 | pass |
 | DatabaseTests | 32 | pass (Docker/Testcontainers) |
-| EndToEndTests | 9 | pass with `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright` and `SCADA_E2E_REQUIRED=1` (incl. the grid-mode browser test) |
+| EndToEndTests | 9 | pass with `PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright` and `SCADA_E2E_REQUIRED=1` |
 
 ## Step 7 suites and CI
 

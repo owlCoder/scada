@@ -5,16 +5,11 @@ A box is ticked only after the feature is implemented **and** verified by a buil
 
 Baseline (before this work): 110 .NET tests + 3 Node frontend tests passing on `main` at `e95fb31`.
 
-## Overall status (2026-11-21)
+## Overall status (2026-11-22)
 
-Steps 1–4 of the 7-step plan in `docs/SESSION-HANDOFF.md` are done and merged to `main` (about 60 % of the work):
-scenario engine, simulation/detection/incidents/Modbus/API, PostgreSQL persistence, authentication and observability.
-
-Step 5 adds the loopback OPC UA server on `feature/opcua`.
-
-Remaining:
-- Step 6: Blazor HMI and SignalR. This is the largest remaining step.
-- Step 7: E2E, performance and protocol tests, Docker smoke test, CI, documentation, PR.
+The plan is finished: Steps 1–7 of the plan in `docs/SESSION-HANDOFF.md` (now a historical record), the electrical grid mode
+and the dispatcher workspaces for both modes are all done, verified and merged to `main`, with CI green.
+No planned work remains open.
 
 ## Phase A — Inspection
 - [x] Repository cloned to Desktop, Git identity set to `owlCoder` (verified GitHub-linked email)
@@ -70,6 +65,14 @@ Remaining:
 - [x] 10 grid detection rules and 8 grid attack scenarios that work on any drawn network
 - [x] ISA-101 refresh of the water HMI
 
+## Phase L — Dispatcher workspaces
+- [x] Dispatcher contracts, design tokens and per-area stylesheets
+- [x] Grid dispatcher backend: safety tags with command enforcement and a reported-value historian
+- [x] Full-viewport dispatcher shell (top bar, alarm bar, status bar, quick switcher)
+- [x] Grid workspace on `/grid/diagram`: `<GridSld>` single-line canvas, control window and bottom dock (alarms, events, commands, trend, tags)
+- [x] Water P&ID workspace on `/diagram` (ISA-5.1 symbols, minimap, context menu, bottom dock)
+- [x] Two operator-review polish rounds for control-room readability; temporary `/grid/sld-preview` route removed
+
 ## Verification log
 - 2026-11-21, first commit (Phase B-D): `dotnet build scada.slnx -c Release` with 0 warnings; 246 .NET tests (12 architecture,
   155 unit, 79 integration) and 3 Node frontend tests pass. All 14 scenarios end as Detected, and 600 simulated seconds of
@@ -100,3 +103,6 @@ Remaining:
   32 database, 9 Playwright E2E) pass on macOS; `dotnet format --verify-no-changes` clean; `scripts/smoke.sh` passes; CI green on
   all seven jobs. Live: grid sign-in, single-line diagram, select-before-operate opening and closing of a feeder breaker with
   loss-of-supply alarms and recovery. A normal simulated day produces zero grid detections and all 8 grid scenarios end Detected.
+- 2026-11-22, dispatcher workspaces: Release build with zero warnings; 1,160 .NET tests (13 architecture, 558 unit,
+  198 integration, 271 bUnit, 73 protocol, 6 performance, 32 database, 9 Playwright E2E) pass on macOS; `dotnet format
+  --verify-no-changes` clean; CI green on `main`.

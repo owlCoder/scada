@@ -1,5 +1,9 @@
 # Session Handoff: Full SCADA Platform Build-out
 
+> **Historical record.** All seven steps below, the electrical grid mode and the dispatcher workspaces are finished and
+> merged to `main`. For the current status and verification log see [implementation-progress.md](implementation-progress.md);
+> the worktrees, branches and agent briefs named below no longer exist. Keep this file only as the design history.
+
 Read this first in a new session. It records exactly where the previous session stopped.
 The original task is the "MASTER IMPLEMENTATION PROMPT — COMPLETE SCADA PROJECT" (paste it again in the new session together with this file).
 

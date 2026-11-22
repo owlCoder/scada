@@ -425,16 +425,6 @@ public sealed class GridSldTests
         Assert.Empty(page.FindAll(".sld-tooltip"));
     }
 
-    [Fact]
-    public async Task PreviewRouteRendersTheCanvasFullScreen()
-    {
-        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridSldPreview>();
-        Assert.NotEmpty(page.FindAll("svg.sld-canvas"));
-        Assert.NotEmpty(page.FindAll("g.sld-el"));
-        Assert.DoesNotContain("Live data could not be refreshed", page.Markup);
-    }
-
     private static AngleSharp.Dom.IElement Button<T>(IRenderedComponent<T> page, string text) where T : IComponent =>
         page.FindAll("button").Single(b => b.TextContent.Trim() == text);
 }

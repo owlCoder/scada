@@ -12,9 +12,6 @@ All grid data pages inherit `GridPageBase` → `ConfirmedComponentBase` → `Rea
 | --- | --- |
 | `/grid` | Load, generation, import, losses, supplied customers, alarm priorities, transformer loading, voltage ranges and feeder cards |
 | `/grid/diagram` | **Dispatcher workspace**: the `<GridSld>` canvas fills the area; right dock = control window for the selected element; resizable bottom dock with Alarms / Events / Commands / Trend / Tags tabs |
-
-| `/grid/diagram` | Live SVG single-line diagram generated from definition positions, terminals and line waypoints; mouse/touch pan, wheel/button zoom, keyboard selection and faceplates (being replaced by the dispatcher workspace that hosts the `<GridSld>` canvas) |
-| `/grid/sld-preview` | Temporary dev route rendering only the `<GridSld>` canvas full-screen (may be removed once the workspace lands) |
 | `/grid/feeders` | Branch currents, power, losses and loading bars |
 | `/grid/transformers` | Transformer loading, taps and AVR faceplates |
 | `/grid/switches` | Switch state, selections, last operator/cause and faceplates |
@@ -31,7 +28,7 @@ Water and grid share a calm grey shell, tables and cards. In grid mode the nav s
 
 ## Single-line diagram canvas (`GridSld`)
 
-`<GridSld>` (parameters unchanged: `Snapshot`, `Definition`, `Tags`, `SelectedId`/`SelectedIdChanged`, `OnAction`, `CanOperate`) is the dispatcher canvas that the grid workspace hosts full-screen; `/grid/sld-preview` renders it standalone for development. It fills its container on the dark `--c-canvas` background and keeps all state in C#:
+`<GridSld>` (parameters unchanged: `Snapshot`, `Definition`, `Tags`, `SelectedId`/`SelectedIdChanged`, `OnAction`, `CanOperate`) is the dispatcher canvas that the grid workspace hosts full-screen. It fills its container on the dark `--c-canvas` background and keeps all state in C#:
 
 - **Geometry** — `SldModelBuilder` turns the definition into static SVG geometry once per definition: busbars as thick bars, line polylines through waypoints and inline switches, bus→element stubs, one dashed substation frame per RTU (`SldFramesLayer`, re-rendered only when the definition changes). Dynamic per-tick state comes from `SldStateBuilder` into `SldElementState` records, so each `<SldElementG @key>` re-renders only when its own state record changes.
 - **States** — closed switches are filled with the voltage colour (`--c-kv-*`), open ones hollow with `--c-open`, bad/unknown quality `--c-invalid` with "?"; de-energised sections `--c-dead`; quality flags U/B from reported measurements only (never spoof indicators). View modes: *Voltage levels* (default), *Energisation*, *Loading* (heat scale `--c-load-*`, also as a toggleable overlay). Energised branches show flow arrows in the measured power direction.
