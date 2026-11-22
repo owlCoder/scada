@@ -1,0 +1,68 @@
+@* Alarms tab: ISA-18.2 table with priority colours, blinking unacknowledged rows and acknowledgement via AlarmService. *@
+@inherits ConfirmedComponentBase
+@inject Application.Alarms.AlarmService AlarmService
+
+@if (_alarms.Count == 0)
+{
+    <EmptyState Message="No alarms." />
+}
+else
+{
+    <table class="grid pid-alarm-table">
+        <thead>
+            <tr><th>Priority</th><th>Raised</th><th>Source</th><th>Alarm</th><th>State</th><th>Acknowledgement</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var alarm in _alarms)
+            {
+                var unack = alarm.IsActive && !alarm.IsAcknowledged;
+                <tr class="@(unack ? "pid-row-unack" : "")">
+                    <td><span class="pid-prio pid-@PriorityClass(alarm.Severity) @(unack ? "pid-blink" : "")">@alarm.Severity</span></td>
+                    <td class="nowrap">@alarm.RaisedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                    <td>@alarm.SourceId</td>
+                    <td>@alarm.Message</td>
+                    <td>@(alarm.IsActive ? "Active" : "Cleared")</td>
+                    <td>@(alarm.IsAcknowledged ? $"by {alarm.AcknowledgedBy}" : "Unacknowledged")</td>
+                    <td>
+                        @if (Session.CanOperate && !alarm.IsAcknowledged)
+                        {
+                            <button class="btn" @onclick="() => AskAcknowledge(alarm.Key)">Acknowledge</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+<OutcomeBanner Outcome="Outcome" />
+<ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+
+@code {
+    private IReadOnlyList<ProcessAlarm> _alarms = [];
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Alarms];
+    protected override TimeSpan MinimumRefreshInterval => TimeSpan.FromSeconds(1);
+
+    protected override bool Refresh()
+    {
+        _alarms = AlarmService.GetCurrent()
+            .OrderByDescending(a => a.IsActive)
+            .ThenByDescending(a => a.Severity)
+            .ThenByDescending(a => a.RaisedAt)
+            .ToArray();
+        return true;
+    }
+
+    private bool AskAcknowledge(string key) =>
+        Ask("Acknowledge alarm?", "Record your acknowledgement of this alarm.",
+            () => Task.FromResult(AlarmService.Acknowledge(key, Session.Actor)
+                ? ActionOutcome.Done("Alarm acknowledged.") : ActionOutcome.Failed("Alarm acknowledgement failed.")));
+
+    private static string PriorityClass(AlarmSeverity severity) => severity switch
+    {
+        AlarmSeverity.Critical => "p1",
+        AlarmSeverity.High => "p2",
+        AlarmSeverity.Medium => "p3",
+        _ => "p4"
+    };
+}

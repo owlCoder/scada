@@ -1,1 +1,213 @@
-/* pid styles */
+/* ==========================================================================
+   WATER P&ID DISPATCHER WORKSPACE (pid.css)
+   --------------------------------------------------------------------------
+   Full-area ISA-101 / ISA-5.1 workspace for the water /diagram page. Every
+   class is pid- prefixed and every colour comes from tokens.css: colour only
+   carries meaning (alarm priority, quality, state), never decoration.
+   ========================================================================== */
+
+/* ---- Workspace shell: canvas fills the area, control window right, dock bottom ---- */
+.pid-head { margin: 0 0 8px; }
+.pid-head h1 { font-size: var(--fs-xl); margin: 0; }
+.pid-head .page-sub { margin: 2px 0 0; font-size: var(--fs-sm); }
+
+.pid-workspace {
+    display: grid;
+    grid-template-areas: "canvas control" "dock dock";
+    grid-template-columns: minmax(0, 1fr) var(--w-dock-right);
+    grid-template-rows: minmax(0, 1fr) var(--h-dock-bottom);
+    gap: 10px;
+    height: calc(100dvh - var(--h-topbar) - 110px);
+    min-height: 460px;
+    outline: none;
+}
+.pid-workspace:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+
+.pid-canvas-wrap {
+    grid-area: canvas;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    background: var(--c-canvas);
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.pid-canvas { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; cursor: grab; }
+.pid-canvas:active { cursor: grabbing; }
+
+/* ---- Floating toolbar (zoom / fit) and minimap over the canvas ---- */
+.pid-toolbar {
+    position: absolute; top: 8px; left: 8px; z-index: 3;
+    display: flex; align-items: center; gap: 6px;
+    background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 8px; padding: 4px 8px;
+}
+.pid-toolbar .btn { padding: 3px 10px; font-size: var(--fs-sm); }
+.pid-zoom {
+    min-width: 46px; text-align: right;
+    font-family: var(--font-value); font-variant-numeric: tabular-nums;
+    font-size: var(--fs-xs); color: var(--c-text-muted);
+}
+.pid-minimap {
+    position: absolute; right: 8px; bottom: 8px; z-index: 3;
+    background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 6px;
+    opacity: .92; cursor: crosshair;
+}
+.pid-minimap-view { fill: none; stroke: var(--c-focus); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pid-minimap .pid-pipe { stroke-width: 2; }
+.pid-minimap .pid-tank, .pid-minimap .pid-pump, .pid-minimap .pid-valve,
+.pid-minimap .pid-bubble, .pid-minimap .pid-controller-box { stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+/* ---- Right control window (PlantFaceplate) ---- */
+.pid-workspace > aside.detail {
+    grid-area: control;
+    position: static;
+    margin: 0;
+    overflow-y: auto;
+    min-height: 0;
+}
+.pid-control-empty p { font-size: var(--fs-sm); }
+.pid-control { font-size: var(--fs-md); }
+.pid-value-text { font-family: var(--font-value); font-variant-numeric: tabular-nums; }
+.pid-slider { width: 150px; accent-color: var(--c-focus); }
+.pid-slider-label { display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--c-text-muted); }
+.pid-sparkline-wrap { border: 1px solid var(--c-border); border-radius: 8px; padding: 6px; background: var(--c-canvas); }
+.pid-comms-text.pid-comms-online { color: var(--c-load-ok); }
+.pid-comms-text.pid-comms-degraded { color: var(--c-p3); }
+.pid-comms-text.pid-comms-offline { color: var(--c-p1); }
+
+/* ---- P&ID canvas symbols (all inside the svg.pid-canvas) ---- */
+.pid-device { cursor: pointer; }
+.pid-device:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.pid-device.pid-selected .pid-tank,
+.pid-device.pid-selected .pid-pump,
+.pid-device.pid-selected .pid-valve,
+.pid-device.pid-selected .pid-bubble,
+.pid-device.pid-selected .pid-controller-box { stroke: var(--c-focus); stroke-width: 3; }
+
+.pid-pipe { fill: none; stroke: var(--c-text-muted); stroke-width: 4; stroke-linejoin: round; }
+.pid-pipe-flow { stroke: var(--c-text); stroke-dasharray: 10 8; animation: pid-flow 1s linear infinite; }
+@keyframes pid-flow { to { stroke-dashoffset: -18; } }
+.pid-flow-arrow { fill: var(--c-text); }
+
+.pid-tank { fill: var(--c-canvas); stroke: var(--c-text); stroke-width: 2; }
+.pid-liquid { fill: var(--c-kv-20); opacity: .85; }
+.pid-liquid-alarm { fill: var(--c-p1); opacity: 1; }
+.pid-tank-limit { stroke: var(--c-text-muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pid-tank-limit-critical { stroke: var(--c-p1); }
+.pid-tank-limit-label { fill: var(--c-text-muted); font-size: 8px; font-family: var(--font-value); }
+
+.pid-device-label { fill: var(--c-text); font-size: var(--fs-sm); font-family: var(--font-ui); text-anchor: middle; }
+.pid-label-small { fill: var(--c-text-muted); font-size: var(--fs-xs); font-family: var(--font-value); font-variant-numeric: tabular-nums; text-anchor: middle; }
+.pid-value {
+    fill: var(--c-text); font-family: var(--font-value); font-variant-numeric: tabular-nums;
+    font-size: var(--fs-lg); font-weight: 700; text-anchor: middle;
+}
+.pid-quality { fill: var(--c-invalid); font-size: var(--fs-xs); font-family: var(--font-value); text-anchor: middle; }
+
+.pid-pump { fill: var(--c-canvas); stroke: var(--c-text); stroke-width: 2; }
+.pid-pump.pid-running { fill: var(--c-load-ok); stroke: var(--c-load-ok); }
+.pid-pump.pid-stopped { fill: var(--c-canvas); stroke: var(--c-dead); }
+.pid-pump.pid-faulted, .pid-valve.pid-faulted { fill: var(--c-p1); stroke: var(--c-p1); }
+.pid-pump-arrow { fill: var(--c-canvas); }
+.pid-pump-stop { stroke: var(--c-text); stroke-width: 3; fill: none; stroke-linecap: round; }
+.pid-pump-fault-mark { fill: var(--c-text); font-size: 22px; font-weight: 700; text-anchor: middle; }
+
+.pid-valve { stroke: var(--c-text); stroke-width: 1.5; }
+.pid-valve.pid-valve-open { fill: var(--c-text); }
+.pid-valve.pid-valve-closed { fill: var(--c-canvas); }
+.pid-valve-stem { stroke: var(--c-text); stroke-width: 2; }
+
+/* ISA instrument bubbles connected to their process point */
+.pid-instrument-line { stroke: var(--c-text-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.pid-bubble { fill: var(--c-panel); stroke: var(--c-text); stroke-width: 1.5; }
+.pid-bubble-tag { fill: var(--c-text); font-size: 9px; font-family: var(--font-value); text-anchor: middle; }
+.pid-bubble-value {
+    fill: var(--c-text); font-size: var(--fs-xs); text-anchor: middle;
+    font-family: var(--font-value); font-variant-numeric: tabular-nums;
+}
+
+/* Controller (PLC/RTU) station boxes */
+.pid-controller-box { fill: var(--c-panel); stroke: var(--c-border); stroke-width: 1.5; }
+.pid-controller-id { fill: var(--c-text); font-size: var(--fs-sm); font-weight: 600; font-family: var(--font-ui); }
+.pid-controller-line { font-size: var(--fs-xs); font-family: var(--font-value); }
+.pid-comms-online { fill: var(--c-load-ok); }
+.pid-comms-degraded { fill: var(--c-p3); }
+.pid-comms-offline { fill: var(--c-p1); }
+
+/* Alarm bells: priority colour, blinking while unacknowledged */
+.pid-bell-shape { stroke: none; }
+.pid-p1 { fill: var(--c-p1); }
+.pid-p2 { fill: var(--c-p2); }
+.pid-p3 { fill: var(--c-p3); }
+.pid-p4 { fill: var(--c-p4); }
+.pid-blink { animation: blink-unack 1.2s ease-in-out infinite; }
+
+/* ---- Context menu (drawn inside the canvas at the device anchor) ---- */
+.pid-menu { filter: none; }
+.pid-menu-box { fill: var(--c-panel); stroke: var(--c-border); stroke-width: 1; }
+.pid-menu-item { cursor: pointer; }
+.pid-menu-item-bg { fill: transparent; }
+.pid-menu-item:hover .pid-menu-item-bg,
+.pid-menu-item:focus-visible .pid-menu-item-bg { fill: var(--c-panel-2); }
+.pid-menu-item:focus-visible { outline: none; }
+.pid-menu-item text { fill: var(--c-text); font-size: var(--fs-sm); font-family: var(--font-ui); pointer-events: none; }
+
+/* ---- Bottom dock with tabs ---- */
+.pid-dock {
+    grid-area: dock;
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; overflow: hidden;
+}
+.pid-dock-tabs {
+    display: flex; gap: 4px; padding: 6px 8px 0;
+    background: var(--c-panel-2); border-bottom: 1px solid var(--c-border);
+}
+.pid-dock-tab {
+    background: none; border: 1px solid transparent; border-bottom: none;
+    color: var(--c-text-muted); font: inherit; font-size: var(--fs-sm);
+    padding: 6px 12px; border-radius: 8px 8px 0 0; cursor: pointer;
+}
+.pid-dock-tab:hover { color: var(--c-text); }
+.pid-dock-tab-active { color: var(--c-text); background: var(--c-panel); border-color: var(--c-border); }
+.pid-dock-tab:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+.pid-dock-badge {
+    margin-left: 6px; padding: 0 6px; border-radius: 10px;
+    background: var(--c-p1); color: var(--c-text);
+    font-family: var(--font-value); font-variant-numeric: tabular-nums; font-size: var(--fs-xs);
+}
+.pid-dock-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; }
+.pid-dock-body .grid { font-size: var(--fs-sm); }
+.pid-dock-body .grid td, .pid-dock-body .grid th { padding: 6px 8px; }
+.pid-row-unack td { background: color-mix(in srgb, var(--c-p1) 12%, transparent); }
+.pid-row-rejected td { background: color-mix(in srgb, var(--c-p1) 8%, transparent); }
+.pid-prio {
+    display: inline-block; min-width: 64px; text-align: center;
+    padding: 2px 8px; border-radius: 12px; color: var(--c-bg); font-weight: 600; font-size: var(--fs-xs);
+}
+
+/* ---- Trend tab ---- */
+.pid-trend-picker { margin: 0 0 6px; }
+.pid-trend-picker label { font-size: var(--fs-sm); }
+.pid-trend-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 6px; font-size: var(--fs-sm); font-family: var(--font-value); }
+.pid-trend-chart { width: 100%; height: auto; min-height: 140px; background: var(--c-canvas); border: 1px solid var(--c-border); border-radius: 8px; }
+.pid-axis { stroke: var(--c-border); stroke-width: 1; }
+.pid-tick { fill: var(--c-text-muted); font-size: 10px; font-family: var(--font-value); }
+.pid-trend-line { fill: none; stroke-width: 2; }
+.pid-trend-dot { stroke: none; }
+.pid-trend-s1 { stroke: var(--c-kv-20); fill: var(--c-kv-20); }
+.pid-trend-s2 { stroke: var(--c-kv-35); fill: var(--c-kv-35); }
+.pid-trend-s3 { stroke: var(--c-load-ok); fill: var(--c-load-ok); }
+.pid-trend-s4 { stroke: var(--c-kv-04); fill: var(--c-kv-04); }
+.pid-trend-key.pid-trend-s1, .pid-trend-key.pid-trend-s2, .pid-trend-key.pid-trend-s3, .pid-trend-key.pid-trend-s4 { font-family: var(--font-value); }
+
+/* ---- Responsive: stack the control window and dock on narrow screens ---- */
+@media (max-width: 1100px) {
+    .pid-workspace {
+        grid-template-areas: "canvas" "control" "dock";
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(320px, 1fr) auto var(--h-dock-bottom);
+        height: auto;
+    }
+    .pid-workspace > aside.detail { max-height: 320px; }
+}

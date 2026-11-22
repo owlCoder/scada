@@ -72,12 +72,12 @@ public sealed class PlantFaceplateTests
         var plant = host.Rig.Engine.Read(w => w.Plant.CaptureSnapshot());
         var page = host.Context.Render<Diagram>();
 
-        Assert.Equal(plant.Tanks.Count * 4, page.FindAll(".diagram .tank-limit").Count);
-        Assert.Equal(plant.Valves.Count, page.FindAll(".diagram .valve-stem").Count);
+        Assert.Equal(plant.Tanks.Count * 4, page.FindAll(".pid-canvas .pid-tank-limit").Count);
+        Assert.Equal(plant.Valves.Count, page.FindAll(".pid-canvas .pid-valve-stem").Count);
         Assert.Equal(plant.Pumps.Count,
-            page.FindAll(".diagram .pump-stop").Count + page.FindAll(".diagram .pump-arrow").Count + page.FindAll(".diagram .pump-fault-mark").Count);
+            page.FindAll(".pid-canvas .pid-pump-stop").Count + page.FindAll(".pid-canvas .pid-pump-arrow").Count + page.FindAll(".pid-canvas .pid-pump-fault-mark").Count);
 
-        var pumpDevice = page.FindAll("g.device").First(g => g.GetAttribute("aria-label") == plant.Pumps[0].Name);
+        var pumpDevice = page.FindAll("g.pid-device").First(g => g.GetAttribute("aria-label") == plant.Pumps[0].Name);
         pumpDevice.TriggerEvent("onkeydown", new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter" });
 
         var faceplate = page.Find("aside.detail.plant-faceplate");

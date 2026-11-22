@@ -1,0 +1,60 @@
+@* Right-click context menu, drawn inside the P&ID canvas at the device's anchor so it needs no inline styles.
+   Items are role-aware: viewers only get Trend/Details; operators also get the device commands. *@
+@inherits ComponentBase
+
+@if (Visible && DeviceId.Length > 0)
+{
+    var items = Items();
+    <g class="pid-menu" transform="translate(@N(X),@N(Y))" role="menu" aria-label="Device actions for @DeviceId">
+        <rect class="pid-menu-box" width="@N(MenuWidth)" height="@N(8 + items.Count * ItemHeight)" rx="6" />
+        @for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var y = 4 + i * ItemHeight;
+            <g class="pid-menu-item" role="menuitem" tabindex="0" @onclick="() => ChooseAsync(item.Action)"
+               @onkeydown="e => ChooseKeyAsync(e, item.Action)">
+                <rect class="pid-menu-item-bg" x="4" y="@N(y)" width="@N(MenuWidth - 8)" height="@N(ItemHeight - 2)" rx="4" />
+                <text x="12" y="@N(y + 16)">@item.Label</text>
+            </g>
+        }
+    </g>
+}
+
+@code {
+    private const double MenuWidth = 190;
+    private const double ItemHeight = 24;
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string DeviceId { get; set; } = "";
+    [Parameter, EditorRequired] public PlantSnapshot Plant { get; set; } = default!;
+    [Parameter] public bool CanOperate { get; set; }
+    [Parameter] public double X { get; set; }
+    [Parameter] public double Y { get; set; }
+    [Parameter] public EventCallback<PidMenuAction> OnChoose { get; set; }
+
+    private IReadOnlyList<(string Label, string Action)> Items()
+    {
+        var items = new List<(string Label, string Action)>();
+        if (Plant.Pump(DeviceId) is { } pump && CanOperate)
+        {
+            items.Add((pump.State == PumpState.Running ? "Stop" : "Start", pump.State == PumpState.Running ? "stop" : "start"));
+            items.Add((pump.Mode == ControlMode.Manual ? "Automatic" : "Manual", pump.Mode == ControlMode.Manual ? "auto" : "manual"));
+        }
+        if (Plant.Valve(DeviceId) is { } valve && CanOperate)
+        {
+            items.Add(("Set position…", "position"));
+            items.Add((valve.Mode == ControlMode.Manual ? "Automatic" : "Manual", valve.Mode == ControlMode.Manual ? "auto" : "manual"));
+        }
+        if (PidTags.PrimaryTag(Plant, DeviceId) is not null)
+            items.Add(("Trend", "trend"));
+        items.Add(("Details", "details"));
+        return items;
+    }
+
+    private Task ChooseAsync(string action) => OnChoose.InvokeAsync(new PidMenuAction(DeviceId, action));
+
+    private Task ChooseKeyAsync(KeyboardEventArgs e, string action) =>
+        e.Key is "Enter" or " " ? ChooseAsync(action) : Task.CompletedTask;
+
+    private static string N(double value) => PlantLayout.Number(value);
+}

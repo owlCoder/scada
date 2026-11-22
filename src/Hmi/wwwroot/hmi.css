@@ -46,18 +46,7 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; width: min(440px, 92vw); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .diagram-layout { display: grid; grid-template-columns: 1fr 300px; gap: 14px; align-items: start; }
-.diagram { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
-.diagram .tank { fill: #0f1a2a; stroke: #4a6380; stroke-width: 2; } .diagram .liquid { fill: var(--liquid); } .diagram .liquid-alarm { fill: var(--alarm); }
-.diagram .pipe { fill: none; stroke: #4a6380; stroke-width: 5; stroke-linejoin: round; }
-.diagram .pipe-flow { stroke: var(--liquid); stroke-dasharray: 12 8; animation: flow 1s linear infinite; }
-@keyframes flow { to { stroke-dashoffset: -20; } }
-.diagram .pump { stroke: #c8d6e8; stroke-width: 2; } .diagram .pump.running { fill: #6c747c; } .diagram .pump.stopped { fill: #373c41; }
-.diagram .faulted { fill: #8a2c2c !important; } .diagram .pump-arrow { fill: #e7eef7; }
-.diagram .valve { stroke: #c8d6e8; stroke-width: 1.5; } .diagram .valve-open { fill: var(--ok); } .diagram .valve-closed { fill: #373c41; }
-.diagram .label { fill: var(--text); font-size: 14px; text-anchor: middle; } .diagram .label.small { font-size: 11px; fill: var(--muted); }
-.diagram .value { fill: #fff; font-size: 16px; font-weight: 700; text-anchor: middle; }
-.diagram .device { cursor: pointer; } .diagram .device:focus { outline: none; }
-.diagram .device.selected .tank, .diagram .device.selected .pump, .diagram .device.selected .valve { stroke: var(--warn); stroke-width: 3; }
+/* .diagram* rules removed: the water /diagram page now uses css/pid.css (pid- classes). */
 .detail { position: sticky; top: 16px; }
 .chart { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .chart .axis { stroke: #34445b; stroke-width: 1; } .chart .series { fill: none; stroke: var(--ok); stroke-width: 2; }
@@ -126,9 +115,10 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
    Everything below this banner belongs to the water-mode pages only. The
    base theme and the "Grid and shared high-performance HMI surfaces" section
    above are owned by the grid HMI agents; this section only re-declares
-   water-specific selectors (.diagram, .level, .chart are never used by grid
+   water-specific selectors (.level, .chart are never used by grid
    pages) or introduces new water-prefixed class names (.page-head, .kpi-*,
-   .sparkline, .plant-faceplate, .pid-* ...), so grid pages keep their look.
+   .sparkline, .plant-faceplate ...), so grid pages keep their look. The
+   water /diagram P&ID workspace lives entirely in css/pid.css (pid- classes).
    Calm dark grey; colour is reserved for abnormal/alarm states.
    ========================================================================== */
 
@@ -172,34 +162,8 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .level-mark-high { stroke: var(--warn); }
 .level-setpoint { stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 
-/* Plant diagram — ISA-101 P&ID look: grey process lines and equipment outlines,
-   colour only for alarms/faults. Selected device gets a white outline like the grid diagram. */
-.diagram { background: var(--panel); }
-.diagram .pipe { stroke: #8f979e; stroke-width: 4; }
-.diagram .pipe-flow { stroke: #c9ced3; stroke-dasharray: 10 8; }
-.diagram .tank { fill: none; stroke: #b9c0c7; stroke-width: 2; }
-.diagram .liquid { fill: var(--liquid); opacity: .9; }
-.diagram .liquid-alarm { fill: var(--alarm); opacity: 1; }
-.diagram .tank-limit { stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.diagram .tank-limit-critical { stroke: var(--alarm); }
-.diagram .pump { fill: var(--panel-2); stroke: #c8cdd2; stroke-width: 2; }
-.diagram .pump.running { fill: #565c63; }
-.diagram .pump.stopped { fill: var(--panel); }
-.diagram .pump.faulted, .diagram .faulted { fill: #8a2c2c !important; stroke: var(--alarm); }
-.diagram .pump-arrow { fill: #e7eef7; }
-.diagram .pump-stop { stroke: #c8cdd2; stroke-width: 3; fill: none; stroke-linecap: round; }
-.diagram .pump-fault-mark { fill: #fff; font-size: 22px; font-weight: 700; text-anchor: middle; }
-.diagram .valve { stroke: #c8cdd2; stroke-width: 1.5; }
-.diagram .valve-open { fill: #9aa1a8; }
-.diagram .valve-closed { fill: var(--panel); }
-.diagram .valve-stem { stroke: #c8cdd2; stroke-width: 2; }
-.diagram .label { fill: var(--text); font-size: 14px; text-anchor: middle; }
-.diagram .label.small { font-size: 11px; fill: var(--muted); }
-.diagram .value { fill: var(--text); font-size: 16px; font-weight: 700; text-anchor: middle; }
-.diagram .device-quality { fill: var(--warn); font-size: 11px; text-anchor: middle; }
-.diagram .device { cursor: pointer; }
-.diagram .device.selected .tank, .diagram .device.selected .pump, .diagram .device.selected .valve { stroke: #fff; stroke-width: 3; }
-.diagram .device:focus-visible { outline: 2px solid #e0e4e8; outline-offset: 4px; }
+/* Plant diagram — the water /diagram page is now a full-area P&ID workspace styled entirely
+   in css/pid.css (pid- prefixed classes); no .diagram rules remain here. */
 
 /* Water device faceplate (plant diagram side panel), consistent with the grid faceplate */
 .plant-faceplate { font-size: 13px; overflow-wrap: anywhere; }

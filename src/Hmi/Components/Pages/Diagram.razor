@@ -1,147 +1,414 @@
 @page "/diagram"
-@inherits RealtimeComponentBase
+@inherits ConfirmedComponentBase
+@inject IJSRuntime JS
+@inject Application.Commands.ControlCommandService Commands
+@inject Application.Simulation.SimulationEngine Engine
 
 <PageTitle>Plant diagram · SCADA</PageTitle>
 <RefreshErrorBanner Error="@RefreshError" />
-<header class="page-head">
+<header class="page-head pid-head">
     <h1>Plant diagram</h1>
     <p class="page-sub muted">@(Session.IsInstructor ? "Instructor view: true process values." : "Values as reported by the field instruments.")
-        Select a device for its faceplate. Grey lines are process piping; red marks abnormal states only.</p>
+        Drag to pan · mouse wheel zooms at the cursor · right-click a device for actions · double-click opens its control window ·
+        keys +/− zoom, 0 fits, arrows pan, 1–4 switch dock tabs, Esc closes.</p>
 </header>
 
-<div class="diagram-layout">
-    <svg class="diagram" viewBox="0 0 @N(_layout.Width) @N(_layout.Height)" role="img" aria-label="Live plant diagram (P&ID)">
-        @foreach (var pump in _plant.Pumps)
-        {
-            var (px, py) = _layout.Position(pump.Id);
-            var from = _layout.TankCenter(pump.SourceTankId);
-            var to = _layout.TankCenter(pump.TargetTankId);
-            var bottom = PlantLayout.TankTop + PlantLayout.TankHeight;
-            <polyline class="pipe @(pump.FlowRate > 0.001 ? "pipe-flow" : "")"
-                      points="@N(from),@N(bottom) @N(from),@N(py) @N(px),@N(py) @N(to),@N(py) @N(to),@N(bottom)" />
-        }
-        @foreach (var valve in _plant.Valves.Where(v => v.Role != ValveRole.Discharge))
-        {
-            var (vx, vy) = _layout.Position(valve.Id);
-            var tankEdge = valve.Role == ValveRole.Inlet ? PlantLayout.TankTop : PlantLayout.TankTop + PlantLayout.TankHeight;
-            <line class="pipe @(valve.FlowRate > 0.001 ? "pipe-flow" : "")" x1="@N(vx)" y1="@N(vy)" x2="@N(vx)" y2="@N(tankEdge)" />
-        }
-
-        @foreach (var tank in _plant.Tanks)
-        {
-            var (tx, ty) = _layout.Position(tank.Id);
-            var fill = PlantLayout.TankHeight * Math.Clamp(tank.LevelPercent, 0, 100) / 100;
-            <g class="device @(Selected(tank.Id))" @onclick="() => Select(tank.Id)" @onkeydown="e => SelectKey(e, tank.Id)"
-               tabindex="0" role="button" aria-label="@tank.Name">
-                <title>@tank.Name</title>
-                <rect class="tank" x="@N(tx)" y="@N(ty)" width="@N(PlantLayout.TankWidth)" height="@N(PlantLayout.TankHeight)" rx="6" />
-                <rect class="@(tank.LevelPercent >= tank.Thresholds.High || tank.LevelPercent <= tank.Thresholds.Low ? "liquid liquid-alarm" : "liquid")"
-                      x="@N(tx + 3)" y="@N(ty + PlantLayout.TankHeight - fill)" width="@N(PlantLayout.TankWidth - 6)" height="@N(Math.Max(0, fill - 3))" rx="4" />
-                <line class="tank-limit tank-limit-critical" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.LowLow))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.LowLow))" />
-                <line class="tank-limit" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.Low))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.Low))" />
-                <line class="tank-limit" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.High))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.High))" />
-                <line class="tank-limit tank-limit-critical" x1="@N(tx + PlantLayout.TankWidth - 12)" y1="@N(LimitY(ty, tank.Thresholds.HighHigh))" x2="@N(tx + PlantLayout.TankWidth - 2)" y2="@N(LimitY(ty, tank.Thresholds.HighHigh))" />
-                <text class="label" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty - 10)">@tank.Id</text>
-                <text class="value" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty + PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text>
-                @if (Quality(tank.Id, SensorKind.Level) is { } levelQuality && levelQuality != MeasurementQuality.Good)
-                {
-                    @:<text class="device-quality" x="@N(tx + PlantLayout.TankWidth / 2)" y="@N(ty + PlantLayout.TankHeight + 16)">quality: @levelQuality</text>
-                }
-            </g>
-        }
-
-        @foreach (var pump in _plant.Pumps)
-        {
-            var (px, py) = _layout.Position(pump.Id);
-            <g class="device @(Selected(pump.Id))" @onclick="() => Select(pump.Id)" @onkeydown="e => SelectKey(e, pump.Id)"
-               tabindex="0" role="button" aria-label="@pump.Name">
-                <title>@pump.Name</title>
-                <circle class="pump @PumpClass(pump)" cx="@N(px)" cy="@N(py)" r="20" />
-                @if (pump.Health == DeviceHealth.Faulted)
-                {
-                    @:<text class="pump-fault-mark" x="@N(px)" y="@N(py + 8)">!</text>
-                }
-                else if (pump.State == PumpState.Running)
-                {
-                    <polygon class="pump-arrow" points="@N(px - 8),@N(py - 10) @N(px + 12),@N(py) @N(px - 8),@N(py + 10)" />
-                }
-                else
-                {
-                    <path class="pump-stop" d="M @N(px - 6),@N(py - 8) L @N(px - 6),@N(py + 8) M @N(px + 6),@N(py - 8) L @N(px + 6),@N(py + 8)" />
-                }
-                <text class="label" x="@N(px)" y="@N(py + 38)">@pump.Id</text>
-                <text class="label small" x="@N(px)" y="@N(py + 52)">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text>
-                @if (Quality(pump.Id, SensorKind.Flow) is { } flowQuality && flowQuality != MeasurementQuality.Good)
-                {
-                    @:<text class="device-quality" x="@N(px)" y="@N(py + 66)">quality: @flowQuality</text>
-                }
-            </g>
-        }
-
-        @foreach (var valve in _plant.Valves)
-        {
-            var (vx, vy) = _layout.Position(valve.Id);
-            <g class="device @(Selected(valve.Id))" @onclick="() => Select(valve.Id)" @onkeydown="e => SelectKey(e, valve.Id)"
-               tabindex="0" role="button" aria-label="@valve.Name">
-                <title>@valve.Name</title>
-                <line class="valve-stem" x1="@N(vx)" y1="@N(vy - 10)" x2="@N(vx)" y2="@N(vy - 18)" />
-                <polygon class="valve @(valve.Position > 0.5 ? "valve-open" : "valve-closed") @(valve.Health != DeviceHealth.Healthy ? "faulted" : "")"
-                         points="@N(vx - 14),@N(vy - 10) @N(vx + 14),@N(vy + 10) @N(vx + 14),@N(vy - 10) @N(vx - 14),@N(vy + 10)" />
-                <text class="label small" x="@N(vx)" y="@N(vy - 24)">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
-                @if (Quality(valve.Id, SensorKind.Flow) is { } valveQuality && valveQuality != MeasurementQuality.Good)
-                {
-                    @:<text class="device-quality" x="@N(vx)" y="@N(vy + 26)">quality: @valveQuality</text>
-                }
-            </g>
-        }
-    </svg>
+<div class="pid-workspace" tabindex="0" @onkeydown="OnKeyDownAsync" @onpointerdown="() => ResetDrag()" @onclick="() => CloseMenu()">
+    <div class="pid-canvas-wrap">
+        <svg @ref="_canvas" class="pid-canvas" viewBox="@ViewBox" preserveAspectRatio="xMidYMid meet" role="img"
+             aria-label="Live water plant P&ID workspace"
+             @onpointerdown="StartPanAsync" @onpointermove="MovePanAsync" @onpointerup="EndPanAsync" @onpointercancel="EndPanAsync"
+             @onwheel="WheelAsync" @onwheel:preventDefault>
+            <PidDiagram Plant="_plant" Layout="_layout" Controllers="_controllers" SelectedId="_selected" Detail="Detail"
+                        OnSelect="SelectAsync" OnMenu="OpenMenuAsync" OnOpen="OpenAsync" />
+            @if (_menu is not null)
+            {
+                <PidContextMenu Visible="true" DeviceId="@_menu" Plant="_plant" CanOperate="Session.CanOperate"
+                                X="@MenuX" Y="@MenuY" OnChoose="ChooseMenuAsync" />
+            }
+        </svg>
+        <div class="pid-toolbar" role="toolbar" aria-label="Diagram view controls">
+            <button type="button" class="btn" title="Zoom in (+)" @onclick="() => ZoomButtonAsync(0.8)">+</button>
+            <button type="button" class="btn" title="Zoom out (−)" @onclick="() => ZoomButtonAsync(1.25)">−</button>
+            <button type="button" class="btn" title="Fit the whole diagram (0)" @onclick="() => FitAsync()">Fit</button>
+            <span class="pid-zoom">@ZoomPercent %</span>
+        </div>
+        <PidMinimap Plant="_plant" Layout="_layout" Controllers="_controllers"
+                    ViewX="_x" ViewY="_y" ViewWidth="_w" ViewHeight="_h" OnCenter="CenterOnAsync" />
+    </div>
 
     @if (_selected is null)
     {
-        <aside class="panel detail">
-            <h2>Faceplate</h2>
-            <p>Select a tank, pump or valve to inspect and operate it.</p>
-            <p class="muted">Filled pump circle with arrow: running. Stop bars: stopped. "!": faulted. Filled valve bowtie: open.</p>
+        <aside class="panel detail pid-control-empty">
+            <h2>Control window</h2>
+            <p>Select a tank, pump, valve, instrument or controller on the diagram to inspect and operate it here.</p>
+            <p class="muted">Running pump: filled circle with an arrow. Stopped: stop bars. Faulted: red with "!".
+                Open valve: filled bow-tie. Bells: active alarms, blinking while unacknowledged. Bubbles: instruments with reported value and unit.</p>
         </aside>
     }
     else
     {
         <PlantFaceplate @key="_selected" DeviceId="@_selected" />
     }
+
+    <PidDock @bind-ActiveTab="_dockTab" TagRequest="_tagRequest" />
+
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
 </div>
 
 @code {
+    private const double MinViewFactor = 1.0 / 12;
+    private const double MaxViewFactor = 3.0;
+    private const double MenuWidth = 190;
+
+    private ElementReference _canvas;
+    private IJSObjectReference? _module;
     private PlantSnapshot _plant = default!;
     private PlantLayout _layout = default!;
+    private IReadOnlyList<ControllerSnapshot> _controllers = [];
     private string? _selected;
+    private string? _menu;
+    private int _dockTab;
+    private (string Tag, long Id)? _tagRequest;
+    private long _tagSeq;
+    private double _x, _y, _w, _h;
+    private bool _fitted;
+    private PidPoint? _pan;
+    private double _dragged;
+    private bool _suppressClick;
 
-    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant];
+    protected override IReadOnlyCollection<string> Topics =>
+        [RealtimeTopics.Plant, RealtimeTopics.Alarms, RealtimeTopics.Controllers, RealtimeTopics.Events];
 
     protected override bool Refresh()
     {
         _plant = Session.Plant();
-        _layout = new PlantLayout(_plant);
+        _controllers = Engine.Read(world => world.Controllers.Select(controller => controller.Snapshot()).ToArray());
+        _layout = new PlantLayout(_plant, _controllers.Select(controller => controller.Id).ToArray());
+        if (!_fitted)
+        {
+            Fit();
+            _fitted = true;
+        }
         return true;
     }
 
-    private bool Select(string id)
+    private PidDetail Detail
     {
-        _selected = id;
+        get
+        {
+            // factor 1 = fitted view; larger factor = zoomed out, so less detail is drawn to keep labels legible.
+            var factor = _w / Math.Max(_layout.Width, 1);
+            if (factor < 1.5)
+                return PidDetail.Full;
+            return factor < 3 ? PidDetail.Compact : PidDetail.Symbols;
+        }
+    }
+
+    private string ViewBox => $"{N(_x)} {N(_y)} {N(_w)} {N(_h)}";
+    private string ZoomPercent => (_layout.Width / Math.Max(_w, 1) * 100).ToString("0", CultureInfo.InvariantCulture);
+
+    private double MenuX
+    {
+        get
+        {
+            if (_menu is null)
+                return 0;
+            var (ax, _) = _layout.Anchor(_menu);
+            var x = ax + 28;
+            if (x + MenuWidth > _layout.Width)
+                x = ax - MenuWidth - 28;
+            return Math.Max(4, x);
+        }
+    }
+
+    private double MenuY
+    {
+        get
+        {
+            if (_menu is null)
+                return 0;
+            var (_, ay) = _layout.Anchor(_menu);
+            return Math.Max(4, ay - 10);
+        }
+    }
+
+    private bool Fit()
+    {
+        _x = -10;
+        _y = -10;
+        _w = _layout.Width + 20;
+        _h = _layout.Height + 20;
         return true;
     }
 
-    private bool SelectKey(KeyboardEventArgs e, string id) => e.Key is "Enter" or " " && Select(id);
+    private Task FitAsync()
+    {
+        Fit();
+        return Task.CompletedTask;
+    }
 
-    private string Selected(string id) => id == _selected ? "selected" : "";
+    private bool ClampView()
+    {
+        _x = Math.Clamp(_x, -_w / 2, _layout.Width - _w / 2);
+        _y = Math.Clamp(_y, -_h / 2, _layout.Height - _h / 2);
+        return true;
+    }
 
-    private MeasurementQuality? Quality(string deviceId, SensorKind kind) =>
-        _plant.Sensors.FirstOrDefault(s => s.DeviceId == deviceId && s.Kind == kind)?.Quality;
+    private async Task ZoomAtAsync(double factor, double? clientX, double? clientY)
+    {
+        var newWidth = Math.Clamp(_w * factor, _layout.Width * MinViewFactor, _layout.Width * MaxViewFactor);
+        var ratio = newWidth / _w;
+        var px = _x + _w / 2;
+        var py = _y + _h / 2;
+        if (clientX is { } cx && clientY is { } cy && await PointAsync(cx, cy) is { } point)
+        {
+            px = point.X;
+            py = point.Y;
+        }
+        _x = px - (px - _x) * ratio;
+        _y = py - (py - _y) * ratio;
+        _w = newWidth;
+        _h = newWidth * _layout.Height / _layout.Width;
+        ClampView();
+    }
 
-    private static double LimitY(double tankTop, double limit) =>
-        tankTop + PlantLayout.TankHeight * (1 - Math.Clamp(limit, 0, 100) / 100);
+    private Task ZoomButtonAsync(double factor) => ZoomAtAsync(factor, null, null);
 
-    private static string PumpClass(PumpSnapshot pump) =>
-        pump.Health == DeviceHealth.Faulted ? "faulted" : pump.State == PumpState.Running ? "running" : "stopped";
+    private Task WheelAsync(WheelEventArgs e) => ZoomAtAsync(e.DeltaY < 0 ? 0.9 : 1.1, e.ClientX, e.ClientY);
+
+    private async Task StartPanAsync(PointerEventArgs e)
+    {
+        if (e.Button != 0)
+            return;
+        _dragged = 0;
+        var module = await ModuleAsync();
+        if (module is null)
+            return;
+        await module.InvokeAsync<bool>("capture", _canvas, e.PointerId);
+        _pan = await module.InvokeAsync<PidPoint>("point", _canvas, e.ClientX, e.ClientY);
+    }
+
+    private async Task MovePanAsync(PointerEventArgs e)
+    {
+        if (_pan is null)
+            return;
+        var point = await PointAsync(e.ClientX, e.ClientY);
+        if (point is null)
+            return;
+        _dragged += Math.Abs(point.X - _pan.X) + Math.Abs(point.Y - _pan.Y);
+        _x -= point.X - _pan.X;
+        _y -= point.Y - _pan.Y;
+        _pan = point;
+        ClampView();
+    }
+
+    private async Task EndPanAsync(PointerEventArgs e)
+    {
+        if (_pan is not null)
+        {
+            _suppressClick = _dragged > 6;
+            var module = await ModuleAsync();
+            if (module is not null)
+                await module.InvokeAsync<bool>("release", _canvas, e.PointerId);
+        }
+        _pan = null;
+    }
+
+    private bool ResetDrag()
+    {
+        _dragged = 0;
+        _suppressClick = false;
+        return true;
+    }
+
+    private async Task<PidPoint?> PointAsync(double clientX, double clientY)
+    {
+        var module = await ModuleAsync();
+        if (module is null)
+            return null;
+        try
+        {
+            return await module.InvokeAsync<PidPoint>("point", _canvas, clientX, clientY);
+        }
+        catch (JSException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<IJSObjectReference?> ModuleAsync()
+    {
+        if (_module is not null)
+            return _module;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Hmi/js/pid.js");
+        }
+        catch (JSException)
+        {
+            // No JS (e.g. prerender or a test without a planned module): pan/zoom degrade to buttons only.
+        }
+        return _module;
+    }
+
+    private Task SelectAsync(string id)
+    {
+        if (_suppressClick)
+        {
+            _suppressClick = false;
+            return Task.CompletedTask;
+        }
+        _menu = null;
+        _selected = id;
+        return Task.CompletedTask;
+    }
+
+    private Task OpenAsync(string id)
+    {
+        _menu = null;
+        _selected = id;
+        return Task.CompletedTask;
+    }
+
+    private Task OpenMenuAsync(string id)
+    {
+        _menu = id;
+        _selected = id;
+        return Task.CompletedTask;
+    }
+
+    private bool CloseMenu()
+    {
+        _menu = null;
+        return true;
+    }
+
+    private Task ChooseMenuAsync(PidMenuAction action)
+    {
+        _menu = null;
+        switch (action.Action)
+        {
+            case "start":
+                return AskDeviceAsync(action.DeviceId, OperatorCommandType.StartPump, "Start");
+            case "stop":
+                return AskDeviceAsync(action.DeviceId, OperatorCommandType.StopPump, "Stop");
+            case "auto":
+                return AskDeviceAsync(action.DeviceId, OperatorCommandType.SetAutomatic, "Switch to automatic");
+            case "manual":
+                return AskDeviceAsync(action.DeviceId, OperatorCommandType.SetManual, "Switch to manual");
+            case "position":
+            case "details":
+                _selected = action.DeviceId;
+                return Task.CompletedTask;
+            case "trend":
+                TrendDevice(action.DeviceId);
+                return Task.CompletedTask;
+            default:
+                return Task.CompletedTask;
+        }
+    }
+
+    private Task AskDeviceAsync(string deviceId, OperatorCommandType type, string verb)
+    {
+        var name = DeviceName(deviceId);
+        Ask($"{verb} {deviceId}?", $"{verb} {name} ({deviceId}). This changes the live process.",
+            () => Task.FromResult(ActionOutcome.From(Commands.Execute(
+                new OperatorCommand(deviceId, type, null, CommandSource.Hmi), Session.Actor))),
+            dangerous: type is OperatorCommandType.StartPump or OperatorCommandType.StopPump);
+        return Task.CompletedTask;
+    }
+
+    private bool TrendDevice(string deviceId)
+    {
+        if (PidTags.PrimaryTag(_plant, deviceId) is { } tag)
+        {
+            _tagRequest = (tag, ++_tagSeq);
+            _dockTab = 3;
+        }
+        return true;
+    }
+
+    private string DeviceName(string deviceId) =>
+        _plant.Pump(deviceId)?.Name ?? _plant.Valve(deviceId)?.Name ?? _plant.Tank(deviceId)?.Name
+        ?? _plant.Sensor(deviceId)?.Name ?? _controllers.FirstOrDefault(c => c.Id == deviceId)?.Name ?? deviceId;
+
+    private Task CenterOnAsync((double X, double Y) center)
+    {
+        _x = Math.Clamp(center.X - _w / 2, -_w / 2, _layout.Width - _w / 2);
+        _y = Math.Clamp(center.Y - _h / 2, -_h / 2, _layout.Height - _h / 2);
+        return Task.CompletedTask;
+    }
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":
+                if (_menu is not null)
+                    _menu = null;
+                else
+                    _selected = null;
+                return Task.CompletedTask;
+            case "+":
+            case "=":
+                return ZoomButtonAsync(0.8);
+            case "-":
+            case "_":
+                return ZoomButtonAsync(1.25);
+            case "0":
+            case "f":
+            case "F":
+                Fit();
+                return Task.CompletedTask;
+            case "1":
+                _dockTab = 0;
+                return Task.CompletedTask;
+            case "2":
+                _dockTab = 1;
+                return Task.CompletedTask;
+            case "3":
+                _dockTab = 2;
+                return Task.CompletedTask;
+            case "4":
+                _dockTab = 3;
+                return Task.CompletedTask;
+            case "ArrowLeft":
+                _x += 60;
+                ClampView();
+                return Task.CompletedTask;
+            case "ArrowRight":
+                _x -= 60;
+                ClampView();
+                return Task.CompletedTask;
+            case "ArrowUp":
+                _y += 60;
+                ClampView();
+                return Task.CompletedTask;
+            case "ArrowDown":
+                _y -= 60;
+                ClampView();
+                return Task.CompletedTask;
+            default:
+                return Task.CompletedTask;
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is already gone.
+            }
+        }
+    }
 
     private static string N(double value) => PlantLayout.Number(value);
 }

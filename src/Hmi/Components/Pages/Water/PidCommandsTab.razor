@@ -1,0 +1,60 @@
+@* Commands tab: accepted and rejected operator commands, read from the event log (source Hmi). *@
+@inherits RealtimeComponentBase
+@using Application.Events
+@inject IEventStore EventStore
+
+@if (_commands.Count == 0)
+{
+    <EmptyState Message="No operator commands recorded yet." />
+}
+else
+{
+    <table class="grid pid-command-table">
+        <thead>
+            <tr><th>Time</th><th>Actor</th><th>Device</th><th>Command</th><th>Outcome</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var item in _commands)
+            {
+                var rejected = IsRejected(item);
+                <tr class="@(rejected ? "pid-row-rejected" : "")">
+                    <td class="nowrap">@item.Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                    <td>@item.Actor</td>
+                    <td>@(item.DeviceId ?? "—")</td>
+                    <td>@item.Message</td>
+                    <td><StatusPill Text="@(rejected ? "Rejected" : "Accepted")" Kind="@(rejected ? "alarm" : "ok")" /></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private const int PageSize = 200;
+    private IReadOnlyList<SecurityEvent> _commands = [];
+    private long _loadId;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Events, RealtimeTopics.EventsPersisted];
+
+    protected override bool Refresh() => true;
+
+    protected override Task RefreshAsync(CancellationToken cancellationToken) => LoadAsync(cancellationToken);
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var loadId = ++_loadId;
+        var result = await EventStore.QueryAsync(
+            new EventQuery(PageSize: PageSize) with { ExcludeTraining = !Session.IsInstructor }, cancellationToken);
+        if (loadId == _loadId && !cancellationToken.IsCancellationRequested)
+            _commands = result.Items.Where(IsCommandEvent).ToArray();
+    }
+
+    private static bool IsCommandEvent(SecurityEvent item) =>
+        item.Source == CommandSource.Hmi.ToString() &&
+        (IsRejected(item) || (item.Category == EventCategories.Audit &&
+            !item.Message.StartsWith("Alarm ", StringComparison.Ordinal)));
+
+    private static bool IsRejected(SecurityEvent item) =>
+        item.Category is EventCategories.CommandRejected or EventCategories.AuthorizationDenied
+            or EventCategories.SecurityAlert or EventCategories.Communication;
+}

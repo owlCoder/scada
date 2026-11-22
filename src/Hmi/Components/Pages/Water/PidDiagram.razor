@@ -1,0 +1,253 @@
+@* The ISA-101 / ISA-5.1 style P&ID canvas content: process lines with flow arrows, tanks, pumps, valves,
+   instrument bubbles, controller stations and alarm bells. All styling lives in css/pid.css (pid- classes). *@
+@inherits ComponentBase
+
+@* Process piping: pump transfer lines and tank inlet/outlet/drain lines, with direction arrows while flowing. *@
+@foreach (var pump in Plant.Pumps)
+{
+    var (px, py) = Layout.Position(pump.Id);
+    var from = Layout.TankCenter(pump.SourceTankId);
+    var to = Layout.TankCenter(pump.TargetTankId);
+    var bottom = PlantLayout.TankTop + PlantLayout.TankHeight;
+    var points = new[] { (from, bottom), (from, py), (px, py), (to, py), (to, bottom) };
+    <polyline class="pid-pipe @(pump.FlowRate > 0.001 ? "pid-pipe-flow" : "")" points="@Points(points)" />
+    @if (pump.FlowRate > 0.001)
+    {
+        foreach (var arrow in PlantLayout.FlowArrows(points))
+        {
+            <polygon class="pid-flow-arrow" points="0,-5 11,0 0,5"
+                     transform="translate(@N(arrow.X),@N(arrow.Y)) rotate(@N(arrow.Degrees))" />
+        }
+    }
+}
+@foreach (var valve in Plant.Valves.Where(v => v.Role != ValveRole.Discharge))
+{
+    var (vx, _) = Layout.Position(valve.Id);
+    var top = valve.Role == ValveRole.Inlet ? PlantLayout.InletY : PlantLayout.TankTop + PlantLayout.TankHeight;
+    var bottom = valve.Role == ValveRole.Inlet ? PlantLayout.TankTop : PlantLayout.OutletY;
+    var points = new[] { (vx, top), (vx, bottom) };
+    <line class="pid-pipe @(valve.FlowRate > 0.001 ? "pid-pipe-flow" : "")" x1="@N(vx)" y1="@N(top)" x2="@N(vx)" y2="@N(bottom)" />
+    @if (valve.FlowRate > 0.001)
+    {
+        foreach (var arrow in PlantLayout.FlowArrows(points, minSegmentLength: 30, maxArrows: 1))
+        {
+            <polygon class="pid-flow-arrow" points="0,-5 11,0 0,5"
+                     transform="translate(@N(arrow.X),@N(arrow.Y)) rotate(@N(arrow.Degrees))" />
+        }
+    }
+}
+
+@* Tanks: outline, level fill, LL/L/H/HH limit marks and the reported level value. *@
+@foreach (var tank in Plant.Tanks)
+{
+    var (tx, ty) = Layout.Position(tank.Id);
+    var fill = PlantLayout.TankHeight * Math.Clamp(tank.LevelPercent, 0, 100) / 100;
+    var alarmLevel = tank.IsOverflowing || tank.LevelPercent >= tank.Thresholds.High || tank.LevelPercent <= tank.Thresholds.Low;
+    <g class="pid-device @(Selected(tank.Id))" transform="translate(@N(tx),@N(ty))" role="button" tabindex="0" aria-label="@tank.Name"
+       @onclick="() => SelectAsync(tank.Id)" @onkeydown="e => SelectKeyAsync(e, tank.Id)" @ondblclick="() => OpenAsync(tank.Id)"
+       @oncontextmenu="() => MenuAsync(tank.Id)" @oncontextmenu:preventDefault @onpointerdown:stopPropagation>
+        <title>@tank.Name</title>
+        <rect class="pid-tank" width="@N(PlantLayout.TankWidth)" height="@N(PlantLayout.TankHeight)" rx="6" />
+        <rect class="pid-liquid @(alarmLevel ? "pid-liquid-alarm" : "")" x="3" y="@N(PlantLayout.TankHeight - fill)"
+              width="@N(PlantLayout.TankWidth - 6)" height="@N(Math.Max(0, fill - 3))" rx="4" />
+        <line class="pid-tank-limit pid-tank-limit-critical" x1="@N(PlantLayout.TankWidth - 12)" y1="@N(LimitY(tank.Thresholds.LowLow))" x2="@N(PlantLayout.TankWidth - 2)" y2="@N(LimitY(tank.Thresholds.LowLow))" />
+        <line class="pid-tank-limit" x1="@N(PlantLayout.TankWidth - 12)" y1="@N(LimitY(tank.Thresholds.Low))" x2="@N(PlantLayout.TankWidth - 2)" y2="@N(LimitY(tank.Thresholds.Low))" />
+        <line class="pid-tank-limit" x1="@N(PlantLayout.TankWidth - 12)" y1="@N(LimitY(tank.Thresholds.High))" x2="@N(PlantLayout.TankWidth - 2)" y2="@N(LimitY(tank.Thresholds.High))" />
+        <line class="pid-tank-limit pid-tank-limit-critical" x1="@N(PlantLayout.TankWidth - 12)" y1="@N(LimitY(tank.Thresholds.HighHigh))" x2="@N(PlantLayout.TankWidth - 2)" y2="@N(LimitY(tank.Thresholds.HighHigh))" />
+        @if (Detail == PidDetail.Full)
+        {
+            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.LowLow) + 3)" text-anchor="end">LL</text>
+            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.Low) + 3)" text-anchor="end">L</text>
+            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.High) + 3)" text-anchor="end">H</text>
+            @:<text class="pid-tank-limit-label" x="@N(PlantLayout.TankWidth - 14)" y="@N(LimitY(tank.Thresholds.HighHigh) + 3)" text-anchor="end">HH</text>
+        }
+        <text class="pid-device-label" x="@N(PlantLayout.TankWidth / 2)" y="-10">@tank.Id</text>
+        @if (Detail != PidDetail.Symbols)
+        {
+            @:<text class="pid-value" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight / 2)">@tank.LevelPercent.ToString("0.0", CultureInfo.InvariantCulture) %</text>
+        }
+        @if (Detail == PidDetail.Full && Quality(tank.Id, SensorKind.Level) is { } levelQuality && levelQuality != MeasurementQuality.Good)
+        {
+            @:<text class="pid-quality" x="@N(PlantLayout.TankWidth / 2)" y="@N(PlantLayout.TankHeight + 16)">quality: @levelQuality</text>
+        }
+    </g>
+}
+
+@* Pumps: ISA circle, arrow when running, stop bars when stopped, "!" when faulted. *@
+@foreach (var pump in Plant.Pumps)
+{
+    var (px, py) = Layout.Position(pump.Id);
+    <g class="pid-device @(Selected(pump.Id))" transform="translate(@N(px),@N(py))" role="button" tabindex="0" aria-label="@pump.Name"
+       @onclick="() => SelectAsync(pump.Id)" @onkeydown="e => SelectKeyAsync(e, pump.Id)" @ondblclick="() => OpenAsync(pump.Id)"
+       @oncontextmenu="() => MenuAsync(pump.Id)" @oncontextmenu:preventDefault @onpointerdown:stopPropagation>
+        <title>@pump.Name</title>
+        <circle class="pid-pump @PumpClass(pump)" r="20" />
+        @if (pump.Health == DeviceHealth.Faulted)
+        {
+            @:<text class="pid-pump-fault-mark" y="8">!</text>
+        }
+        else if (pump.State == PumpState.Running)
+        {
+            <polygon class="pid-pump-arrow" points="-8,-10 12,0 -8,10" />
+        }
+        else
+        {
+            <path class="pid-pump-stop" d="M -6,-8 L -6,8 M 6,-8 L 6,8" />
+        }
+        <text class="pid-device-label" y="-30">@pump.Id</text>
+        @if (Detail != PidDetail.Symbols)
+        {
+            @:<text class="pid-label-small" y="38">@pump.FlowRate.ToString("0.00", CultureInfo.InvariantCulture) m³/min</text>
+        }
+        @if (Detail == PidDetail.Full && Quality(pump.Id, SensorKind.Flow) is { } flowQuality && flowQuality != MeasurementQuality.Good)
+        {
+            @:<text class="pid-quality" y="52">quality: @flowQuality</text>
+        }
+    </g>
+}
+
+@* Valves: bow-tie with stem, open = filled, plus the position in %. *@
+@foreach (var valve in Plant.Valves)
+{
+    var (vx, vy) = Layout.Position(valve.Id);
+    <g class="pid-device @(Selected(valve.Id))" transform="translate(@N(vx),@N(vy))" role="button" tabindex="0" aria-label="@valve.Name"
+       @onclick="() => SelectAsync(valve.Id)" @onkeydown="e => SelectKeyAsync(e, valve.Id)" @ondblclick="() => OpenAsync(valve.Id)"
+       @oncontextmenu="() => MenuAsync(valve.Id)" @oncontextmenu:preventDefault @onpointerdown:stopPropagation>
+        <title>@valve.Name</title>
+        <line class="pid-valve-stem" x1="0" y1="-10" x2="0" y2="-18" />
+        <polygon class="pid-valve @(valve.Position > 0.5 ? "pid-valve-open" : "pid-valve-closed") @(valve.Health != DeviceHealth.Healthy ? "pid-faulted" : "")"
+                 points="-14,-10 14,10 14,-10 -14,10" />
+        <text class="pid-device-label" y="-24">@valve.Id @valve.Position.ToString("0", CultureInfo.InvariantCulture)%</text>
+        @if (Detail == PidDetail.Full && Quality(valve.Id, SensorKind.Flow) is { } valveQuality && valveQuality != MeasurementQuality.Good)
+        {
+            @:<text class="pid-quality" y="26">quality: @valveQuality</text>
+        }
+    </g>
+}
+
+@* ISA instrument bubbles (LT/FT/PT) connected to their process point, with reported value, unit and quality. *@
+@if (Detail != PidDetail.Symbols)
+{
+    @foreach (var sensor in Plant.Sensors)
+    {
+        var (bx, by, cx, cy) = Layout.SensorSlot(sensor.Id);
+        <g class="pid-device pid-instrument @(Selected(sensor.Id))" transform="translate(@N(bx),@N(by))" role="button" tabindex="0" aria-label="@sensor.Name"
+           @onclick="() => SelectAsync(sensor.Id)" @onkeydown="e => SelectKeyAsync(e, sensor.Id)" @ondblclick="() => OpenAsync(sensor.Id)"
+           @oncontextmenu="() => MenuAsync(sensor.Id)" @oncontextmenu:preventDefault @onpointerdown:stopPropagation>
+            <title>@sensor.Name</title>
+            <line class="pid-instrument-line" x1="0" y1="0" x2="@N(cx - bx)" y2="@N(cy - by)" />
+            <circle class="pid-bubble" r="@N(PlantLayout.BubbleRadius)" />
+            <text class="pid-bubble-tag" y="3">@sensor.Id</text>
+            @if (Detail == PidDetail.Full)
+            {
+                @:<text class="pid-bubble-value" y="@N(PlantLayout.BubbleRadius + 14)">@sensor.ReportedValue.ToString("0.##", CultureInfo.InvariantCulture) @sensor.Unit</text>
+                @if (sensor.Quality != MeasurementQuality.Good)
+                {
+                    @:<text class="pid-quality" y="@N(PlantLayout.BubbleRadius + 28)">@sensor.Quality</text>
+                }
+            }
+        </g>
+    }
+}
+
+@* Controller (PLC/RTU) station boxes with field and supervisory comms state. *@
+@foreach (var controller in Controllers)
+{
+    var (cx, cy) = Layout.ControllerPosition(controller.Id);
+    <g class="pid-device pid-controller @(Selected(controller.Id))" transform="translate(@N(cx),@N(cy))" role="button" tabindex="0" aria-label="@controller.Name"
+       @onclick="() => SelectAsync(controller.Id)" @onkeydown="e => SelectKeyAsync(e, controller.Id)" @ondblclick="() => OpenAsync(controller.Id)"
+       @oncontextmenu="() => MenuAsync(controller.Id)" @oncontextmenu:preventDefault @onpointerdown:stopPropagation>
+        <title>@controller.Name</title>
+        <rect class="pid-controller-box" width="@N(PlantLayout.ControllerBoxWidth)" height="@N(PlantLayout.ControllerBoxHeight)" rx="6" />
+        <text class="pid-controller-id" x="10" y="18">@controller.Id · @controller.Kind</text>
+        <text class="pid-controller-line @CommsClass(controller.FieldCommunication)" x="10" y="36">field @controller.FieldCommunication</text>
+        <text class="pid-controller-line @CommsClass(controller.SupervisoryCommunication)" x="10" y="52">supervisory @controller.SupervisoryCommunication</text>
+    </g>
+}
+
+@* Alarm bells on active alarms, priority coloured, blinking while unacknowledged. *@
+@{
+    var bellSlots = new Dictionary<string, int>(StringComparer.Ordinal);
+}
+@foreach (var alarm in Plant.Alarms.Where(a => a.IsActive))
+{
+    var (bx, by) = BellPosition(alarm.SourceId, bellSlots);
+    <g class="pid-alarm-bell pid-@PriorityClass(alarm.Severity) @(alarm.IsAcknowledged ? "" : "pid-blink")"
+       transform="translate(@N(bx),@N(by))" role="img" aria-label="@($"{alarm.Severity} alarm: {alarm.Message}")">
+        <title>@alarm.Message</title>
+        <path class="pid-bell-shape" d="M -7 3 A 7 7 0 0 1 7 3 L 9 8 L -9 8 Z" />
+        <circle class="pid-bell-shape" cx="0" cy="10.5" r="2" />
+    </g>
+}
+
+@code {
+    [Parameter, EditorRequired] public PlantSnapshot Plant { get; set; } = default!;
+    [Parameter, EditorRequired] public PlantLayout Layout { get; set; } = default!;
+    [Parameter] public IReadOnlyList<ControllerSnapshot> Controllers { get; set; } = [];
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public PidDetail Detail { get; set; } = PidDetail.Full;
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+    [Parameter] public EventCallback<string> OnMenu { get; set; }
+    [Parameter] public EventCallback<string> OnOpen { get; set; }
+
+    private string Selected(string id) => id == SelectedId ? "pid-selected" : "";
+
+    private Task SelectAsync(string id) => OnSelect.InvokeAsync(id);
+    private Task OpenAsync(string id) => OnOpen.InvokeAsync(id);
+    private Task MenuAsync(string id) => OnMenu.InvokeAsync(id);
+
+    private Task SelectKeyAsync(KeyboardEventArgs e, string id) =>
+        e.Key is "Enter" or " " ? OnSelect.InvokeAsync(id) : Task.CompletedTask;
+
+    private MeasurementQuality? Quality(string deviceId, SensorKind kind) =>
+        Plant.Sensors.FirstOrDefault(s => s.DeviceId == deviceId && s.Kind == kind)?.Quality;
+
+    private static double LimitY(double limit) =>
+        PlantLayout.TankHeight * (1 - Math.Clamp(limit, 0, 100) / 100);
+
+    private static string PumpClass(PumpSnapshot pump) =>
+        pump.Health == DeviceHealth.Faulted ? "pid-faulted"
+            : pump.State == PumpState.Running ? "pid-running" : "pid-stopped";
+
+    private static string CommsClass(CommunicationState state) => state switch
+    {
+        CommunicationState.Online => "pid-comms-online",
+        CommunicationState.Degraded => "pid-comms-degraded",
+        _ => "pid-comms-offline"
+    };
+
+    private static string PriorityClass(AlarmSeverity severity) => severity switch
+    {
+        AlarmSeverity.Critical => "p1",
+        AlarmSeverity.High => "p2",
+        AlarmSeverity.Medium => "p3",
+        _ => "p4"
+    };
+
+    private (double X, double Y) BellPosition(string sourceId, Dictionary<string, int> slots)
+    {
+        var index = slots[sourceId] = slots.GetValueOrDefault(sourceId) + 1;
+        var device = Layout.Position(sourceId);
+        if (Plant.Tank(sourceId) is { } tank)
+        {
+            var (tx, ty) = Layout.Position(tank.Id);
+            return (tx + PlantLayout.TankWidth / 2 + (index - 1) * 22, ty - 26);
+        }
+        if (Plant.Sensor(sourceId) is not null)
+        {
+            var (bx, by, _, _) = Layout.SensorSlot(sourceId);
+            return (bx + (index - 1) * 22, by - 26);
+        }
+        if (Controllers.FirstOrDefault(c => c.Id == sourceId) is not null)
+        {
+            var (cx, cy) = Layout.ControllerPosition(sourceId);
+            return (cx + PlantLayout.ControllerBoxWidth / 2 + (index - 1) * 22, cy - 12);
+        }
+        return (device.X + (index - 1) * 22, device.Y - 56);
+    }
+
+    private static string Points(IReadOnlyList<(double X, double Y)> points) =>
+        string.Join(' ', points.Select(p => $"{N(p.X)},{N(p.Y)}"));
+
+    private static string N(double value) => PlantLayout.Number(value);
+}
