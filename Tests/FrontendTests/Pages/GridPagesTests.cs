@@ -4,6 +4,7 @@ using Application.Realtime;
 using Bunit;
 using FrontendTests.Support;
 using Hmi.Components.Pages.Grid;
+using Hmi.Components.Pages.Grid.Workspace;
 using Hmi.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +16,7 @@ public sealed class GridPagesTests
 {
     [Theory]
     [InlineData(typeof(GridOverview), "Electrical distribution grid")]
-    [InlineData(typeof(GridDiagram), "Single-line diagram")]
+    [InlineData(typeof(GridWorkspace), "Control window")]
     [InlineData(typeof(GridFeeders), "North feeder")]
     [InlineData(typeof(GridTransformers), "Main transformer")]
     [InlineData(typeof(GridSwitches), "Feeder breaker")]
@@ -57,7 +58,7 @@ public sealed class GridPagesTests
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
         foreach (var id in new[] { "Q1", "T1", "L1" })
         {
-            var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, id));
+            var page = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, id));
             Assert.DoesNotContain("SwitchStuck", page.Markup);
             Assert.DoesNotContain("Overheating", page.Markup);
             Assert.DoesNotContain("EarthFault", page.Markup);
@@ -92,24 +93,24 @@ public sealed class GridPagesTests
     }
 
     [Fact]
-    public async Task DiagramUsesDefinitionPositionsAndDistinctSwitchSymbols()
+    public async Task DiagramPageIsTheDispatcherWorkspaceWithCanvasAndDocks()
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridDiagram>();
-        Assert.Equal(host.Grid.Definition.Buses.Count + host.Grid.Definition.Sources.Count + host.Grid.Definition.Transformers.Count
-            + host.Grid.Definition.Switches.Count + host.Grid.Definition.Loads.Count + host.Grid.Definition.Generators.Count + host.Grid.Definition.Capacitors.Count,
-            page.FindAll("g.grid-node").Count);
-        Assert.NotEmpty(page.FindAll(".deenergized"));
-        Assert.Single(page.FindAll("rect.switch-closed"));
-        Assert.Contains("tap 0", page.Markup);
-        Assert.Contains("voltage-hv", page.Markup);
-        Assert.Contains("voltage-mv", page.Markup);
-        var bus = page.FindAll("g.grid-node").Single(n => n.GetAttribute("aria-label") == "MV bus");
-        Assert.Equal("translate(80 280)", bus.GetAttribute("transform"));
-        bus.Click();
-        Assert.Contains("19.40 kV", page.Find(".grid-faceplate").TextContent);
-        var before = page.Find("svg.grid-diagram").GetAttribute("viewBox");
-        page.FindAll("button").Single(b => b.TextContent == "Zoom in").Click();
-        Assert.NotEqual(before, page.Find("svg.grid-diagram").GetAttribute("viewBox"));
+        var page = host.Context.Render<GridWorkspace>();
+        // The canvas hosts the GridSld component as-is with snapshot, definition, tags and selection.
+        var canvas = page.Find(".workspace-canvas .grid-sld");
+        Assert.True(string.IsNullOrEmpty(canvas.GetAttribute("data-selected")));
+        Assert.NotNull(page.Find(".dock-right"));
+        Assert.NotNull(page.Find(".dock-bottom"));
+        Assert.Contains("Control window", page.Markup);
+        // Bottom dock tabs: alarms, events, commands, trend, tags.
+        foreach (var tab in new[] { "Alarms", "Events", "Commands", "Trend", "Tags" })
+            Assert.Contains($">{tab}<", page.Markup);
+        // The alarms tab lists the fake network's alarm; clicking its element selects it and opens the control window.
+        Assert.Contains("Bus voltage low", page.Markup);
+        page.FindAll(".dock-table .linklike").Single(b => b.TextContent.Trim() == "B-MV").Click();
+        page.WaitForAssertion(() => Assert.Equal("B-MV", page.Find(".workspace-canvas .grid-sld").GetAttribute("data-selected")));
+        page.WaitForAssertion(() => Assert.Contains("MV bus", page.Find(".control-window").TextContent));
+        page.WaitForAssertion(() => Assert.Contains("19.40 kV", page.Find(".control-window").TextContent));
     }
 }

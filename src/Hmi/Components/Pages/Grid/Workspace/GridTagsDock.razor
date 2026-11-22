@@ -1,0 +1,53 @@
+@inherits GridPageBase
+
+@* Tags tab of the workspace bottom dock: all active grid tags with remove (confirmed). *@
+<div class="dock-tab-body" role="tabpanel" aria-label="Active tags">
+    <OutcomeBanner Outcome="Outcome" />
+    @if (Tags.Count == 0)
+    {
+        <EmptyState Message="No active tags." />
+    }
+    else
+    {
+        <div class="table-scroll dock-table-scroll">
+            <table class="grid dock-table">
+                <thead>
+                    <tr><th>Element</th><th>Kind</th><th>Reason</th><th>Placed by</th><th>Placed at (UTC)</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var tag in Tags.OrderBy(t => t.ElementId).ThenBy(t => t.Kind))
+                    {
+                        <tr @key="tag.Id">
+                            <td><button type="button" class="linklike" @onclick="() => SelectElement.InvokeAsync(tag.ElementId)" title="Select and centre this element">@tag.ElementId</button></td>
+                            <td><span class="tag-badge tag-@(tag.Kind == GridTagKind.DoNotOperate ? "do-not-operate" : tag.Kind == GridTagKind.Earthed ? "earthed" : tag.Kind == GridTagKind.WorkInProgress ? "wip" : "info")">@tag.Kind</span></td>
+                            <td>@tag.Reason</td>
+                            <td class="nowrap">@tag.PlacedBy</td>
+                            <td class="nowrap value">@tag.PlacedAt.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</td>
+                            <td>
+                                @if (Session.CanOperate && Tagging is not null)
+                                {
+                                    <button class="btn" @onclick="() => RemoveTag(tag)">Remove</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<GridTag> Tags { get; set; } = [];
+    [Parameter] public IGridTagging? Tagging { get; set; }
+    [Parameter] public EventCallback<string> SelectElement { get; set; }
+
+    private bool RemoveTag(GridTag tag) => Ask($"Remove tag {tag.Id} from {tag.ElementId}?", $"Tag {tag.Kind} placed by {tag.PlacedBy}: {tag.Reason}", async () =>
+    {
+        if (Tagging is null)
+            return ActionOutcome.Failed("Tagging is not available.");
+        var result = await Tagging.RemoveTagAsync(tag.Id, Session.Actor, StoppingToken);
+        return ActionOutcome.From(result);
+    });
+}

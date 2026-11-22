@@ -1,0 +1,53 @@
+@inherits ComponentBase
+
+@* Bottom dock of the grid dispatcher workspace: tab bar plus the active tab's content. The page owns the
+   active tab and dock layout; the tabs own their live data. *@
+<div class="dock-head">
+    <nav class="dock-tabs" role="tablist" aria-label="Workspace dock tabs">
+        @foreach (var tab in Enum.GetValues<GridWorkspaceTab>())
+        {
+            <button type="button" role="tab" aria-selected="@(Tab == tab)" class="dock-tab @(Tab == tab ? "active" : "")"
+                    @onclick="() => TabChanged.InvokeAsync(tab)">@TabName(tab)</button>
+        }
+    </nav>
+</div>
+<div class="dock-body">
+    @switch (Tab)
+    {
+        case GridWorkspaceTab.Alarms:
+            <GridAlarmsDock SelectElement="SelectElement" />
+            break;
+        case GridWorkspaceTab.Events:
+            <GridEventListDock Mode="GridEventDockMode.Events" />
+            break;
+        case GridWorkspaceTab.Commands:
+            <GridEventListDock Mode="GridEventDockMode.Commands" />
+            break;
+        case GridWorkspaceTab.Trend:
+            <GridTrendDock History="History" FocusElementId="@FocusElementId" />
+            break;
+        case GridWorkspaceTab.Tags:
+            <GridTagsDock Tags="Tags" Tagging="Tagging" SelectElement="SelectElement" />
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<GridTag> Tags { get; set; } = [];
+    [Parameter] public IGridTagging? Tagging { get; set; }
+    [Parameter] public IGridHistory? History { get; set; }
+    [Parameter] public GridWorkspaceTab Tab { get; set; } = GridWorkspaceTab.Alarms;
+    [Parameter] public EventCallback<GridWorkspaceTab> TabChanged { get; set; }
+    [Parameter] public string? FocusElementId { get; set; }
+    [Parameter] public EventCallback<string> SelectElement { get; set; }
+
+    private static string TabName(GridWorkspaceTab tab) => tab switch
+    {
+        GridWorkspaceTab.Alarms => "Alarms",
+        GridWorkspaceTab.Events => "Events",
+        GridWorkspaceTab.Commands => "Commands",
+        GridWorkspaceTab.Trend => "Trend",
+        GridWorkspaceTab.Tags => "Tags",
+        _ => tab.ToString()
+    };
+}

@@ -1,0 +1,487 @@
+@inherits GridPageBase
+@inject TimeProvider Clock
+@inject IGridControl Control
+@inject GridOptions Options
+
+@* Control window of the dispatcher workspace: the right dock for the selected element. Select-before-operate,
+   per-type control sections, protection relays, measurements with mini trends and safety tags. *@
+<aside class="dock-panel control-window" aria-label="Control window for @ElementId">
+    <header class="cw-head">
+        <svg class="cw-icon @GridWorkspaceElements.VoltageClass(Element?.NominalVoltageKv)" viewBox="-26 -26 52 52" aria-hidden="true">
+            @if (Element?.Kind == GridWorkspaceElementKind.Switch && Snapshot?.Switch(ElementId) is { } iconSwitch)
+            {
+                <GridSymbol Kind="@iconSwitch.Kind.ToString()" Closed="@iconSwitch.Closed" />
+            }
+            else if (Element?.Kind == GridWorkspaceElementKind.Transformer)
+            {
+                <GridSymbol Kind="Transformer" Tap="@(Snapshot?.Branch(ElementId)?.TapPosition)" />
+            }
+            else if (Element?.Kind == GridWorkspaceElementKind.Bus) { <GridSymbol Kind="Bus" /> }
+            else if (Element?.Kind == GridWorkspaceElementKind.Load) { <GridSymbol Kind="Load" /> }
+            else if (Element?.Kind == GridWorkspaceElementKind.Generator) { <GridSymbol Kind="PV" /> }
+            else if (Element?.Kind == GridWorkspaceElementKind.Capacitor) { <GridSymbol Kind="Capacitor" /> }
+            else { <line x1="-18" y1="0" x2="18" y2="0" /> }
+        </svg>
+        <div class="cw-title">
+            <h2>@ElementId</h2>
+            <p class="muted">@(Element?.Name ?? "Unknown element") · @(Element?.Kind.ToString() ?? "?")</p>
+        </div>
+        <div class="cw-badges">
+            @if (StateBadge is { } badge) { <span class="state-badge @badge.Css" title="State">@badge.Text</span> }
+            @foreach (var tag in Tags.Where(t => t.ElementId == ElementId))
+            {
+                <span class="tag-badge tag-@TagClass(tag.Kind)" title="@($"Tagged {tag.Kind} by {tag.PlacedBy}: {tag.Reason}")">@tag.Kind</span>
+            }
+        </div>
+        <div class="cw-tabs" role="tablist" aria-label="Control window tabs">
+            <button type="button" role="tab" aria-selected="@(!_details)" class="dock-tab @(_details ? "" : "active")" @onclick="() => ShowControl()">Control</button>
+            <button type="button" role="tab" aria-selected="@_details" class="dock-tab @(_details ? "active" : "")" @onclick="() => ShowDetails()">Details</button>
+        </div>
+    </header>
+    <OutcomeBanner Outcome="Outcome" />
+    <RefreshErrorBanner Error="@RefreshError" />
+    @if (Snapshot is { } grid)
+    {
+        if (!_details)
+        {
+            @if (grid.Switch(ElementId) is { } device) { @SwitchSection(device) }
+            @if (grid.Branch(ElementId) is { } branch) { @BranchSection(branch) }
+            @if (grid.Load(ElementId) is { } load) { @LoadSection(load) }
+            @if (grid.Capacitors.FirstOrDefault(c => c.Id == ElementId) is { } capacitor) { @CapacitorSection(capacitor) }
+            @if (grid.Bus(ElementId) is { } bus) { @BusSection(bus) }
+            @if (grid.Generators.FirstOrDefault(g => g.Id == ElementId) is { } generator) { @GeneratorSection(generator) }
+            @if (GridWorkspaceElements.ProtectionsOf(grid, ElementId) is { Count: > 0 } relays) { @ProtectionSection(relays) }
+            @MeasurementsSection()
+            @if (Tagging is not null) { @TagsSection() }
+        }
+        else
+        {
+            <section class="cw-section">
+                <h3>Details</h3>
+                <dl class="facts">
+                    <dt>Element</dt><dd>@ElementId · @(Element?.Name ?? "—")</dd>
+                    <dt>Type</dt><dd>@(Element?.Kind.ToString() ?? "—")</dd>
+                    @if (Element?.NominalVoltageKv is { } kv) { <dt>Nominal voltage</dt><dd>@Number(kv) kV</dd> }
+                    @if (grid.Switch(ElementId) is { } sw)
+                    {
+                        <dt>Last operation</dt><dd>@(sw.LastOperatedBy ?? "—") · @sw.LastCause</dd>
+                        <dt>Selection</dt><dd>@(sw.Selected ? (sw.SelectedToClose == true ? "Close" : "Open") : "None")</dd>
+                    }
+                    @if (Definition is not null)
+                    {
+                        foreach (var rtu in Definition.Rtus.Where(r => r.ElementIds.Contains(ElementId)))
+                        {
+                            <dt>RTU</dt><dd>@rtu.Id (@rtu.Name) · @(GridWorkspaceElements.RtuOffline(ElementId, grid, Definition) ? "offline" : "online")</dd>
+                        }
+                    }
+                </dl>
+                @if (Session.IsInstructor && (grid.Switch(ElementId)?.Fault ?? grid.Branch(ElementId)?.Fault ?? GridEquipmentFault.None) is not GridEquipmentFault.None)
+                {
+                    <p class="cw-fault">Fault: @(grid.Switch(ElementId)?.Fault ?? grid.Branch(ElementId)?.Fault)</p>
+                }
+            </section>
+            @MeasurementsSection()
+        }
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+</aside>
+
+@code {
+    [Parameter, EditorRequired] public string ElementId { get; set; } = "";
+    [Parameter] public IReadOnlyList<GridTag> Tags { get; set; } = [];
+    [Parameter] public IGridTagging? Tagging { get; set; }
+    [Parameter] public IGridHistory? History { get; set; }
+
+    private bool _details;
+    private bool _placeTag;
+    private GridTagKind _tagKind = GridTagKind.DoNotOperate;
+    private string _tagReason = "";
+    private DateTimeOffset? _selectionUntil;
+    private int? _steps;
+
+    private GridWorkspaceElement? Element => GridWorkspaceElements.Resolve(Snapshot, Definition, ElementId);
+    private IReadOnlyList<GridMeasurementSnapshot> Measurements => GridWorkspaceElements.Measurements(Snapshot, ElementId);
+    private IReadOnlyList<GridTag> Blocking => GridWorkspaceElements.BlockingTags(ElementId, Snapshot?.Switch(ElementId), Tags);
+    private string? DisabledReason
+    {
+        get
+        {
+            if (Blocking.Count > 0)
+                return $"Tagged {Blocking[0].Kind} on {Blocking[0].ElementId} by {Blocking[0].PlacedBy} — operation blocked.";
+            if (GridWorkspaceElements.RtuOffline(ElementId, Snapshot, Definition))
+                return "Owning RTU is offline — operation blocked.";
+            return null;
+        }
+    }
+    private bool CanSelect => Session.CanOperate && DisabledReason is null;
+    private int SecondsRemaining => _selectionUntil is { } until ? Math.Max(0, (int)Math.Ceiling((until - Clock.GetUtcNow()).TotalSeconds)) : 0;
+    // Two seconds less than the service timeout so an Execute confirmed at the last moment still reaches the service in time.
+    private int WindowSeconds => Math.Max(5, (int)Options.SelectTimeoutSeconds - 2);
+    private bool CanExecute => SecondsRemaining > 0 && Snapshot?.Switch(ElementId)?.Selected == true && DisabledReason is null;
+
+    private (string Text, string Css)? StateBadge
+    {
+        get
+        {
+            if (Snapshot?.Switch(ElementId) is { } sw)
+                return sw.Closed ? ("Closed", "state-closed") : ("Open", "state-open");
+            if (Snapshot?.Branch(ElementId) is { } branch)
+                return branch.Energized ? ("Energised", "state-energized") : ("De-energised", "state-dead");
+            if (Snapshot?.Bus(ElementId) is { } bus)
+                return bus.Energized ? ("Energised", "state-energized") : ("De-energised", "state-dead");
+            if (Snapshot?.Load(ElementId) is { } load)
+                return load.Shed ? ("Shed", "state-dead") : ("Supplied", "state-energized");
+            if (Snapshot?.Generators.FirstOrDefault(g => g.Id == ElementId) is { } generator)
+                return generator.Connected ? ("Connected", "state-energized") : ("Disconnected", "state-dead");
+            if (Snapshot?.Capacitors.FirstOrDefault(c => c.Id == ElementId) is { } capacitor)
+                return ($"{capacitor.StepsInService}/{capacitor.Steps} steps", "state-neutral");
+            return null;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _ = CountdownAsync();
+    }
+
+    private async Task CountdownAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
+            while (await timer.WaitForNextTickAsync(StoppingToken))
+                if (_selectionUntil is not null)
+                    await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) when (StoppingToken.IsCancellationRequested) { }
+    }
+
+    /// <summary>Starts the select-before-operate flow for the element (canvas request or keyboard).</summary>
+    public async Task BeginSelectAsync(GridCommandType type)
+    {
+        Select(type);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Cancels the running selection countdown (Del key).</summary>
+    public async Task RequestCancelSelectionAsync()
+    {
+        CancelSelection();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Opens the place-tag form on the control tab (canvas request).</summary>
+    public async Task BeginPlaceTagAsync()
+    {
+        _details = false;
+        _placeTag = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Opens the details tab (canvas request).</summary>
+    public async Task BeginShowDetailsAsync()
+    {
+        _details = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShowControl() { _details = false; _placeTag = false; return true; }
+    private bool ShowDetails() { _details = true; return true; }
+
+    private bool Select(GridCommandType type) => Ask($"{type}: {ElementId}?", $"Reserve this switch for your operation. Execute within {WindowSeconds} seconds after selection.", async () =>
+    {
+        var result = await Control.ExecuteAsync(new GridCommand(type, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = result.Accepted ? Clock.GetUtcNow().AddSeconds(WindowSeconds) : null;
+        return ActionOutcome.From(result);
+    });
+
+    private bool Execute() => Ask($"Execute: {ElementId}?", "Operate the selected switch on the live grid.", async () =>
+    {
+        if (!CanExecute)
+            return ActionOutcome.Failed("Selection expired. Select the switch again.");
+        var result = await Control.ExecuteAsync(new GridCommand(GridCommandType.Execute, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = null;
+        return ActionOutcome.From(result);
+    });
+
+    private bool CancelSelection() => Ask($"Cancel selection: {ElementId}?", "Release the selected switch without operating it.", async () =>
+    {
+        var result = await Control.ExecuteAsync(new GridCommand(GridCommandType.Cancel, ElementId), Session.Actor, "hmi", StoppingToken);
+        _selectionUntil = null;
+        return ActionOutcome.From(result);
+    }, dangerous: false);
+
+    private bool PlaceTag() => Ask($"Place @_tagKind tag on {ElementId}?", "The tag is visible to all operators and blocks operation where applicable.", async () =>
+    {
+        if (Tagging is null)
+            return ActionOutcome.Failed("Tagging is not available.");
+        if (string.IsNullOrWhiteSpace(_tagReason))
+            return ActionOutcome.Failed("A reason is required for a tag.");
+        var result = await Tagging.PlaceTagAsync(ElementId, _tagKind, _tagReason.Trim(), Session.Actor, StoppingToken);
+        if (result.Accepted)
+        {
+            _placeTag = false;
+            _tagReason = "";
+        }
+        return ActionOutcome.From(result);
+    });
+
+    private bool RemoveTag(GridTag tag) => Ask($"Remove tag {tag.Id} from {tag.ElementId}?", $"Tag {tag.Kind} placed by {tag.PlacedBy}: {tag.Reason}", async () =>
+    {
+        if (Tagging is null)
+            return ActionOutcome.Failed("Tagging is not available.");
+        var result = await Tagging.RemoveTagAsync(tag.Id, Session.Actor, StoppingToken);
+        return ActionOutcome.From(result);
+    });
+
+    private static string TagClass(GridTagKind kind) => kind switch
+    {
+        GridTagKind.DoNotOperate => "do-not-operate",
+        GridTagKind.Earthed => "earthed",
+        GridTagKind.WorkInProgress => "wip",
+        _ => "info"
+    };
+
+    private static string QualityClass(MeasurementQuality quality) => quality switch
+    {
+        MeasurementQuality.Good => "q-good",
+        MeasurementQuality.Uncertain => "q-uncertain",
+        _ => "q-bad"
+    };
+
+    private RenderFragment SwitchSection(SwitchSnapshot device) => @<text>
+        <section class="cw-section">
+            <h3>Switch</h3>
+            <dl class="facts">
+                <dt>Kind</dt><dd>@device.Kind</dd>
+                <dt>State</dt><dd>@(device.Closed ? "Closed" : "Open")</dd>
+                <dt>Last operation</dt><dd>@(device.LastOperatedBy ?? "—") · @device.LastCause</dd>
+                <dt>Selection</dt><dd>@(device.Selected ? (device.SelectedToClose == true ? "Close" : "Open") : "None")</dd>
+            </dl>
+            @if (Session.IsInstructor && device.Fault != GridEquipmentFault.None) { <p class="cw-fault">Fault: @device.Fault</p> }
+            @if (Session.CanOperate)
+            {
+                <div class="actions">
+                    <button class="btn" disabled="@(!CanSelect)" @onclick="() => Select(GridCommandType.SelectOpen)">Select open</button>
+                    <button class="btn" disabled="@(!CanSelect)" @onclick="() => Select(GridCommandType.SelectClose)">Select close</button>
+                    <button class="btn" disabled="@(!CanExecute)" @onclick="() => Execute()">Execute</button>
+                    <button class="btn" disabled="@(!device.Selected && _selectionUntil is null)" @onclick="() => CancelSelection()">Cancel selection</button>
+                </div>
+                @if (DisabledReason is { } reason) { <p class="cw-blocked" role="alert">@reason</p> }
+                @if (_selectionUntil is not null)
+                {
+                    <div class="sbo-countdown" role="status">
+                        <progress value="@SecondsRemaining" max="@WindowSeconds">@SecondsRemaining</progress>
+                        <span class="value">@SecondsRemaining s remaining</span>
+                    </div>
+                }
+                <p class="muted">Select, then execute within @WindowSeconds s. The service checks ownership, expiry and interlocks.</p>
+            }
+        </section>
+    </text>;
+
+    private RenderFragment BranchSection(BranchSnapshot branch) => @<text>
+        <section class="cw-section">
+            <h3>@(branch.Kind == GridBranchKind.Transformer ? "Transformer" : "Line / cable")</h3>
+            <dl class="facts">
+                <dt>Energised</dt><dd>@(branch.Energized ? "Yes" : "No")</dd>
+                <dt>Current</dt><dd><span class="value">@Number(branch.CurrentA) A</span>@(Definition?.Lines.FirstOrDefault(l => l.Id == branch.Id) is { } lineDef ? $" of {Number(lineDef.RatedCurrentA)} A rating" : "")</dd>
+                <dt>Loading</dt><dd><span class="value">@Number(branch.LoadingPercent) %</span></dd>
+                <dt>P / Q from</dt><dd><span class="value">@Number(branch.ActivePowerFromMw) MW · @Number(branch.ReactivePowerFromMvar) Mvar</span></dd>
+                <dt>P / Q to</dt><dd><span class="value">@Number(branch.ActivePowerToMw) MW · @Number(branch.ReactivePowerToMvar) Mvar</span></dd>
+            </dl>
+            <GridLoadingBar Percent="branch.LoadingPercent" />
+            @if (branch.Kind == GridBranchKind.Transformer)
+            {
+                if (Definition?.Transformers.FirstOrDefault(t => t.Id == branch.Id) is { } tx && branch.TapPosition is { } tap)
+                {
+                    <div class="tap-gauge" role="img" aria-label="Tap position @tap between @tx.TapMin and @tx.TapMax">
+                        @for (var t = tx.TapMin; t <= tx.TapMax; t++)
+                        {
+                            <span class="tap-cell @(t == tap ? "tap-current" : "") @(t == tx.TapNeutral ? "tap-neutral" : "")">@t</span>
+                        }
+                    </div>
+                    <dl class="facts">
+                        <dt>Tap</dt><dd><span class="value">@tap</span> of @tx.TapMin–@tx.TapMax (neutral @tx.TapNeutral)</dd>
+                        <dt>AVR</dt><dd>@(branch.TapAutomatic == true ? "Automatic" : "Manual")</dd>
+                        @if (Snapshot?.Bus(tx.HvBusId) is { } hv) { <dt>HV voltage</dt><dd><span class="value">@Number(hv.VoltageKv) kV</span></dd> }
+                        @if (Snapshot?.Bus(tx.LvBusId) is { } lv) { <dt>LV voltage</dt><dd><span class="value">@Number(lv.VoltageKv) kV</span></dd> }
+                    </dl>
+                    @if (Session.CanOperate)
+                    {
+                        <div class="actions">
+                            <button class="btn" disabled="@(DisabledReason is not null)" @onclick="() => Command(GridCommandType.TapRaise, ElementId)">Raise tap</button>
+                            <button class="btn" disabled="@(DisabledReason is not null)" @onclick="() => Command(GridCommandType.TapLower, ElementId)">Lower tap</button>
+                            <button class="btn" disabled="@(DisabledReason is not null)" @onclick="() => Command(branch.TapAutomatic == true ? GridCommandType.SetTapManual : GridCommandType.SetTapAutomatic, ElementId)">
+                                @(branch.TapAutomatic == true ? "Set AVR manual" : "Set AVR automatic")
+                            </button>
+                        </div>
+                        @if (DisabledReason is { } reason) { <p class="cw-blocked" role="alert">@reason</p> }
+                    }
+                }
+            }
+        </section>
+    </text>;
+
+    private RenderFragment LoadSection(LoadSnapshot load) => @<text>
+        <section class="cw-section">
+            <h3>Load</h3>
+            <dl class="facts">
+                <dt>Demand</dt><dd><span class="value">@Number(load.DemandMw) MW</span></dd>
+                <dt>Supplied</dt><dd><span class="value">@Number(load.ActivePowerMw) MW · @Number(load.ReactivePowerMvar) Mvar</span></dd>
+                <dt>Customers</dt><dd><span class="value">@load.CustomersSupplied / @load.Customers</span>@(load.Critical ? " · critical" : "")</dd>
+                <dt>State</dt><dd>@(load.Shed ? "Shed" : "Restored")</dd>
+            </dl>
+            @if (Session.CanOperate)
+            {
+                <div class="actions">
+                    <button class="btn" disabled="@(DisabledReason is not null)" @onclick="() => Command(load.Shed ? GridCommandType.RestoreLoad : GridCommandType.ShedLoad, ElementId)">
+                        @(load.Shed ? "Restore load" : "Shed load")
+                    </button>
+                </div>
+                @if (DisabledReason is { } reason) { <p class="cw-blocked" role="alert">@reason</p> }
+            }
+        </section>
+    </text>;
+
+    private RenderFragment CapacitorSection(CapacitorSnapshot capacitor) => @<text>
+        <section class="cw-section">
+            <h3>Capacitor bank</h3>
+            <dl class="facts">
+                <dt>Steps</dt><dd><span class="value">@capacitor.StepsInService / @capacitor.Steps</span></dd>
+                <dt>Reactive power</dt><dd><span class="value">@Number(capacitor.ReactivePowerMvar) Mvar</span></dd>
+            </dl>
+            @{ var steps = _steps ?? capacitor.StepsInService; }
+            @if (Session.CanOperate)
+            {
+                <div class="actions">
+                    <button class="btn" disabled="@(steps <= 0 || DisabledReason is not null)" @onclick="() => _steps = Math.Max(0, steps - 1)">− step</button>
+                    <span class="value stepper-value">@steps / @capacitor.Steps</span>
+                    <button class="btn" disabled="@(steps >= capacitor.Steps || DisabledReason is not null)" @onclick="() => _steps = Math.Min(capacitor.Steps, steps + 1)">+ step</button>
+                    <button class="btn" disabled="@(DisabledReason is not null || steps == capacitor.StepsInService)" @onclick="() => Command(GridCommandType.SetCapacitorSteps, ElementId, steps)">Set steps</button>
+                </div>
+                @if (DisabledReason is { } reason) { <p class="cw-blocked" role="alert">@reason</p> }
+            }
+        </section>
+    </text>;
+
+    private RenderFragment BusSection(BusSnapshot bus) => @<text>
+        <section class="cw-section">
+            <h3>Bus</h3>
+            <dl class="facts">
+                <dt>Voltage</dt><dd><span class="value">@Number(bus.VoltageKv) kV · @Number(bus.VoltagePu) pu</span></dd>
+                <dt>Limits</dt><dd>@(Definition?.Buses.FirstOrDefault(b => b.Id == bus.Id) is { } def ? $"{Number(def.MinVoltagePu)}–{Number(def.MaxVoltagePu)} pu" : "—")</dd>
+                <dt>State</dt><dd>@(bus.Energized ? "Energised" : "De-energised")</dd>
+            </dl>
+            @if (Definition?.Buses.FirstOrDefault(b => b.Id == bus.Id) is { } busDef)
+            {
+                var outside = bus.VoltagePu < busDef.MinVoltagePu || bus.VoltagePu > busDef.MaxVoltagePu;
+                <p class="@(outside ? "cw-blocked" : "muted")" role="@(outside ? "alert" : null)">@(outside ? "Voltage outside limits." : "Voltage within limits.")</p>
+            }
+        </section>
+    </text>;
+
+    private RenderFragment GeneratorSection(GeneratorSnapshot generator) => @<text>
+        <section class="cw-section">
+            <h3>Generator</h3>
+            <dl class="facts">
+                <dt>Kind</dt><dd>@generator.Kind</dd>
+                <dt>Connected</dt><dd>@(generator.Connected ? "Yes" : "No")</dd>
+                <dt>P / Q</dt><dd><span class="value">@Number(generator.ActivePowerMw) MW · @Number(generator.ReactivePowerMvar) Mvar</span></dd>
+            </dl>
+        </section>
+    </text>;
+
+    private RenderFragment ProtectionSection(IReadOnlyList<ProtectionSnapshot> relays) => @<text>
+        <section class="cw-section">
+            <h3>Protection relays</h3>
+            @foreach (var relay in relays)
+            {
+                <dl class="facts">
+                    <dt>@relay.Name</dt><dd>@relay.Function · curve @relay.Curve</dd>
+                    <dt>Pickup</dt><dd><span class="value">@Number(relay.PickupValue)</span> · time @Number(relay.TimeSetting)</dd>
+                    <dt>Status</dt><dd>@(relay.Enabled ? "Enabled" : "Disabled") · @(relay.Tripped ? "Tripped" : relay.PickedUp ? "Picked up" : "Normal")</dd>
+                </dl>
+                @if (Session.CanOperate)
+                {
+                    <div class="actions"><button class="btn" @onclick="() => Command(GridCommandType.ResetProtection, relay.Id)">Reset protection</button></div>
+                }
+            }
+        </section>
+    </text>;
+
+    private RenderFragment MeasurementsSection() => @<text>
+        <section class="cw-section">
+            <h3>Measurements</h3>
+            @if (Measurements.Count == 0)
+            {
+                <p class="muted">No telemetry reported for this element.</p>
+            }
+            else
+            {
+                foreach (var reading in Measurements)
+                {
+                    <div class="cw-measurement">
+                        <span class="cw-m-kind">@reading.Kind</span>
+                        <span class="value">@Number(reading.ReportedValue) @reading.Unit</span>
+                        <span class="quality @QualityClass(reading.Quality)">@reading.Quality</span>
+                        @if (Session.IsInstructor) { <span class="muted">true @Number(reading.TrueValue)</span> }
+                        @if (History is not null) { <GridSparkline Points="@(History.Series(reading.Id, 60))" Label="@($"{reading.Kind} of {ElementId}")" /> }
+                    </div>
+                }
+            }
+        </section>
+    </text>;
+
+    private RenderFragment TagsSection() => @<text>
+        <section class="cw-section">
+            <h3>Tags</h3>
+            @{ var mine = Tags.Where(t => t.ElementId == ElementId).ToList(); }
+            @if (mine.Count == 0)
+            {
+                <p class="muted">No tags on this element.</p>
+            }
+            else
+            {
+                foreach (var tag in mine)
+                {
+                    <div class="tag-row">
+                        <span class="tag-badge tag-@TagClass(tag.Kind)">@tag.Kind</span>
+                        <span class="tag-reason">@tag.Reason</span>
+                        <span class="muted">@tag.PlacedBy · @tag.PlacedAt.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</span>
+                        @if (Session.CanOperate)
+                        {
+                            <button class="btn" @onclick="() => RemoveTag(tag)">Remove</button>
+                        }
+                    </div>
+                }
+            }
+            @if (Session.CanOperate)
+            {
+                if (_placeTag)
+                {
+                    <div class="tag-form">
+                        <label>Kind
+                            <select @bind="_tagKind">
+                                @foreach (var kind in Enum.GetValues<GridTagKind>())
+                                {
+                                    <option value="@kind">@kind</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Reason <input type="text" maxlength="256" @bind="_tagReason" /></label>
+                        <div class="actions">
+                            <button class="btn btn-primary" @onclick="() => PlaceTag()">Place tag</button>
+                            <button class="btn" @onclick="() => _placeTag = false">Cancel</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="actions"><button class="btn" @onclick="() => _placeTag = true">Place tag</button></div>
+                }
+            }
+        </section>
+    </text>;
+}

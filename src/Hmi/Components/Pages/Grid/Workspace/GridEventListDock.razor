@@ -1,0 +1,65 @@
+@inherits GridPageBase
+@inject Application.Events.IEventStore EventStore
+@using Application.Events
+
+@* Events / Commands tab of the workspace bottom dock: grid-source events from IEventStore, newest first, live.
+   Commands mode keeps only the supervisory command categories (accepted/rejected). *@
+<div class="dock-tab-body" role="tabpanel" aria-label="@(Mode == GridEventDockMode.Commands ? "Command log" : "Grid events")">
+    @if (Mode == GridEventDockMode.Commands)
+    {
+        <p class="dock-hint muted">Accepted and rejected supervisory commands on the grid (actor, channel, result).</p>
+    }
+    else
+    {
+        <p class="dock-hint muted">Grid events, newest first.</p>
+    }
+    @if (_items.Count == 0)
+    {
+        <EmptyState Message="No matching events." />
+    }
+    else
+    {
+        <div class="table-scroll dock-table-scroll">
+            <table class="grid dock-table">
+                <thead>
+                    <tr><th>Time (UTC)</th><th>Category</th><th>Severity</th><th>Channel</th><th>Actor</th><th>Device</th><th>Message</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _items)
+                    {
+                        <tr @key="item.Id" class="@(item.Severity >= EventSeverity.High ? "row-sev-high" : "")">
+                            <td class="nowrap value">@item.Timestamp.ToUniversalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                            <td>@item.Category</td>
+                            <td>@item.Severity</td>
+                            <td class="nowrap">@item.Source</td>
+                            <td class="nowrap">@item.Actor</td>
+                            <td>@(item.DeviceId ?? "—")</td>
+                            <td>@item.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public GridEventDockMode Mode { get; set; }
+
+    private static readonly string[] CommandCategories =
+        [EventCategories.Audit, EventCategories.CommandRejected, EventCategories.AuthorizationDenied];
+
+    private IReadOnlyList<SecurityEvent> _items = [];
+
+    protected override IReadOnlyCollection<string> Topics =>
+        [.. base.Topics, RealtimeTopics.Events, RealtimeTopics.EventsPersisted];
+
+    protected override async Task RefreshAsync(CancellationToken cancellationToken)
+    {
+        var result = await EventStore.QueryAsync(new EventQuery(PageSize: 120, ExcludeTraining: !Session.IsInstructor), cancellationToken);
+        _items = result.Items
+            .Where(e => e.Source.StartsWith("grid", StringComparison.OrdinalIgnoreCase))
+            .Where(e => Mode != GridEventDockMode.Commands || CommandCategories.Contains(e.Category))
+            .ToArray();
+    }
+}

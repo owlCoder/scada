@@ -1,0 +1,155 @@
+@inherits GridPageBase
+
+@* Trend tab of the workspace bottom dock: up to four reported measurement series from IGridHistory on one SVG chart,
+   time axis in simulated time. *@
+<div class="dock-tab-body" role="tabpanel" aria-label="Trend">
+    @if (History is null)
+    {
+        <EmptyState Message="History is not available." />
+    }
+    else if (History.MeasurementIds.Count == 0)
+    {
+        <EmptyState Message="No measurement history yet." />
+    }
+    else
+    {
+        <div class="trend-picker">
+            @foreach (var id in History.MeasurementIds)
+            {
+                var measurement = Snapshot?.Measurements.FirstOrDefault(m => m.Id == id);
+                var label = measurement is null ? id : $"{id} · {measurement.ElementId} {measurement.Kind} ({measurement.Unit})";
+                <label class="trend-pick @(_selected.Contains(id) ? "picked" : "")">
+                    <input type="checkbox" checked="@_selected.Contains(id)" disabled="@(!_selected.Contains(id) && _selected.Count >= 4)"
+                           @onchange="e => Toggle(id, e.Value is true)" />
+                    @label
+                </label>
+            }
+        </div>
+        @if (Series.Count == 0)
+        {
+            <EmptyState Message="Pick up to 4 measurements to chart." />
+        }
+        else
+        {
+            <svg class="trend-chart" viewBox="0 0 640 240" preserveAspectRatio="none" role="img" aria-label="Trend chart of selected measurements">
+                <line class="trend-axis" x1="40" y1="10" x2="40" y2="200" />
+                <line class="trend-axis" x1="40" y1="200" x2="630" y2="200" />
+                @foreach (var tick in TimeTicks)
+                {
+                    @:<text class="trend-tick" x="@tick.X" y="218">@tick.Label</text>
+                }
+                @foreach (var series in Series)
+                {
+                    <polyline class="trend-line @series.CssClass" points="@Coordinates(series)" />
+                }
+            </svg>
+            <ul class="trend-legend">
+                @foreach (var series in Series)
+                {
+                    <li><span class="trend-chip @series.CssClass"></span>@series.Label · last <span class="value">@Number(series.Points.Count > 0 ? series.Points[^1].Value : 0) @series.Unit</span></li>
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IGridHistory? History { get; set; }
+    /// <summary>Element whose measurements are pre-selected when the tab is opened from a canvas ShowTrend action.</summary>
+    [Parameter] public string? FocusElementId { get; set; }
+
+    private const int MaxSeries = 4;
+    private const double ChartWidth = 640;
+    private const double ChartHeight = 240;
+    private const double PlotLeft = 40;
+    private const double PlotRight = 630;
+    private const double PlotTop = 10;
+    private const double PlotBottom = 200;
+
+    private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+    private string? _focused;
+
+    private IReadOnlyList<GridTrendSeries> Series => _selected
+        .OrderBy(id => id, StringComparer.Ordinal)
+        .Select((id, index) =>
+        {
+            var measurement = Snapshot?.Measurements.FirstOrDefault(m => m.Id == id);
+            var points = History?.Series(id, 240) ?? [];
+            return new GridTrendSeries(id, $"{id} · {measurement?.ElementId ?? "?"} {measurement?.Kind.ToString() ?? ""}",
+                measurement?.Unit ?? "", $"trend-s{index % 4}", points);
+        })
+        .ToArray();
+
+    private IReadOnlyList<(double X, string Label)> TimeTicks
+    {
+        get
+        {
+            var all = Series.SelectMany(s => s.Points).ToArray();
+            if (all.Length == 0)
+                return [];
+            var start = all.Min(p => p.SimulationTime);
+            var end = all.Max(p => p.SimulationTime);
+            return [(PlotLeft, Format(start)), ((PlotLeft + PlotRight) / 2, Format(start + (end - start) / 2)), (PlotRight, Format(end))];
+        }
+    }
+
+    protected override bool Refresh()
+    {
+        var changed = base.Refresh();
+        // Pre-select the measurements of the element the trend was opened for (canvas ShowTrend action).
+        if (FocusElementId is { } focus && focus != _focused && History is not null)
+        {
+            _focused = focus;
+            foreach (var id in History.MeasurementIds)
+            {
+                if (_selected.Count >= MaxSeries)
+                    break;
+                if (Snapshot?.Measurements.FirstOrDefault(m => m.Id == id)?.ElementId == focus)
+                    _selected.Add(id);
+            }
+            changed = true;
+        }
+        return changed;
+    }
+
+    private bool Toggle(string id, bool on)
+    {
+        if (on)
+        {
+            if (_selected.Count < MaxSeries)
+                _selected.Add(id);
+        }
+        else
+            _selected.Remove(id);
+        return true;
+    }
+
+    private string Coordinates(GridTrendSeries series)
+    {
+        var points = series.Points;
+        if (points.Count < 2)
+            return "";
+        var values = points.Select(p => p.Value).Where(double.IsFinite).ToArray();
+        if (values.Length < 2)
+            return "";
+        var min = values.Min();
+        var max = values.Max();
+        var span = max - min;
+        var times = points.Select(p => p.SimulationTime).ToArray();
+        var tMin = times.Min();
+        var tSpan = (times.Max() - tMin).TotalSeconds;
+        var coordinates = new List<string>(points.Count);
+        for (var i = 0; i < points.Count; i++)
+        {
+            if (!double.IsFinite(points[i].Value))
+                continue;
+            var x = tSpan == 0 ? (PlotLeft + PlotRight) / 2 : PlotLeft + (PlotRight - PlotLeft) * (points[i].SimulationTime - tMin).TotalSeconds / tSpan;
+            var y = span == 0 ? (PlotTop + PlotBottom) / 2 : PlotBottom - (PlotBottom - PlotTop) * (points[i].Value - min) / span;
+            coordinates.Add($"{Num(x)},{Num(y)}");
+        }
+        return string.Join(' ', coordinates);
+    }
+
+    private static string Format(TimeSpan time) => time.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+    private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

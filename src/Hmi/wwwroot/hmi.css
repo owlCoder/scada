@@ -95,7 +95,6 @@ input, select, textarea { background: var(--bg); color: var(--text); border: 1px
 .grid-node.selected { stroke: white; stroke-width: 3; }.grid-node:focus, button:focus-visible, a:focus-visible { outline: 2px solid #e0e4e8; outline-offset: 4px; }
 .grid-wire.selected-wire { stroke: white; stroke-width: 6; }
 .loading-bar { display: block; width: 120px; height: 8px; margin-top: 6px; }.loading-track { fill: #4c5258; }.loading-fill { fill: #bdc4ca; }.loading-over { fill: var(--alarm); }
-.grid-faceplate h3 { font-size: 14px; margin-top: 20px; }.grid-faceplate { font-size: 13px; overflow-wrap: anywhere; }
 .diagram-tools, .editor-toolbar { margin-bottom: 12px; }
 .editor-layout { display: grid; grid-template-columns: 175px minmax(300px, 1fr) 290px; gap: 14px; align-items: start; }
 .palette { display: grid; gap: 8px; max-height: 85vh; overflow-y: auto; }.palette h2 { margin: 10px 0 0; }.palette p { font-size: 12px; }
