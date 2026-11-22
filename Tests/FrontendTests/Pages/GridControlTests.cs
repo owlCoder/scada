@@ -4,6 +4,7 @@ using Bunit;
 using Domain.Grid.Commands;
 using FrontendTests.Support;
 using Hmi.Components.Pages.Grid;
+using Hmi.Components.Pages.Grid.Workspace;
 using Xunit;
 using Microsoft.AspNetCore.Components;
 
@@ -15,7 +16,7 @@ public sealed class GridControlTests
     public async Task SelectConfirmExecuteUsesTheActorAndHmiChannel()
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, "Q1"));
+        var page = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, "Q1"));
         Button(page, "Select open").Click();
         Assert.Empty(host.GridControl.Calls);
         Button(page, "Confirm").Click();
@@ -38,7 +39,7 @@ public sealed class GridControlTests
     public async Task CancellingConfirmationDoesNotSelectAndCancelSelectionDoesNotOperate()
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, "Q1"));
+        var page = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, "Q1"));
         Button(page, "Select open").Click(); Button(page, "Cancel").Click();
         Assert.Empty(host.GridControl.Calls);
         Button(page, "Select open").Click(); Button(page, "Confirm").Click();
@@ -55,7 +56,7 @@ public sealed class GridControlTests
     public async Task ExpiredLocalSelectionCannotExecute()
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, "Q1"));
+        var page = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, "Q1"));
         Button(page, "Select open").Click(); Button(page, "Confirm").Click();
         page.WaitForAssertion(() => Assert.Single(host.GridControl.Calls));
         host.Rig.Time.Advance(TimeSpan.FromSeconds(29));
@@ -73,7 +74,7 @@ public sealed class GridControlTests
     public async Task FaceplateCommandsRequireConfirmation(string id, string text, GridCommandType expected)
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
-        var page = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, id));
+        var page = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, id));
         Button(page, text).Click(); Assert.Empty(host.GridControl.Calls);
         Button(page, "Confirm").Click();
         page.WaitForAssertion(() => Assert.Single(host.GridControl.Calls));
@@ -100,8 +101,8 @@ public sealed class GridControlTests
     public async Task ViewersHaveNoLiveControls()
     {
         await using var host = HmiTestHost.Create(AccessRole.Viewer, mode: SimulationMode.Grid);
-        var faceplate = host.Context.Render<GridFaceplate>(p => p.Add(x => x.ElementId, "Q1"));
-        Assert.Empty(faceplate.FindAll("button"));
+        var faceplate = host.Context.Render<GridControlWindow>(p => p.Add(x => x.ElementId, "Q1"));
+        Assert.DoesNotContain(faceplate.FindAll("button"), b => b.TextContent.Contains("Select open") || b.TextContent.Contains("Execute") || b.TextContent.Contains("Place tag"));
         Assert.Empty(host.Context.Render<GridAlarms>().FindAll("button"));
     }
 

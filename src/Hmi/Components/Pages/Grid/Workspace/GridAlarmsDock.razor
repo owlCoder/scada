@@ -1,0 +1,49 @@
+@inherits GridPageBase
+@using Application.Events
+
+@* Alarms tab of the workspace bottom dock: ISA-18.2 grid alarm table. Clicking a row selects and centres the
+   element in the workspace; acknowledgement goes through IGridControl with confirmation. *@
+<div class="dock-tab-body" role="tabpanel" aria-label="Grid alarms">
+    <OutcomeBanner Outcome="Outcome" />
+    @if (Snapshot is { } grid)
+    {
+        if (grid.Alarms.Count == 0)
+        {
+            <EmptyState Message="No grid alarms." />
+        }
+        else
+        {
+            <div class="table-scroll dock-table-scroll">
+                <table class="grid dock-table">
+                    <thead>
+                        <tr><th>Priority</th><th>Time</th><th>Element</th><th>Alarm</th><th>State</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var alarm in grid.Alarms.OrderBy(a => a.Acknowledged).ThenByDescending(a => a.Severity).ThenByDescending(a => a.RaisedAt))
+                        {
+                            <tr class="@(alarm.Active && !alarm.Acknowledged ? "alarm-unack" : "") @(alarm.Acknowledged ? "" : "alarm-open")">
+                                <td><span class="priority-pill p-@(4 - (int)alarm.Severity)">@alarm.Severity</span></td>
+                                <td class="nowrap value">@alarm.RaisedAt.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)</td>
+                                <td><button type="button" class="linklike" @onclick="() => SelectElement.InvokeAsync(alarm.SourceId)" title="Select and centre this element">@alarm.SourceId</button></td>
+                                <td>@alarm.Message</td>
+                                <td>@(alarm.Active ? "Active" : "Returned to normal") · @(alarm.Acknowledged ? $"Ack by {alarm.AcknowledgedBy}" : "Unacknowledged")</td>
+                                <td>
+                                    @if (Session.CanOperate && !alarm.Acknowledged)
+                                    {
+                                        <button class="btn" @onclick="() => Command(GridCommandType.AcknowledgeAlarm, alarm.Key)" @onclick:stopPropagation>Acknowledge</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
+</div>
+
+@code {
+    /// <summary>Raised when a row is activated: the workspace selects (and centres) the alarm's element.</summary>
+    [Parameter] public EventCallback<string> SelectElement { get; set; }
+}

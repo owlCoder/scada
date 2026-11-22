@@ -11,7 +11,7 @@ All grid data pages inherit `GridPageBase` → `ConfirmedComponentBase` → `Rea
 | Route | Purpose |
 | --- | --- |
 | `/grid` | Load, generation, import, losses, supplied customers, alarm priorities, transformer loading, voltage ranges and feeder cards |
-| `/grid/diagram` | Live SVG single-line diagram generated from definition positions, terminals and line waypoints; mouse/touch pan, wheel/button zoom, keyboard selection and faceplates |
+| `/grid/diagram` | **Dispatcher workspace**: the `<GridSld>` canvas fills the area; right dock = control window for the selected element; resizable bottom dock with Alarms / Events / Commands / Trend / Tags tabs |
 | `/grid/feeders` | Branch currents, power, losses and loading bars |
 | `/grid/transformers` | Transformer loading, taps and AVR faceplates |
 | `/grid/switches` | Switch state, selections, last operator/cause and faceplates |
@@ -27,6 +27,40 @@ All grid data pages inherit `GridPageBase` → `ConfirmedComponentBase` → `Rea
 Water and grid share a calm grey shell, tables and cards. In grid mode the nav shows the grid pages plus **Scenarios** (pointing at `/grid/scenarios`) and, for Administrators, **Detection rules** (`/grid/rules`); events, incidents, health and my account stay shared. The persistent top-bar banner shows the newest three unacknowledged alarms in the selected mode. Grid voltage levels use heavy/medium/fine strokes rather than colors. De-energized sections are dimmed and dashed. Breakers use filled/hollow squares, disconnectors and load-break switches use distinct contact symbols, transformers use two circles and a tap label, and loads/PV/capacitors/sources have dedicated symbols.
 
 Faceplates use `IGridControl` with `Session.Actor` and source `hmi`. Every service mutation, including switch selection/cancellation, requires `ConfirmDialog`. Select open/close → confirm reserves a switch; Execute → confirm operates it. Cancel selection → confirm releases it. A visible **10-second local execution window** is deliberately independent of the service's authoritative ownership/expiry/interlock checks. The contracts do not expose selection expiry or last-operation timestamps; the HMI shows its local countdown and the available last operator/cause. An externally-created selection must be reselected in this circuit before execution. Transformer tap/AVR, load shed/restore, capacitor steps and protection reset follow the same confirmation flow. Instructor mutations use `IGridTraining`; services remain responsible for role enforcement.
+
+
+## Dispatcher workspace (`/grid/diagram`)
+
+`/grid/diagram` is a full-viewport workspace, not a page with side panels. It hosts the `<GridSld>` canvas as-is
+(`Snapshot` from `HmiSession.GridSnapshot()`, `Definition`, `Tags` from `IGridTagging`, two-way `SelectedId`, `OnAction`,
+`CanOperate`) and wires its `OnAction` requests to the docks:
+
+- `OpenControl` selects the element and opens the right dock; `SelectOpen`/`SelectClose` select the element, open the
+  control window and start the select-before-operate flow (confirmation dialog included); `ShowTrend` opens the bottom
+  dock on the Trend tab pre-selecting that element's measurements; `PlaceTag` opens the tag form; `ShowDetails` opens the
+  Details tab of the control window.
+- Right dock (`--w-dock-right`, collapsible) = **control window** (`GridControlWindow`, replaces the old `GridFaceplate`,
+  which the switches/loads/transformers pages now also use): header with element id, name, type icon, state badge and tag
+  badges, Control/Details tabs, and per element type — switch (state, last operation, SBO buttons with a countdown bar of
+  `Grid:SelectTimeoutSeconds − 2`, Execute/Cancel, disabled with the blocking reason when a `DoNotOperate`/`Earthed`/
+  `WorkInProgress` tag is on the switch or its connected line/transformer, or when the owning RTU has an active
+  communication-loss alarm; protection relays on the breaker with Reset), transformer (tap gauge with min/max/neutral,
+  AVR toggle, Raise/Lower, loading bar, HV/LV voltages), line/cable (current vs rating, loading bar, P/Q at both ends,
+  energised), load (demand, customers supplied/total, shed/restore), capacitor (step stepper), bus (voltage vs pu limits),
+  generator (P/Q, connected) — plus the element's reported measurements with quality and a 60-point mini sparkline from
+  `IGridHistory`, and the tag list with place/remove (kind + reason, each confirmed through `IGridTagging`).
+- Bottom dock (`--h-dock-bottom`, collapsible, drag-resizable via the `js/workspace-dock.js` module) with tabs:
+  **Alarms** (ISA-18.2 table with `--c-p1..p4` priority pills, blinking unacknowledged rows, acknowledge single with
+  confirmation via `IGridControl`, row click selects + centres the element), **Events** and **Commands** (grid-source
+  events from `IEventStore`, newest first, live on the `events` topics; Commands keeps the Audit/CommandRejected/
+  AuthorizationDenied categories = the supervisory command log with actor, channel and result), **Trend** (SVG multi-series
+  chart, up to 4 measurements from `IGridHistory`, time axis in simulated time), **Tags** (all active tags, remove with
+  confirmation).
+- Keyboard (forwarded by the JS module): `Esc` deselects, `Enter` opens the control window for the selection, `Del` cancels
+  a running selection countdown. Dock collapsed flags, bottom dock height and the active tab are remembered per user in
+  `localStorage` by the JS module (all state in C#, JS only forwards geometry and persists the layout).
+- `IGridTagging`/`IGridHistory` are resolved optionally (`GetService`); when they are not registered the tag/trend sections
+  are hidden instead of failing. The only JavaScript is the first-party ES module `_content/Hmi/js/workspace-dock.js`.
 
 ## Redactor integration
 

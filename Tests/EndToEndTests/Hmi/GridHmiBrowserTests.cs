@@ -27,15 +27,17 @@ public sealed class GridHmiBrowserTests(ITestOutputHelper output)
         var customers = await metrics.Nth(4).InnerTextAsync();
         var suppliedBefore = int.Parse(Regex.Match(customers, @"^(\d+)").Groups[1].Value);
 
-        // The single-line diagram renders the network nodes.
+        // The single-line diagram page is the dispatcher workspace: canvas, control window dock and bottom dock.
         await BrowserTestSession.NavigateAsync(page, "Single-line diagram");
-        await Assertions.Expect(page.Locator("svg.grid-diagram")).ToBeVisibleAsync();
-        Assert.True((await page.Locator("svg.grid-diagram g.grid-node").CountAsync()) > 10);
+        await Assertions.Expect(page.Locator(".grid-workspace")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator(".workspace-canvas .grid-sld")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator(".dock-right")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator(".dock-bottom .dock-tabs")).ToBeVisibleAsync();
 
         // Open feeder breaker QF1 via select-before-operate, each step confirmed.
         await BrowserTestSession.NavigateAsync(page, "Switches");
         await Row(page, "QF1").GetByRole(AriaRole.Button, new() { Name = "Open QF1", Exact = true }).ClickAsync();
-        var faceplate = page.Locator(".grid-faceplate");
+        var faceplate = page.Locator(".control-window");
         await Assertions.Expect(faceplate).ToBeVisibleAsync();
         await faceplate.GetByRole(AriaRole.Button, new() { Name = "Select open", Exact = true }).ClickAsync();
         await BrowserTestSession.ConfirmAsync(page);

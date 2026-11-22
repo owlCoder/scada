@@ -13,7 +13,7 @@
             <td><button class="btn" @onclick="() => Select(item.Id)">Open @item.Id</button></td></tr>
     }
     </tbody></table>
-    @if (_selected is not null) { <GridFaceplate @key="_selected" ElementId="@_selected" /> }
+    @if (_selected is not null) { <GridControlWindow @key="_selected" ElementId="@_selected" /> }
 }
 @code {
     private string? _selected;

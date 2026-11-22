@@ -30,8 +30,9 @@ namespace FrontendTests.Support;
 /// </summary>
 public sealed class HmiTestHost : IAsyncDisposable
 {
-    private HmiTestHost(AccessRole role, string name, RegisterWriteOptions? registerOptions, SimulationMode mode)
+    private HmiTestHost(AccessRole role, string name, RegisterWriteOptions? registerOptions, SimulationMode mode, bool workspaceServices)
     {
+        Context.JSInterop.Mode = Bunit.JSRuntimeMode.Loose;
         RealtimeBroadcaster? broadcaster = null;
         Rig = new TestRig(registerOptions, createRealtime: time => broadcaster = new RealtimeBroadcaster(time));
         Broadcaster = broadcaster!;
@@ -77,6 +78,13 @@ public sealed class HmiTestHost : IAsyncDisposable
         services.AddSingleton<IGridDefinitionStore>(GridStore);
         services.AddSingleton<IGridDefinitionAdministration>(GridAdministration);
         services.AddSingleton<GridEquipmentCatalog>();
+        if (workspaceServices)
+        {
+            GridTagging = new HmiWorkspaceFakeGridTagging();
+            GridHistory = new HmiWorkspaceFakeGridHistory();
+            services.AddSingleton<IGridTagging>(GridTagging);
+            services.AddSingleton<IGridHistory>(GridHistory);
+        }
         // The real grid security stack over the fake grid services, so the grid scenarios/rules pages can be tested.
         GridScenarios = new GridScenarioEngine(DefaultGridScenarios.Create(), Grid, GridTraining, GridControl,
             Rig.DetectionStore, Rig.RunStore, Rig.Events, Broadcaster, Rig.Time, new CommandReplayGuard(),
@@ -98,12 +106,14 @@ public sealed class HmiTestHost : IAsyncDisposable
     public HmiFakeGridDefinitionAdministration GridAdministration { get; }
     public GridScenarioEngine GridScenarios { get; }
     public GridDetectionEngine GridDetection { get; }
+    public HmiWorkspaceFakeGridTagging? GridTagging { get; }
+    public HmiWorkspaceFakeGridHistory? GridHistory { get; }
     public BunitContext Context { get; } = new();
     public TestRig Rig { get; }
     public RealtimeBroadcaster Broadcaster { get; }
 
-    public static HmiTestHost Create(AccessRole role, string name = "tester", RegisterWriteOptions? registerOptions = null, SimulationMode mode = SimulationMode.Water) =>
-        new(role, name, registerOptions, mode);
+    public static HmiTestHost Create(AccessRole role, string name = "tester", RegisterWriteOptions? registerOptions = null, SimulationMode mode = SimulationMode.Water, bool workspaceServices = true) =>
+        new(role, name, registerOptions, mode, workspaceServices);
 
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }
