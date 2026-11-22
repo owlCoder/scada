@@ -1,0 +1,51 @@
+@using Hmi.Services.Grid.Sld
+@using Domain.Grid.Definition
+@* Pure symbol shapes for one element kind in local coordinates. State (closed/open/dead/invalid) is expressed
+   through classes on the parent group; CSS maps them to the design tokens. *@
+
+@if (Kind == SldElementKind.Bus)
+{
+    <line x1="-30" y1="0" x2="30" y2="0" class="sym busbar" />
+}
+else if (Kind == SldElementKind.Switch && SwitchKind == GridSwitchKind.Breaker)
+{
+    <rect x="-9" y="-9" width="18" height="18" class="sym sym-switch" />
+}
+else if (Kind == SldElementKind.Switch && SwitchKind == GridSwitchKind.Disconnector)
+{
+    <circle cx="0" cy="-11" r="2.4" class="sym" /><circle cx="0" cy="11" r="2.4" class="sym" />
+    <path class="sym" d="@(IsClosed ? "M0,-9 L0,9" : "M0,-9 L11,7")" />
+}
+else if (Kind == SldElementKind.Switch && SwitchKind == GridSwitchKind.LoadBreakSwitch)
+{
+    <path class="sym" d="@(IsClosed ? "M0,-12 L0,10 M-6,-12 L6,-12" : "M0,-12 L11,6 M-6,-12 L6,-12")" /><circle cx="0" cy="12" r="3" class="sym" />
+}
+else if (Kind == SldElementKind.Transformer)
+{
+    <circle cx="0" cy="-8" r="11" class="sym" /><circle cx="0" cy="8" r="11" class="sym" />
+}
+else if (Kind == SldElementKind.Load)
+{
+    <path class="sym sym-fill" d="M-11,-9 L11,-9 L0,12 Z" />
+}
+else if (Kind == SldElementKind.Generator)
+{
+    <rect x="-13" y="-10" width="26" height="20" class="sym" />
+    <path class="sym" d="M-13,0 L13,0 M0,-10 L0,10 M-19,-19 L-10,-11 M-8,-20 L-3,-13" />
+}
+else if (Kind == SldElementKind.Capacitor)
+{
+    <path class="sym" d="M0,-18 L0,-4 M-13,-4 L13,-4 M-13,4 L13,4 M0,4 L0,18" />
+}
+else if (Kind == SldElementKind.Source)
+{
+    <circle r="14" class="sym" /><path class="sym" d="M-9,0 Q-4.5,-11 0,0 Q4.5,11 9,0" />
+}
+
+@code {
+    [Parameter, EditorRequired] public SldElementKind Kind { get; set; }
+    [Parameter] public GridSwitchKind? SwitchKind { get; set; }
+    [Parameter] public bool? Closed { get; set; }
+
+    private bool IsClosed => Closed == true;
+}

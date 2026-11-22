@@ -1,0 +1,183 @@
+@using Hmi.Services.Grid.Sld
+@using Domain.Grid.Definition
+@using System.Globalization
+@* One diagram element: wires, symbol, flow arrow, markers, LOD labels and (at high zoom) its value box.
+   ShouldRender compares the immutable state records so a realtime tick only re-renders changed elements. *@
+
+<g class="sld-el kind-@KindCss @GroupClass" data-id="@Element.Id" data-kind="@KindCss"
+   role="button" tabindex="-1" aria-label="@Aria"
+   @onclick="SelectAsync" @onclick:stopPropagation
+   @ondblclick="OpenAsync" @ondblclick:stopPropagation
+   @oncontextmenu="MenuAsync" @oncontextmenu:preventDefault @oncontextmenu:stopPropagation
+   @onpointerdown:stopPropagation
+   @onpointerover="HoverAsync" @onpointerout="UnhoverAsync">
+    @foreach (var wire in Element.Wires)
+    {
+        <polyline class="sld-wire @VoltageClass @WireClass" points="@Points(wire)" />
+    }
+    <g transform="@AnchorTransform">
+        @if (State?.Selected == true)
+        {
+            <circle class="sld-halo" r="27" />
+        }
+        <SldSymbol Kind="Element.Kind" SwitchKind="Element.SwitchKind" Closed="State?.Closed" />
+        @if (State?.Invalid == true)
+        {
+            @:<text class="sld-qmark" x="16" y="-12">?</text>
+        }
+        @if (State?.HasFlow == true && Element.Wires.Count > 0)
+        {
+            var (point, angle) = SldPathMath.PointAt(Element.Wires[0], 0.5);
+            <path class="sld-flow" transform="translate(@N(point.X) @N(point.Y)) rotate(@N(State.FlowFrom ? angle : angle + 180))" d="M7,0 L-5,-4.5 L-5,4.5 Z" />
+        }
+        @if (Lod >= SldLod.Medium && Element.Kind == SldElementKind.Transformer && Tap is { } tap)
+        {
+            @:<text class="sld-tap" x="0" y="32" text-anchor="middle">tap @tap</text>
+        }
+        @if (Lod == SldLod.Low && (Element.Kind == SldElementKind.Bus || Element.Kind == SldElementKind.Line))
+        {
+            @:<text class="sld-lod-id" x="12" y="-12">@Element.Id</text>
+        }
+        else if (Lod >= SldLod.Medium)
+        {
+            @:<text class="sld-lod-name" x="14" y="-12">@Element.Name</text>
+        }
+        @if (State is not null)
+        {
+            @if (State.ProtectionTripped)
+            {
+                <g class="sld-marker sld-protection" transform="translate(-26 -30)" role="img" aria-label="Protection tripped">
+                    <title>Protection tripped</title><path d="M0,0 L0,-11 L9,-8 L0,-5 Z" /><text y="7" text-anchor="middle">P</text>
+                </g>
+            }
+            @if (State.AlarmSeverity is { } severity)
+            {
+                <g class="sld-marker sld-alarm @State.AlarmClass @(State.AlarmUnacknowledged ? "blink-unack" : "")" transform="translate(26 -30)" role="img" aria-label="Active alarm @severity">
+                    <title>Active alarm (@severity)</title><path d="M-5,3 L-3.5,-3 A4.5,4.5 0 0 1 3.5,-3 L5,3 Z" /><circle cy="5.5" r="1.6" />
+                </g>
+            }
+            var tags = State.Tags;
+            @for (var i = 0; i < tags.Count; i++)
+            {
+                var tag = tags[i];
+                <g class="sld-marker sld-tag tag-@TagClass(tag.Kind)" transform="translate(-36 @(20 + i * 20))" role="img" aria-label="@TagLabel(tag)">
+                    <title>@TagLabel(tag): @tag.Reason</title>
+                    <rect x="0" y="0" width="34" height="16" rx="3" />
+                    @if (tag.Kind == GridTagKind.Earthed)
+                    {
+                        <path class="tag-glyph" d="M17,3 L17,9 M12,6 L22,6 M14,8.5 L20,8.5 M15.5,11 L18.5,11" />
+                    }
+                    else
+                    {
+                        @:<text x="17" y="12" text-anchor="middle">@TagText(tag.Kind)</text>
+                    }
+                </g>
+            }
+        }
+    </g>
+    @if (Lod == SldLod.High && Placement is not null && State?.ValueText is { } value)
+    {
+        <g class="sld-value" transform="translate(@N(Placement.X) @N(Placement.Y))">
+            <rect width="@ValueWidth" height="18" rx="3" />
+            <text x="6" y="13">@value</text>
+            @if (State.QualityFlag is { } flag)
+            {
+                @:<text class="sld-qflag q-@flag.ToLowerInvariant()" x="@N(ValueWidth - 12)" y="13">@flag</text>
+            }
+        </g>
+    }
+</g>
+
+@code {
+    [Parameter, EditorRequired] public SldElement Element { get; set; } = default!;
+    [Parameter] public SldElementState? State { get; set; }
+    [Parameter] public SldLod Lod { get; set; }
+    [Parameter] public SldViewMode ViewMode { get; set; }
+    [Parameter] public bool ShowHeat { get; set; }
+    [Parameter] public SldLabelPlacement? Placement { get; set; }
+    [Parameter] public int? Tap { get; set; }
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+    [Parameter] public EventCallback<string> OnOpenControl { get; set; }
+    [Parameter] public EventCallback<SldPointerRequest> OnContextMenu { get; set; }
+    [Parameter] public EventCallback<SldPointerRequest> OnHover { get; set; }
+    [Parameter] public EventCallback<string> OnUnhover { get; set; }
+
+    // Signature of the last render; a realtime tick only re-renders elements whose state actually changed.
+    private SldElementState? _renderedState;
+    private SldLod _renderedLod;
+    private SldViewMode _renderedMode;
+    private bool _renderedHeat;
+    private SldLabelPlacement? _renderedPlacement;
+    private int? _renderedTap;
+
+    protected override bool ShouldRender() =>
+        !Equals(State, _renderedState) || Lod != _renderedLod || ViewMode != _renderedMode || ShowHeat != _renderedHeat
+        || !Equals(Placement, _renderedPlacement) || Tap != _renderedTap;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _renderedState = State;
+        _renderedLod = Lod;
+        _renderedMode = ViewMode;
+        _renderedHeat = ShowHeat;
+        _renderedPlacement = Placement;
+        _renderedTap = Tap;
+    }
+
+    private string KindCss => Element.Kind.ToString().ToLowerInvariant();
+    private string VoltageClass => SldVoltage.Class(Element.VoltageKv);
+    private string AnchorTransform => $"translate({N(Element.Anchor.X)} {N(Element.Anchor.Y)})";
+    private string GroupClass
+    {
+        get
+        {
+            var classes = new List<string> { VoltageClass };
+            if (State is null) return string.Join(' ', classes);
+            if (!State.Energized) classes.Add("is-dead");
+            if (State.Invalid) classes.Add("is-invalid");
+            if (State.Closed == true) classes.Add("closed");
+            if (State.Closed == false) classes.Add("open");
+            if (State.Selected) classes.Add("is-selected");
+            return string.Join(' ', classes);
+        }
+    }
+    private string WireClass
+    {
+        get
+        {
+            if (State is null) return "";
+            var classes = new List<string>();
+            if (!State.Energized) classes.Add("is-dead");
+            classes.Add(State.LoadingClass);
+            return string.Join(' ', classes);
+        }
+    }
+    private string Aria => State is null
+        ? $"{Element.Name}, {Element.Kind}, {Element.Id}"
+        : $"{Element.Name}, {Element.Kind}, {Element.Id}, {(State.Closed is { } c ? (c ? "closed" : "open") : State.Energized ? "energized" : "de-energised")}, {State.ValueText ?? "no value"}";
+    private double ValueWidth => SldLabelPlacer.BoxSize(State?.ValueText, State?.QualityFlag).Width;
+
+    private static string Points(IReadOnlyList<DiagramPosition> wire) => string.Join(' ', wire.Select(p => $"{N(p.X)},{N(p.Y)}"));
+    private static string N(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    private static string TagClass(GridTagKind kind) => kind switch
+    {
+        GridTagKind.DoNotOperate => "dno",
+        GridTagKind.Earthed => "earthed",
+        GridTagKind.WorkInProgress => "wip",
+        _ => "info"
+    };
+    private static string TagText(GridTagKind kind) => kind switch
+    {
+        GridTagKind.DoNotOperate => "DNO",
+        GridTagKind.WorkInProgress => "WIP",
+        GridTagKind.Information => "i",
+        _ => "⏚"
+    };
+    private static string TagLabel(GridTag tag) => $"{tag.Kind} tag";
+
+    private Task SelectAsync() => OnSelect.InvokeAsync(Element.Id);
+    private Task OpenAsync() => OnOpenControl.InvokeAsync(Element.Id);
+    private Task MenuAsync(MouseEventArgs e) => OnContextMenu.InvokeAsync(new SldPointerRequest(Element.Id, e.ClientX, e.ClientY));
+    private Task HoverAsync(PointerEventArgs e) => OnHover.InvokeAsync(new SldPointerRequest(Element.Id, e.ClientX, e.ClientY));
+    private Task UnhoverAsync(PointerEventArgs e) => OnUnhover.InvokeAsync(Element.Id);
+}

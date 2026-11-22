@@ -12,6 +12,9 @@ All grid data pages inherit `GridPageBase` → `ConfirmedComponentBase` → `Rea
 | --- | --- |
 | `/grid` | Load, generation, import, losses, supplied customers, alarm priorities, transformer loading, voltage ranges and feeder cards |
 | `/grid/diagram` | **Dispatcher workspace**: the `<GridSld>` canvas fills the area; right dock = control window for the selected element; resizable bottom dock with Alarms / Events / Commands / Trend / Tags tabs |
+
+| `/grid/diagram` | Live SVG single-line diagram generated from definition positions, terminals and line waypoints; mouse/touch pan, wheel/button zoom, keyboard selection and faceplates (being replaced by the dispatcher workspace that hosts the `<GridSld>` canvas) |
+| `/grid/sld-preview` | Temporary dev route rendering only the `<GridSld>` canvas full-screen (may be removed once the workspace lands) |
 | `/grid/feeders` | Branch currents, power, losses and loading bars |
 | `/grid/transformers` | Transformer loading, taps and AVR faceplates |
 | `/grid/switches` | Switch state, selections, last operator/cause and faceplates |
@@ -25,6 +28,17 @@ All grid data pages inherit `GridPageBase` → `ConfirmedComponentBase` → `Rea
 | `/grid/editor` | Administrator-only network draft editor and version administration |
 
 Water and grid share a calm grey shell, tables and cards. In grid mode the nav shows the grid pages plus **Scenarios** (pointing at `/grid/scenarios`) and, for Administrators, **Detection rules** (`/grid/rules`); events, incidents, health and my account stay shared. The persistent top-bar banner shows the newest three unacknowledged alarms in the selected mode. Grid voltage levels use heavy/medium/fine strokes rather than colors. De-energized sections are dimmed and dashed. Breakers use filled/hollow squares, disconnectors and load-break switches use distinct contact symbols, transformers use two circles and a tap label, and loads/PV/capacitors/sources have dedicated symbols.
+
+## Single-line diagram canvas (`GridSld`)
+
+`<GridSld>` (parameters unchanged: `Snapshot`, `Definition`, `Tags`, `SelectedId`/`SelectedIdChanged`, `OnAction`, `CanOperate`) is the dispatcher canvas that the grid workspace hosts full-screen; `/grid/sld-preview` renders it standalone for development. It fills its container on the dark `--c-canvas` background and keeps all state in C#:
+
+- **Geometry** — `SldModelBuilder` turns the definition into static SVG geometry once per definition: busbars as thick bars, line polylines through waypoints and inline switches, bus→element stubs, one dashed substation frame per RTU (`SldFramesLayer`, re-rendered only when the definition changes). Dynamic per-tick state comes from `SldStateBuilder` into `SldElementState` records, so each `<SldElementG @key>` re-renders only when its own state record changes.
+- **States** — closed switches are filled with the voltage colour (`--c-kv-*`), open ones hollow with `--c-open`, bad/unknown quality `--c-invalid` with "?"; de-energised sections `--c-dead`; quality flags U/B from reported measurements only (never spoof indicators). View modes: *Voltage levels* (default), *Energisation*, *Loading* (heat scale `--c-load-*`, also as a toggleable overlay). Energised branches show flow arrows in the measured power direction.
+- **LOD** — zoom decides detail: low shows element ids of busbars/feeders, medium shows names, high shows measurement value boxes (kV at buses, A/% at branches, MW at loads, tap at transformers) placed by `SldLabelPlacer`, a greedy slot ring that guarantees no two boxes overlap.
+- **Markers** — tag badges from `Tags` (DNO red, Earthed green earth glyph, WIP amber, "i"), protection-tripped flag, alarm bell in the priority colour blinking while unacknowledged, and a `--c-focus` halo on the selection.
+- **Interaction** — drag empty space to pan, wheel zooms around the cursor, `+`/`−`/`0`/arrows/Tab/Enter/ContextMenu/Escape keyboard control, zoom buttons and *Fit* in the top-right toolbar, minimap (bottom-left, click/drag to navigate), search box and substation/feeder quick list (top-left, zooms to and selects the element). Hover shows a tooltip; click selects (`SelectedIdChanged`); double-click raises `OnAction(OpenControl)`; right-click opens a role-aware context menu (`SelectOpen`/`SelectClose`/`PlaceTag`/`ShowTrend`/`ShowDetails`/`OpenControl` — viewers get read-only items only).
+- **JavaScript** — only the first-party ES module `_content/Hmi/js/sld.js`: pointer capture, client↔SVG transforms, overlay placement via the CSSOM (no inline styles) and a resize observer reporting the container size. Without it (tests, prerender) the canvas falls back to centre-based zoom and fixed-size minimap math.
 
 Faceplates use `IGridControl` with `Session.Actor` and source `hmi`. Every service mutation, including switch selection/cancellation, requires `ConfirmDialog`. Select open/close → confirm reserves a switch; Execute → confirm operates it. Cancel selection → confirm releases it. A visible **10-second local execution window** is deliberately independent of the service's authoritative ownership/expiry/interlock checks. The contracts do not expose selection expiry or last-operation timestamps; the HMI shows its local countdown and the available last operator/cause. An externally-created selection must be reselected in this circuit before execution. Transformer tap/AVR, load shed/restore, capacitor steps and protection reset follow the same confirmation flow. Instructor mutations use `IGridTraining`; services remain responsible for role enforcement.
 
@@ -82,7 +96,7 @@ raises them through the same `IncidentService`).
 6. Every edit calls `IGridDefinitionAdministration.Validate`. Validation messages remain visible and block save. Enter a version comment, choose **Save new version**, and confirm; this calls `SaveAsync` with the actor.
 7. The version list shows version, author, creation time, comment and active state. **Activate version** explicitly confirms that it **restarts the grid simulation**, then calls `IGridRuntime.ActivateVersionAsync`. Saving alone does not activate.
 
-The only JavaScript is the first-party ES module `_content/Hmi/grid-pointer.js`, imported via Blazor interop. It provides pointer capture/release and client-to-SVG coordinate transforms only. Draft, connection, dragging, viewport and command state stay in C#. There is no CDN, inline script, inline style or CSP relaxation. Pointer modules and realtime subscriptions are disposed on navigation.
+The only JavaScript is the first-party ES modules `_content/Hmi/grid-pointer.js` (editor) and `_content/Hmi/js/sld.js` (diagram canvas), imported via Blazor interop. They provide pointer capture/release, client-to-SVG coordinate transforms, overlay placement and resize observation only. Draft, connection, dragging, viewport and command state stay in C#. There is no CDN, inline script, inline style or CSP relaxation. Pointer modules and realtime subscriptions are disposed on navigation.
 
 ## Validation
 

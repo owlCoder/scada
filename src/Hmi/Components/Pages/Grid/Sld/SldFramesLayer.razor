@@ -1,0 +1,23 @@
+@using Hmi.Services.Grid.Sld
+@* Substation frames: dashed rectangles grouping the elements of one RTU, with the station name. Pure static
+   geometry — this layer only re-renders when the definition changes. *@
+
+@foreach (var frame in Model.Frames)
+{
+    <g class="sld-frame" data-rtu="@frame.RtuId">
+        <rect x="@N(frame.X)" y="@N(frame.Y)" width="@N(frame.Width)" height="@N(frame.Height)" rx="10" />
+        <text class="sld-frame-name" x="@N(frame.X + 10)" y="@N(frame.Y + 18)">@frame.Name</text>
+    </g>
+}
+
+@code {
+    [Parameter, EditorRequired] public SldStaticModel Model { get; set; } = default!;
+
+    private SldStaticModel? _rendered;
+
+    protected override bool ShouldRender() => !ReferenceEquals(Model, _rendered);
+
+    protected override void OnAfterRender(bool firstRender) => _rendered = Model;
+
+    private static string N(double value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}

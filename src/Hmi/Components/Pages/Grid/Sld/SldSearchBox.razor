@@ -1,0 +1,73 @@
+@using Hmi.Services.Grid.Sld
+@* Search box (top-left overlay): type an element id/name to list matches and zoom to them, plus a quick list of
+   substations (RTU frames) and feeders (lines). *@
+
+<div class="sld-search">
+    <input class="sld-search-input" type="search" placeholder="Search id or name…" aria-label="Search elements"
+           value="@_query" @oninput="OnInputAsync" />
+    @if (_results.Count > 0)
+    {
+        <ul class="sld-search-results" role="listbox">
+            @foreach (var result in _results)
+            {
+                <li role="option" aria-selected="false">
+                    <button type="button" class="sld-search-item" @onclick="() => PickAsync(result)">
+                        <span class="sld-search-id">@result.Id</span> @result.Name <span class="sld-search-kind">@result.Kind</span>
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+    <select class="sld-quicklist" aria-label="Substations and feeders" @onchange="OnQuickAsync">
+        <option value="">Substations / feeders…</option>
+        @foreach (var frame in Model.Frames)
+        {
+            <option value="rtu:@frame.RtuId">@frame.Name (substation)</option>
+        }
+        @foreach (var line in Model.Elements.Where(e => e.Kind == SldElementKind.Line))
+        {
+            <option value="el:@line.Id">@line.Name (feeder)</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SldSearchIndex Index { get; set; } = default!;
+    [Parameter, EditorRequired] public SldStaticModel Model { get; set; } = default!;
+    [Parameter] public EventCallback<SldElement> OnPick { get; set; }
+    [Parameter] public EventCallback<SldBounds> OnNavigateBounds { get; set; }
+
+    private string _query = "";
+    private IReadOnlyList<SldElement> _results = [];
+
+    private Task OnInputAsync(ChangeEventArgs e)
+    {
+        _query = e.Value as string ?? "";
+        _results = Index.Search(_query);
+        return Task.CompletedTask;
+    }
+
+    private async Task PickAsync(SldElement element)
+    {
+        _query = "";
+        _results = [];
+        await OnPick.InvokeAsync(element);
+    }
+
+    private async Task OnQuickAsync(ChangeEventArgs e)
+    {
+        var value = e.Value as string;
+        if (string.IsNullOrEmpty(value))
+            return;
+        if (value.StartsWith("rtu:", StringComparison.Ordinal))
+        {
+            var frame = Model.Frames.FirstOrDefault(f => f.RtuId == value[4..]);
+            if (frame is not null)
+                await OnNavigateBounds.InvokeAsync(new SldBounds(frame.X, frame.Y, frame.Width, frame.Height));
+        }
+        else if (value.StartsWith("el:", StringComparison.Ordinal) && Model.Element(value[3..]) is { } element)
+        {
+            await OnPick.InvokeAsync(element);
+        }
+    }
+}
