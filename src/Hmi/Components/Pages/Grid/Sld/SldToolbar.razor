@@ -1,0 +1,35 @@
+@using Hmi.Services.Grid.Sld
+@* Zoom buttons, fit, view-mode toggle and the loading-heat toggle (top-right overlay). *@
+
+<div class="sld-toolbar" role="toolbar" aria-label="Diagram view controls">
+    <button type="button" class="sld-btn" title="Zoom in (+)" @onclick="OnZoomIn">+</button>
+    <button type="button" class="sld-btn" title="Zoom out (−)" @onclick="OnZoomOut">−</button>
+    <button type="button" class="sld-btn sld-btn-fit" title="Fit network (0)" @onclick="OnFit">Fit</button>
+    <div class="sld-modes" role="group" aria-label="View mode">
+        <button type="button" class="sld-btn @(ViewMode == SldViewMode.VoltageLevels ? "active" : "")" aria-pressed="@(ViewMode == SldViewMode.VoltageLevels)"
+                title="Colour by voltage level" @onclick="() => OnViewMode.InvokeAsync(SldViewMode.VoltageLevels)">Voltage</button>
+        <button type="button" class="sld-btn @(ViewMode == SldViewMode.Energisation ? "active" : "")" aria-pressed="@(ViewMode == SldViewMode.Energisation)"
+                title="Colour energised / de-energised" @onclick="() => OnViewMode.InvokeAsync(SldViewMode.Energisation)">Energised</button>
+        <button type="button" class="sld-btn @(ViewMode == SldViewMode.Loading ? "active" : "")" aria-pressed="@(ViewMode == SldViewMode.Loading)"
+                title="Colour lines by loading" @onclick="() => OnViewMode.InvokeAsync(SldViewMode.Loading)">Loading</button>
+    </div>
+    <label class="sld-heat-toggle" title="Overlay loading heat colours on lines">
+        <input type="checkbox" @bind="_heat" @bind:after="HeatChangedAsync" /> Loading colours
+    </label>
+</div>
+
+@code {
+    [Parameter] public SldViewMode ViewMode { get; set; }
+    [Parameter] public bool ShowHeat { get; set; }
+    [Parameter] public EventCallback OnZoomIn { get; set; }
+    [Parameter] public EventCallback OnZoomOut { get; set; }
+    [Parameter] public EventCallback OnFit { get; set; }
+    [Parameter] public EventCallback<SldViewMode> OnViewMode { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleHeat { get; set; }
+
+    private bool _heat;
+
+    protected override void OnParametersSet() => _heat = ShowHeat;
+
+    private Task HeatChangedAsync() => OnToggleHeat.InvokeAsync(_heat);
+}

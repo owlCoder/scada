@@ -1,5 +1,71 @@
-@* Single-line diagram canvas. Placeholder contract owned by the SLD agent; the workspace page hosts it. *@
-<div class="grid-sld" data-selected="@SelectedId"></div>
+@using Hmi.Services.Grid.Sld
+@using Domain.Grid.Definition
+@using System.Globalization
+@using Microsoft.Extensions.Logging
+@using Hmi.Components.Pages.Grid.Sld
+@inject IJSRuntime JS
+@inject ILogger<GridSld> Log
+@implements IAsyncDisposable
+
+@* Single-line diagram canvas. Fills its container; pan by dragging empty space, wheel zoom around the cursor,
+   zoom buttons / keyboard, minimap, search, view modes, context menu. All state is C#; the JS module only reports
+   pointer positions, the container size and places overlays. *@
+
+<div class="grid-sld" @ref="_root" data-selected="@SelectedId">
+    <svg @ref="_canvas" class="sld-canvas mode-@ModeCss @(_showHeat ? "heat-on" : "")" viewBox="@_viewport.ViewBox"
+         preserveAspectRatio="xMidYMid meet" tabindex="0" role="application" aria-label="Single-line diagram of the electrical network"
+         @onpointerdown="OnPointerDownAsync" @onpointermove="OnPointerMoveAsync" @onpointerup="OnPointerUpAsync" @onpointercancel="OnPointerUpAsync"
+         @onwheel="OnWheelAsync" @onwheel:preventDefault
+         @onkeydown="OnKeyDownAsync" @onkeydown:preventDefault
+         @onclick="OnBackgroundClickAsync"
+         @oncontextmenu="OnBackgroundContextMenu" @oncontextmenu:preventDefault>
+        <SldFramesLayer Model="_model" />
+        @foreach (var element in _model.Elements)
+        {
+            <SldElementG @key="element.Id" Element="element" State="_states.GetValueOrDefault(element.Id)"
+                         Lod="_lod" ViewMode="_viewMode" ShowHeat="_showHeat" Tap="BranchTap(element.Id)"
+                         Placement="_placements is null ? null : _placements.GetValueOrDefault(element.Id)"
+                         OnSelect="SelectAsync" OnOpenControl="id => RaiseActionAsync(id, GridSldActionKind.OpenControl)"
+                         OnContextMenu="OnElementMenuAsync" OnHover="OnElementHover" OnUnhover="OnElementUnhover" />
+        }
+    </svg>
+
+    <SldSearchBox Index="_index" Model="_model" OnPick="PickAsync" OnNavigateBounds="NavigateBoundsAsync" />
+    <SldToolbar ViewMode="_viewMode" ShowHeat="_showHeat"
+                OnZoomIn="() => ZoomCenter(1.25)" OnZoomOut="() => ZoomCenter(0.8)" OnFit="() => Fit()"
+                OnViewMode="SetViewMode" OnToggleHeat="SetHeatAsync" />
+    <SldMinimap Model="_model" Viewport="_viewport" OnNavigate="NavigateMinimap" />
+
+    @if (_hover is { } hover && _model.Element(hover.ElementId) is { } hoverElement)
+    {
+        <div class="sld-tooltip" @ref="_tooltipEl" role="tooltip">
+            <p class="sld-tooltip-title">@hoverElement.Name <span class="sld-tooltip-id">@hoverElement.Id</span></p>
+            <p>@hoverElement.Kind · @(_states.GetValueOrDefault(hover.ElementId)?.Energized == true ? "energised" : "de-energised")</p>
+            @if (_states.GetValueOrDefault(hover.ElementId)?.ValueText is { } hoverValue)
+            {
+                <p class="sld-tooltip-value">@hoverValue @(_states.GetValueOrDefault(hover.ElementId)?.QualityFlag)</p>
+            }
+            @if (_states.GetValueOrDefault(hover.ElementId)?.Closed is { } closed)
+            {
+                <p>@(closed ? "closed" : "open")</p>
+            }
+        </div>
+    }
+
+    @if (_menu is { } menu)
+    {
+        <div class="sld-context-menu" @ref="_menuEl" role="menu" aria-label="Element commands for @_menuTitle"
+             @onclick:stopPropagation @onpointerdown:stopPropagation @onkeydown:stopPropagation>
+            <p class="sld-menu-title">@_menuTitle</p>
+            @foreach (var item in menu.Items)
+            {
+                <button type="button" role="menuitem" class="sld-menu-item" disabled="@(!item.Enabled)"
+                        @onclick="() => ChooseMenuAsync(item)">@item.Label</button>
+            }
+        </div>
+    }
+</div>
+
 @code {
     /// <summary>Ground truth already redacted for the current session.</summary>
     [Parameter, EditorRequired] public Domain.Grid.Snapshots.GridSnapshot Snapshot { get; set; } = default!;
@@ -10,4 +76,440 @@
     /// <summary>Context-menu / double-click / keyboard requests for the host (control window, trend, tag, SBO).</summary>
     [Parameter] public EventCallback<Hmi.Services.Grid.GridSldAction> OnAction { get; set; }
     [Parameter] public bool CanOperate { get; set; }
+
+    private readonly SldViewport _viewport = new();
+    private GridDefinition? _definition;
+    private SldStaticModel _model = new([], [], new SldBounds(0, 0, 100, 100), new Dictionary<string, SldElement>());
+    private SldSearchIndex _index = new(new SldStaticModel([], [], new SldBounds(0, 0, 100, 100), new Dictionary<string, SldElement>()));
+    private IReadOnlyDictionary<string, SldElementState> _states = new Dictionary<string, SldElementState>();
+    private IReadOnlyDictionary<string, SldLabelPlacement>? _placements;
+    private SldLod _lod;
+    private SldViewMode _viewMode = SldViewMode.VoltageLevels;
+    private bool _showHeat;
+    private bool _fitted;
+
+    private ElementReference _root;
+    private ElementReference _canvas;
+    private ElementReference _menuEl;
+    private ElementReference _tooltipEl;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<GridSld>? _dotNet;
+
+    private SldContextMenu? _menu;
+    private string _menuTitle = "";
+    private bool _menuDirty;
+    private SldPointerRequest? _hover;
+    private bool _hoverDirty;
+
+    private bool _panning;
+    private bool _dragged;
+    private Domain.Grid.Definition.DiagramPosition? _panLast;
+    private Domain.Grid.Definition.DiagramPosition? _panStart;
+
+    private string ModeCss => _viewMode.ToString().ToLowerInvariant();
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(Definition, _definition))
+        {
+            _definition = Definition;
+            _model = SldModelBuilder.Build(Definition);
+            _index = new SldSearchIndex(_model);
+            if (!_fitted)
+            {
+                _viewport.Fit(_model.Bounds);
+                _fitted = true;
+            }
+        }
+        _states = SldStateBuilder.Build(Snapshot, Definition, Tags, SelectedId);
+        RefreshZoomDerived();
+    }
+
+    // Self-triggered renders (zoom, keyboard, menu) do not run OnParametersSet, so the zoom-dependent
+    // derived state is also recomputed here on every render pass.
+    protected override bool ShouldRender()
+    {
+        RefreshZoomDerived();
+        return true;
+    }
+
+    private bool RefreshZoomDerived()
+    {
+        _lod = _viewport.Lod;
+        _placements = _lod == SldLod.High ? PlaceLabels() : null;
+        return true;
+    }
+
+    private IReadOnlyDictionary<string, SldLabelPlacement> PlaceLabels()
+    {
+        var candidates = new List<SldLabelCandidate>();
+        foreach (var element in _model.Elements)
+        {
+            if (_states.GetValueOrDefault(element.Id)?.ValueText is not { } value)
+                continue;
+            var (width, height) = SldLabelPlacer.BoxSize(value, _states.GetValueOrDefault(element.Id)?.QualityFlag);
+            candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width, height));
+        }
+        return SldLabelPlacer.Place(candidates).ToDictionary(p => p.Id);
+    }
+
+    private int? BranchTap(string id) => Snapshot.Branch(id)?.TapPosition;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNet = DotNetObjectReference.Create(this);
+            var module = await ModuleAsync();
+            if (module is not null)
+            {
+                try
+                {
+                    await module.InvokeAsync<bool>("observeSize", _dotNet, _root);
+                    var rect = await module.InvokeAsync<SldClientRect>("rect", _root);
+                    _viewport.SetContainer(rect.Width, rect.Height);
+                    if (!_fitted)
+                    {
+                        _viewport.Fit(_model.Bounds);
+                        _fitted = true;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Log.LogDebug(exception, "SLD container observation unavailable");
+                }
+            }
+        }
+        if (_menuDirty && _menu is not null && _menuEl.Id.Length > 0)
+        {
+            _menuDirty = false;
+            await PlaceAsync(_menuEl, _menu.ClientX, _menu.ClientY);
+        }
+        if (_hoverDirty && _hover is not null && _tooltipEl.Id.Length > 0)
+        {
+            _hoverDirty = false;
+            await PlaceAsync(_tooltipEl, _hover.ClientX, _hover.ClientY);
+        }
+    }
+
+    [JSInvokable]
+    public Task OnResize(double width, double height)
+    {
+        _viewport.SetContainer(width, height);
+        if (!_fitted)
+        {
+            _viewport.Fit(_model.Bounds);
+            _fitted = true;
+        }
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<IJSObjectReference?> ModuleAsync()
+    {
+        if (_module is not null)
+            return _module;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Hmi/js/sld.js");
+        }
+        catch (Exception exception)
+        {
+            Log.LogDebug(exception, "SLD JS module unavailable (tests/prerender)");
+            return null;
+        }
+        return _module;
+    }
+
+    private async Task<DiagramPosition> SvgPointAsync(double clientX, double clientY)
+    {
+        var module = await ModuleAsync();
+        if (module is not null)
+        {
+            try
+            {
+                return await module.InvokeAsync<DiagramPosition>("point", _canvas, clientX, clientY);
+            }
+            catch (Exception exception)
+            {
+                Log.LogDebug(exception, "SLD point transform unavailable");
+            }
+        }
+        return new DiagramPosition(_viewport.X + _viewport.Width / 2, _viewport.Y + _viewport.Height / 2);
+    }
+
+    private async Task<DiagramPosition> ClientPointAsync(double svgX, double svgY)
+    {
+        var module = await ModuleAsync();
+        if (module is not null)
+        {
+            try
+            {
+                return await module.InvokeAsync<DiagramPosition>("clientPoint", _canvas, svgX, svgY);
+            }
+            catch (Exception exception)
+            {
+                Log.LogDebug(exception, "SLD client transform unavailable");
+            }
+        }
+        var rect = await RectAsync();
+        return rect is null
+            ? new DiagramPosition(0, 0)
+            : new DiagramPosition(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
+    }
+
+    private async Task<SldClientRect?> RectAsync()
+    {
+        var module = await ModuleAsync();
+        if (module is null)
+            return null;
+        try
+        {
+            return await module.InvokeAsync<SldClientRect>("rect", _root);
+        }
+        catch (Exception exception)
+        {
+            Log.LogDebug(exception, "SLD rect unavailable");
+            return null;
+        }
+    }
+
+    private async Task PlaceAsync(ElementReference element, double clientX, double clientY)
+    {
+        var module = await ModuleAsync();
+        if (module is null)
+            return;
+        try
+        {
+            await module.InvokeAsync<bool>("placeAt", element, clientX, clientY);
+        }
+        catch (Exception exception)
+        {
+            Log.LogDebug(exception, "SLD overlay placement unavailable");
+        }
+    }
+
+    // ---- viewport actions ----
+
+    private bool ZoomCenter(double factor)
+    {
+        _viewport.ZoomCenter(factor);
+        return true;
+    }
+
+    private Task SetViewMode(SldViewMode mode)
+    {
+        _viewMode = mode;
+        return Task.CompletedTask;
+    }
+
+    private Task SetHeatAsync(bool heat)
+    {
+        _showHeat = heat;
+        return Task.CompletedTask;
+    }
+
+    private bool Fit()
+    {
+        _viewport.Fit(_model.Bounds);
+        return true;
+    }
+
+    private async Task OnWheelAsync(WheelEventArgs e)
+    {
+        var point = await SvgPointAsync(e.ClientX, e.ClientY);
+        _viewport.ZoomAt(point, e.DeltaY < 0 ? 1.15 : 1 / 1.15);
+    }
+
+    private async Task OnPointerDownAsync(PointerEventArgs e)
+    {
+        if (e.Button != 0)
+            return;
+        _panStart = await SvgPointAsync(e.ClientX, e.ClientY);
+        _panLast = _panStart;
+        _panning = true;
+        _dragged = false;
+        var module = await ModuleAsync();
+        if (module is not null)
+        {
+            try { await module.InvokeAsync<bool>("capture", _canvas, e.PointerId); }
+            catch (Exception exception) { Log.LogDebug(exception, "SLD pointer capture unavailable"); }
+        }
+    }
+
+    private async Task OnPointerMoveAsync(PointerEventArgs e)
+    {
+        if (!_panning || _panLast is null)
+            return;
+        var point = await SvgPointAsync(e.ClientX, e.ClientY);
+        _viewport.PanBy(point.X - _panLast.X, point.Y - _panLast.Y);
+        if (_panStart is { } start && Math.Abs(point.X - start.X) + Math.Abs(point.Y - start.Y) > 6)
+            _dragged = true;
+        _panLast = point;
+    }
+
+    private async Task OnPointerUpAsync(PointerEventArgs e)
+    {
+        if (!_panning)
+            return;
+        _panning = false;
+        _panLast = null;
+        var module = await ModuleAsync();
+        if (module is not null)
+        {
+            try { await module.InvokeAsync<bool>("release", _canvas, e.PointerId); }
+            catch (Exception exception) { Log.LogDebug(exception, "SLD pointer release unavailable"); }
+        }
+    }
+
+    private async Task OnBackgroundClickAsync()
+    {
+        if (_dragged)
+        {
+            _dragged = false;
+            return;
+        }
+        CloseMenu();
+        await SelectedIdChanged.InvokeAsync(null);
+    }
+
+    private Task OnBackgroundContextMenu(MouseEventArgs e)
+    {
+        CloseMenu();
+        return Task.CompletedTask;
+    }
+
+    // ---- selection / actions ----
+
+    private Task SelectAsync(string id) => SelectedIdChanged.InvokeAsync(id);
+
+    private async Task RaiseActionAsync(string id, GridSldActionKind kind)
+    {
+        CloseMenu();
+        await OnAction.InvokeAsync(new Hmi.Services.Grid.GridSldAction(id, kind));
+    }
+
+    private Task OnElementMenuAsync(SldPointerRequest request)
+    {
+        if (_model.Element(request.ElementId) is not { } element)
+            return Task.CompletedTask;
+        _menu = SldMenuBuilder.For(element, _states.GetValueOrDefault(request.ElementId), CanOperate, request.ClientX, request.ClientY);
+        _menuTitle = $"{element.Name} ({element.Id})";
+        _menuDirty = true;
+        return Task.CompletedTask;
+    }
+
+    private Task OnElementHover(SldPointerRequest request)
+    {
+        _hover = request;
+        _hoverDirty = true;
+        return Task.CompletedTask;
+    }
+
+    private Task OnElementUnhover(string id)
+    {
+        if (_hover?.ElementId == id)
+            _hover = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task ChooseMenuAsync(SldMenuItem item)
+    {
+        if (_menu is null || !item.Enabled)
+            return;
+        await RaiseActionAsync(_menu.ElementId, item.Action);
+    }
+
+    private bool CloseMenu()
+    {
+        _menu = null;
+        _menuDirty = false;
+        return true;
+    }
+
+    private async Task PickAsync(SldElement element)
+    {
+        _viewport.ZoomTo(element.Anchor, _model.Bounds);
+        await SelectedIdChanged.InvokeAsync(element.Id);
+    }
+
+    private Task NavigateBoundsAsync(SldBounds bounds)
+    {
+        _viewport.ZoomToBounds(bounds);
+        return Task.CompletedTask;
+    }
+
+    private Task NavigateMinimap((double Fx, double Fy) fraction)
+    {
+        _viewport.NavigateFraction(fraction.Fx, fraction.Fy, _model.Bounds);
+        return Task.CompletedTask;
+    }
+
+    // ---- keyboard ----
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "+" or "=":
+                _viewport.ZoomCenter(1.25);
+                break;
+            case "-" or "_":
+                _viewport.ZoomCenter(0.8);
+                break;
+            case "0":
+                _viewport.Fit(_model.Bounds);
+                break;
+            case "ArrowRight" or "ArrowDown" or "Tab":
+                await MoveSelectionAsync(e.ShiftKey ? -1 : 1);
+                break;
+            case "ArrowLeft" or "ArrowUp":
+                await MoveSelectionAsync(-1);
+                break;
+            case "Enter":
+                if (SelectedId is not null)
+                    await RaiseActionAsync(SelectedId, GridSldActionKind.OpenControl);
+                break;
+            case "ContextMenu":
+                await OpenMenuForSelectedAsync();
+                break;
+            case "Escape":
+                CloseMenu();
+                await SelectedIdChanged.InvokeAsync(null);
+                break;
+        }
+    }
+
+    private async Task MoveSelectionAsync(int delta)
+    {
+        var ordered = _model.Elements.OrderBy(e => e.Anchor.Y).ThenBy(e => e.Anchor.X).ThenBy(e => e.Id, StringComparer.Ordinal).ToArray();
+        if (ordered.Length == 0)
+            return;
+        var index = Array.FindIndex(ordered, e => e.Id == SelectedId);
+        var next = index < 0 ? (delta >= 0 ? 0 : ordered.Length - 1) : (index + delta + ordered.Length) % ordered.Length;
+        await SelectedIdChanged.InvokeAsync(ordered[next].Id);
+    }
+
+    private async Task OpenMenuForSelectedAsync()
+    {
+        if (SelectedId is null || _model.Element(SelectedId) is not { } element)
+            return;
+        var client = await ClientPointAsync(element.Anchor.X, element.Anchor.Y);
+        _menu = SldMenuBuilder.For(element, _states.GetValueOrDefault(element.Id), CanOperate, client.X, client.Y);
+        _menuTitle = $"{element.Name} ({element.Id})";
+        _menuDirty = true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var module = await ModuleAsync();
+        if (module is not null)
+        {
+            try { await module.InvokeAsync<bool>("unobserveSize", _root); }
+            catch (Exception exception) { Log.LogDebug(exception, "SLD resize observer stop unavailable"); }
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        _dotNet?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }

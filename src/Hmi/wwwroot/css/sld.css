@@ -1,1 +1,187 @@
-/* sld styles */
+/* Single-line diagram canvas (Agent B). Every colour comes from tokens.css; colour carries meaning only:
+   voltage level, energisation, switch state, loading, alarm priority, quality. */
+
+.grid-sld {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 320px;
+    overflow: hidden;
+    background: var(--c-canvas);
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    user-select: none;
+}
+
+.sld-preview { position: relative; height: calc(100vh - var(--h-topbar) - var(--h-statusbar)); }
+.sld-preview-hud {
+    position: absolute; right: 10px; bottom: 10px; z-index: 30;
+    background: var(--c-panel); color: var(--c-text-muted);
+    border: 1px solid var(--c-border); border-radius: 4px;
+    padding: 4px 10px; font-size: var(--fs-sm);
+}
+
+/* ---- canvas ---- */
+.sld-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; outline: none; }
+.sld-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--c-focus); }
+.sld-canvas:active { cursor: grabbing; }
+
+/* ---- voltage level colours (currentColor cascade) ---- */
+.sld-el.v-110 { color: var(--c-kv-110); }
+.sld-el.v-35  { color: var(--c-kv-35); }
+.sld-el.v-20  { color: var(--c-kv-20); }
+.sld-el.v-10  { color: var(--c-kv-10); }
+.sld-el.v-04  { color: var(--c-kv-04); }
+.sld-el.is-dead { color: var(--c-dead); }
+
+/* ---- wires ---- */
+.sld-wire { fill: none; stroke: currentColor; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; pointer-events: stroke; }
+.sld-el.kind-bus .sld-wire, .sld-el:not(.kind-line):not(.kind-transformer) .sld-wire { stroke-width: 2.5; }
+.sld-wire.is-dead { stroke: var(--c-dead); stroke-dasharray: 8 5; }
+.sld-el.v-110 .sld-wire { stroke-width: 5; }
+.sld-el.v-35 .sld-wire { stroke-width: 4; }
+.sld-el.v-04 .sld-wire { stroke-width: 2; }
+
+/* energisation view: live wires bright, dead grey */
+.mode-energisation .sld-el:not(.is-dead) .sld-wire { color: var(--c-text); }
+.mode-energisation .sld-el.is-dead .sld-wire { color: var(--c-dead); }
+
+/* loading heat (view mode "Loading" or the "Loading colours" toggle) */
+.sld-canvas.mode-loading .sld-wire.heat-ok,   .sld-canvas.heat-on .sld-wire.heat-ok   { color: var(--c-load-ok); }
+.sld-canvas.mode-loading .sld-wire.heat-warn, .sld-canvas.heat-on .sld-wire.heat-warn { color: var(--c-load-warn); }
+.sld-canvas.mode-loading .sld-wire.heat-high, .sld-canvas.heat-on .sld-wire.heat-high { color: var(--c-load-high); }
+.sld-canvas.mode-loading .sld-wire.heat-over, .sld-canvas.heat-on .sld-wire.heat-over { color: var(--c-load-over); }
+.sld-canvas.mode-loading .sld-wire.is-dead, .sld-canvas.heat-on .sld-wire.is-dead { color: var(--c-dead); }
+
+/* ---- element groups ---- */
+.sld-el { cursor: pointer; }
+.sld-el:focus { outline: none; }
+.sld-halo { fill: none; stroke: var(--c-focus); stroke-width: 2; stroke-dasharray: 5 4; }
+
+/* symbols */
+.sym { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sym-fill { fill: currentColor; }
+.busbar { stroke-width: 6; }
+.sld-el.v-110 .busbar { stroke-width: 10; }
+.sld-el.v-35 .busbar { stroke-width: 8; }
+.sld-el.v-20 .busbar { stroke-width: 6; }
+.sld-el.v-10 .busbar { stroke-width: 5; }
+.sld-el.v-04 .busbar { stroke-width: 4; }
+
+/* switching devices: closed = filled with the voltage colour, open = hollow with --c-open */
+.sld-el.closed .sym-switch { fill: currentColor; stroke: currentColor; }
+.sld-el.open .sym-switch, .sld-el:not(.closed) .sym-switch { fill: none; stroke: var(--c-open); }
+.sld-el.open .sym, .sld-el:not(.closed) .sym { }
+/* open blades/contacts keep the --c-open outline */
+.sld-el.kind-switch.open .sym { stroke: var(--c-open); }
+.sld-el.kind-switch.closed .sym { stroke: currentColor; }
+
+/* bad quality / unknown state */
+.sld-el.is-invalid .sym { stroke: var(--c-invalid); }
+.sld-el.is-invalid .sym-switch { stroke: var(--c-invalid); fill: none; }
+.sld-qmark { fill: var(--c-invalid); font-size: var(--fs-md); font-weight: 700; pointer-events: none; }
+
+/* de-energised symbols */
+.sld-el.is-dead .sym { stroke: var(--c-dead); }
+.sld-el.is-dead .sym-fill { fill: var(--c-dead); }
+.sld-el.is-dead.closed .sym-switch { fill: var(--c-dead); stroke: var(--c-dead); }
+
+/* flow arrows */
+.sld-flow { fill: currentColor; stroke: none; pointer-events: none; }
+.sld-el.is-dead .sld-flow { fill: var(--c-dead); }
+
+/* ---- labels ---- */
+.sld-lod-id, .sld-lod-name, .sld-tap { fill: var(--c-text); font-size: var(--fs-sm); pointer-events: none; }
+.sld-lod-id { fill: var(--c-text-muted); font-size: var(--fs-xs); font-family: var(--font-value); }
+.sld-el.is-dead .sld-lod-id, .sld-el.is-dead .sld-lod-name, .sld-el.is-dead .sld-tap { fill: var(--c-dead); }
+
+/* ---- value boxes (high zoom) ---- */
+.sld-value rect { fill: var(--c-panel); stroke: var(--c-border); }
+.sld-value text { fill: var(--c-text); font-family: var(--font-value); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.sld-qflag.q-b { fill: var(--c-invalid); font-weight: 700; }
+.sld-qflag.q-u { fill: var(--c-load-warn); font-weight: 700; }
+
+/* ---- markers ---- */
+.sld-marker { pointer-events: none; }
+.sld-alarm path, .sld-alarm circle { fill: var(--c-p1); stroke: none; }
+.sld-alarm.p1 path, .sld-alarm.p1 circle { fill: var(--c-p1); }
+.sld-alarm.p2 path, .sld-alarm.p2 circle { fill: var(--c-p2); }
+.sld-alarm.p3 path, .sld-alarm.p3 circle { fill: var(--c-p3); }
+.sld-alarm.p4 path, .sld-alarm.p4 circle { fill: var(--c-p4); }
+.sld-alarm.blink-unack { animation: blink-unack 1s step-start infinite; }
+.sld-protection path { fill: var(--c-p1); stroke: none; }
+.sld-protection text { fill: var(--c-p1); font-size: var(--fs-xs); font-weight: 700; }
+
+.sld-tag rect { stroke: var(--c-border); }
+.sld-tag text { fill: var(--c-bg); font-size: var(--fs-xs); font-weight: 700; }
+.sld-tag .tag-glyph { stroke: var(--c-bg); stroke-width: 1.6; fill: none; }
+.sld-tag.tag-dno rect { fill: var(--c-p1); }
+.sld-tag.tag-earthed rect { fill: var(--c-earthed); }
+.sld-tag.tag-wip rect { fill: var(--c-p2); }
+.sld-tag.tag-info rect { fill: var(--c-focus); }
+.sld-tag.tag-info text { fill: var(--c-canvas); }
+
+/* ---- substation frames ---- */
+.sld-frame rect { fill: none; stroke: var(--c-border); stroke-width: 1.5; stroke-dasharray: 10 6; }
+.sld-frame-name { fill: var(--c-text-muted); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; }
+
+/* ---- overlays ---- */
+.sld-search { position: absolute; top: 10px; left: 10px; z-index: 20; width: 260px; display: flex; flex-direction: column; gap: 6px; }
+.sld-search-input, .sld-quicklist {
+    background: var(--c-panel); color: var(--c-text);
+    border: 1px solid var(--c-border); border-radius: 4px;
+    padding: 6px 8px; font-size: var(--fs-sm); font-family: var(--font-ui);
+}
+.sld-search-input:focus, .sld-quicklist:focus { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.sld-search-results { list-style: none; margin: 0; padding: 4px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 4px; max-height: 260px; overflow: auto; }
+.sld-search-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--c-text); font-size: var(--fs-sm); padding: 4px 6px; border-radius: 3px; cursor: pointer; }
+.sld-search-item:hover, .sld-search-item:focus-visible { background: var(--c-panel-2); outline: none; }
+.sld-search-id { font-family: var(--font-value); color: var(--c-focus); }
+.sld-search-kind { color: var(--c-text-muted); font-size: var(--fs-xs); }
+
+.sld-toolbar { position: absolute; top: 10px; right: 10px; z-index: 20; display: flex; align-items: center; gap: 6px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 6px; padding: 6px; }
+.sld-btn {
+    background: var(--c-panel-2); color: var(--c-text); border: 1px solid var(--c-border);
+    border-radius: 4px; min-width: 30px; height: 28px; padding: 0 8px;
+    font-size: var(--fs-md); cursor: pointer;
+}
+.sld-btn:hover { border-color: var(--c-focus); }
+.sld-btn:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+.sld-btn.active { background: var(--c-focus); color: var(--c-canvas); border-color: var(--c-focus); }
+.sld-modes { display: flex; gap: 2px; padding-left: 6px; border-left: 1px solid var(--c-border); }
+.sld-heat-toggle { display: flex; align-items: center; gap: 4px; color: var(--c-text-muted); font-size: var(--fs-xs); padding-left: 6px; border-left: 1px solid var(--c-border); cursor: pointer; }
+
+/* minimap */
+.sld-minimap-wrap { position: absolute; left: 10px; bottom: 10px; z-index: 15; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 6px; padding: 4px; }
+.sld-minimap { display: block; width: 200px; height: 130px; cursor: crosshair; }
+.mm-wire { fill: none; stroke: var(--c-text-muted); stroke-width: 2; }
+.mm-frame { fill: none; stroke: var(--c-border); stroke-width: 1; stroke-dasharray: 4 3; }
+.mm-bus { fill: var(--c-text-muted); }
+.mm-bus.v-110 { fill: var(--c-kv-110); } .mm-bus.v-35 { fill: var(--c-kv-35); }
+.mm-bus.v-20 { fill: var(--c-kv-20); } .mm-bus.v-10 { fill: var(--c-kv-10); } .mm-bus.v-04 { fill: var(--c-kv-04); }
+.mm-view { fill: rgba(79, 195, 247, .12); stroke: var(--c-focus); stroke-width: 1.5; }
+
+/* tooltip + context menu (positioned by the JS module through the CSSOM — never an inline style attribute) */
+.sld-tooltip {
+    position: fixed; z-index: 40; max-width: 320px; pointer-events: none;
+    background: var(--c-panel); color: var(--c-text); border: 1px solid var(--c-border);
+    border-radius: 6px; padding: 8px 10px; font-size: var(--fs-sm);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+}
+.sld-tooltip p { margin: 2px 0; }
+.sld-tooltip-title { font-weight: 600; }
+.sld-tooltip-id { color: var(--c-focus); font-family: var(--font-value); font-size: var(--fs-xs); margin-left: 6px; }
+.sld-tooltip-value { font-family: var(--font-value); font-variant-numeric: tabular-nums; color: var(--c-text); }
+
+.sld-context-menu {
+    position: fixed; z-index: 50; min-width: 190px;
+    background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 6px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .5); padding: 4px;
+}
+.sld-menu-title { margin: 4px 8px 6px; color: var(--c-text-muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.sld-menu-item {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    color: var(--c-text); font-size: var(--fs-md); padding: 6px 10px; border-radius: 4px; cursor: pointer;
+}
+.sld-menu-item:hover:not(:disabled), .sld-menu-item:focus-visible { background: var(--c-panel-2); outline: none; }
+.sld-menu-item:disabled { color: var(--c-text-muted); cursor: default; opacity: .55; }

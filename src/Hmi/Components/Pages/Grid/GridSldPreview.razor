@@ -1,0 +1,56 @@
+@page "/grid/sld-preview"
+@inherits GridPageBase
+@using Microsoft.Extensions.DependencyInjection
+@* Temporary dev route: renders only the <GridSld> canvas full-screen. The workspace page will host it with docks;
+   this page may be deleted once the workspace lands. *@
+
+<PageTitle>SLD preview · SCADA</PageTitle>
+<div class="sld-preview">
+    @if (Snapshot is { } snapshot && Definition is { } definition)
+    {
+        <GridSld Snapshot="snapshot" Definition="definition" Tags="_tags" SelectedId="_selected"
+                 SelectedIdChanged="OnSelectedAsync" OnAction="OnSldActionAsync" CanOperate="Session.CanOperate" />
+        <div class="sld-preview-hud" aria-live="polite">
+            @if (_lastAction is { } action)
+            {
+                <span>Last action: @action.Kind on @action.ElementId</span>
+            }
+            else if (_selected is not null)
+            {
+                <span>Selected: @_selected</span>
+            }
+        </div>
+    }
+    else
+    {
+        <GridPageStatus Error="@RefreshError" Available="false" />
+    }
+</div>
+
+@code {
+    private string? _selected;
+    private GridSldAction? _lastAction;
+    private IReadOnlyList<GridTag> _tags = [];
+
+    protected override IReadOnlyCollection<string> Topics => [.. base.Topics, RealtimeTopics.GridTags];
+
+    protected override bool Refresh()
+    {
+        base.Refresh();
+        _tags = Services.GetService<IGridTagging>()?.Tags ?? [];
+        return true;
+    }
+
+    private Task OnSelectedAsync(string? id)
+    {
+        _selected = id;
+        _lastAction = null;
+        return Task.CompletedTask;
+    }
+
+    private Task OnSldActionAsync(GridSldAction action)
+    {
+        _lastAction = action;
+        return Task.CompletedTask;
+    }
+}
