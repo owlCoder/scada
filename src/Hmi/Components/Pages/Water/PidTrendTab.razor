@@ -1,0 +1,128 @@
+@* Trend tab: multi-series SVG chart of up to 4 reported tags from the TelemetryHistorian. *@
+@inherits RealtimeComponentBase
+@using Application.Telemetry
+@inject TelemetryHistorian Historian
+
+<div class="pid-trend-picker form-row">
+    @for (var slot = 0; slot < _selected.Length; slot++)
+    {
+        var index = slot;
+        <label>Tag @(index + 1)
+            <select value="@_selected[index]" @onchange="args => SelectTagAsync(index, args.Value?.ToString())" aria-label="@($"Trend tag {index + 1}")">
+                <option value="">None</option>
+                @foreach (var tag in _tags)
+                {
+                    <option value="@tag" disabled="@(tag != _selected[index] && _selected.Contains(tag))">@tag</option>
+                }
+            </select>
+        </label>
+    }
+</div>
+
+@if (_series.Length == 0)
+{
+    <EmptyState Message="@(_tags.Count == 0 ? "Waiting for telemetry samples." : "Select up to four tags with telemetry samples.")" />
+}
+else
+{
+    <div class="pid-trend-legend">
+        @foreach (var series in _series)
+        {
+            <span class="pid-trend-key pid-trend-s@(series.Slot + 1)">@series.Tag</span>
+        }
+    </div>
+    <svg class="pid-trend-chart" viewBox="0 0 800 260" role="img" aria-label="Trend of reported telemetry tags">
+        <title>Reported telemetry by time</title>
+        <line class="pid-axis" x1="82" y1="16" x2="82" y2="220" />
+        <line class="pid-axis" x1="82" y1="220" x2="776" y2="220" />
+        <text class="pid-tick" x="76" y="21" text-anchor="end">@Number(_max)</text>
+        <text class="pid-tick" x="76" y="220" text-anchor="end">@Number(_min)</text>
+        <text class="pid-tick" x="82" y="238">@Clock(_first)</text>
+        <text class="pid-tick" x="776" y="238" text-anchor="end">@Clock(_last)</text>
+        @foreach (var series in _series)
+        {
+            <g>
+                <title>@series.Tag</title>
+                @if (series.Points.Count == 1)
+                {
+                    <circle class="pid-trend-dot pid-trend-s@(series.Slot + 1)" cx="@Number(X(series.Points[0]))" cy="@Number(Y(series.Points[0]))" r="3" />
+                }
+                else
+                {
+                    <polyline class="pid-trend-line pid-trend-s@(series.Slot + 1)" points="@Coordinates(series.Points)" />
+                }
+            </g>
+        }
+    </svg>
+}
+
+@code {
+    private const int SampleCount = 240;
+    private readonly string?[] _selected = new string?[4];
+    private IReadOnlyList<string> _tags = [];
+    private (int Slot, string Tag, IReadOnlyList<TelemetryPoint> Points)[] _series = [];
+    private DateTimeOffset _first;
+    private DateTimeOffset _last;
+    private double _min;
+    private double _max;
+    private long _consumedTagId;
+
+    [Parameter] public (string Tag, long Id)? TagRequest { get; set; }
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Telemetry];
+
+    protected override bool Refresh()
+    {
+        ConsumeTagRequest();
+        _tags = Historian.Tags();
+        _series = _selected.Select((tag, slot) => (Tag: tag, Slot: slot))
+            .Where(selection => selection.Tag is not null)
+            .Select(selection => (selection.Slot, Tag: selection.Tag!,
+                Points: (IReadOnlyList<TelemetryPoint>)Historian.GetSeries(selection.Tag!, SampleCount)
+                    .Where(point => double.IsFinite(point.Value)).ToArray()))
+            .Where(series => series.Points.Count > 0)
+            .ToArray();
+
+        if (_series.Length > 0)
+        {
+            var points = _series.SelectMany(series => series.Points).ToArray();
+            _first = points.Min(point => point.Timestamp);
+            _last = points.Max(point => point.Timestamp);
+            _min = points.Min(point => point.Value);
+            _max = points.Max(point => point.Value);
+        }
+        return true;
+    }
+
+    // Runs on every refresh: on first render Blazor initialises the component before OnParametersSet,
+    // so the tag request is consumed here, where the parameter is always set.
+    private bool ConsumeTagRequest()
+    {
+        if (TagRequest is { } request && request.Id != _consumedTagId)
+        {
+            _consumedTagId = request.Id;
+            var free = Array.FindIndex(_selected, tag => tag is null);
+            _selected[free >= 0 ? free : 0] = request.Tag;
+        }
+        return true;
+    }
+
+    private Task<bool> SelectTagAsync(int slot, string? tag)
+    {
+        _selected[slot] = tag is not null && _tags.Contains(tag) &&
+            !_selected.Where((_, index) => index != slot).Contains(tag) ? tag : null;
+        return RefreshNowAsync();
+    }
+
+    private double X(TelemetryPoint point) =>
+        _last == _first ? 429 : 82 + 694 * (point.Timestamp - _first).Ticks / (double)(_last - _first).Ticks;
+
+    private double Y(TelemetryPoint point) =>
+        _max == _min ? 118 : 220 - 204 * ((point.Value - _min) / (_max - _min));
+
+    private string Coordinates(IEnumerable<TelemetryPoint> points) =>
+        string.Join(' ', points.Select(point => $"{Number(X(point))},{Number(Y(point))}"));
+
+    private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+    private static string Clock(DateTimeOffset time) => time.ToUniversalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+}

@@ -1,17 +1,22 @@
 @inherits ConfirmedComponentBase
 @inject ControlCommandService Commands
+@inject Application.Telemetry.TelemetryHistorian Historian
+@inject Application.Simulation.SimulationEngine Engine
 
-@* Water device faceplate for the plant diagram: same confirm flow as the grid faceplate. *@
-<aside class="panel detail plant-faceplate" aria-label="Device faceplate">
+@* Water device control window for the P&ID workspace: same confirm flow as the grid faceplate.
+   Covers tanks, pumps, valves, instruments (sensors) and controllers (PLC/RTU); viewers are read-only. *@
+<aside class="panel detail plant-faceplate pid-control" aria-label="Device control window">
     <h2>@DeviceId</h2>
     <OutcomeBanner Outcome="Outcome" />
     <RefreshErrorBanner Error="@RefreshError" />
     @if (_plant.Tank(DeviceId) is { } tank)
     {
+        var (inflow, outflow) = Flows(tank.Id);
         <h3>@tank.Name</h3>
         <dl class="facts">
-            <dt>Level</dt><dd>@Number(tank.LevelPercent) %</dd>
+            <dt>Level</dt><dd class="pid-value-text">@Number(tank.LevelPercent) %</dd>
             <dt>Volume</dt><dd>@Number(tank.Volume) / @Number(tank.Capacity) m³</dd>
+            <dt>Inflow / outflow</dt><dd>@Number(inflow) / @Number(outflow) m³/min</dd>
             <dt>Alarm limits</dt><dd>LL @Number(tank.Thresholds.LowLow) · L @Number(tank.Thresholds.Low) · H @Number(tank.Thresholds.High) · HH @Number(tank.Thresholds.HighHigh) %</dd>
             <dt>Overflow</dt><dd>@(tank.IsOverflowing ? "OVERFLOWING" : "No")</dd>
         </dl>
@@ -24,8 +29,8 @@
         <dl class="facts">
             <dt>State</dt><dd><StatusPill Text="@pump.State.ToString()" Kind="@(pump.State == PumpState.Running ? "ok" : "neutral")" /> @pump.Mode</dd>
             <dt>Speed</dt><dd>@pump.Speed.ToString("0", CultureInfo.InvariantCulture) %</dd>
-            <dt>Flow</dt><dd>@Number(pump.FlowRate) m³/min</dd>
-            <dt>Pressure</dt><dd>@Number(pump.DischargePressure) bar</dd>
+            <dt>Flow</dt><dd class="pid-value-text">@Number(pump.FlowRate) m³/min</dd>
+            <dt>Pressure</dt><dd class="pid-value-text">@Number(pump.DischargePressure) bar</dd>
             <dt>Health</dt><dd>@pump.Health @(pump.Fault != PumpFault.None ? $"({pump.Fault})" : "")</dd>
             <dt>Interlock</dt><dd>@(pump.InterlockReason ?? "—")</dd>
             <dt>Last change</dt><dd>@pump.LastChangeCause @(pump.LastChangedBy is null ? "" : $"by {pump.LastChangedBy}")</dd>
@@ -53,9 +58,9 @@
         <h3>@valve.Name</h3>
         <dl class="facts">
             <dt>Role</dt><dd>@valve.Role</dd>
-            <dt>Position</dt><dd>@valve.Position.ToString("0", CultureInfo.InvariantCulture) % (setpoint @valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %)</dd>
+            <dt>Position</dt><dd class="pid-value-text">@valve.Position.ToString("0", CultureInfo.InvariantCulture) % (setpoint @valve.Setpoint.ToString("0", CultureInfo.InvariantCulture) %)</dd>
             <dt>Mode</dt><dd>@valve.Mode</dd>
-            <dt>Flow</dt><dd>@Number(valve.FlowRate) m³/min</dd>
+            <dt>Flow</dt><dd class="pid-value-text">@Number(valve.FlowRate) m³/min</dd>
             <dt>Health</dt><dd>@valve.Health @(valve.Fault != ValveFault.None ? $"({valve.Fault})" : "")</dd>
             <dt>Interlock</dt><dd>@(valve.InterlockReason ?? "—")</dd>
         </dl>
@@ -65,6 +70,9 @@
             <div class="form-row">
                 <label>Position (%)<input class="input-small" type="number" min="0" max="100" step="5" aria-label="@($"New position for {valve.Id}")"
                                           value="@Target(valve)" @onchange="e => SetTarget(valve.Id, e.Value)" /></label>
+                <label class="pid-slider-label">Slider<input class="pid-slider" type="range" min="0" max="100" step="5"
+                                          aria-label="@($"Position slider for {valve.Id}")"
+                                          value="@Target(valve)" @oninput="e => SetTarget(valve.Id, e.Value)" /></label>
                 <button class="btn" @onclick="() => AskPosition(valve)">Set position</button>
                 <button class="btn" @onclick="() => AskMode(valve)">@(valve.Mode == ControlMode.Manual ? "Automatic" : "Manual")</button>
             </div>
@@ -72,9 +80,51 @@
         }
         <p><a href="valves">Operate valves</a></p>
     }
+    else if (_plant.Sensor(DeviceId) is { } sensor)
+    {
+        <h3>@sensor.Name</h3>
+        <dl class="facts">
+            <dt>Device</dt><dd>@sensor.DeviceId (@sensor.Kind)</dd>
+            <dt>Reported</dt><dd class="pid-value-text">@Number(sensor.ReportedValue) @sensor.Unit</dd>
+            <dt>Quality</dt><dd><StatusPill Text="@sensor.Quality.ToString()" Kind="@(sensor.Quality == MeasurementQuality.Good ? "ok" : "alarm")" /></dd>
+            <dt>Health</dt><dd>@sensor.Health</dd>
+            @if (Session.IsInstructor)
+            {
+                <dt>True value</dt><dd class="pid-value-text">@Number(sensor.TrueValue) @sensor.Unit</dd>
+                <dt>Fault</dt><dd>@sensor.Fault@(sensor.IsSpoofed ? $" (spoofed {Number(sensor.SpoofedValue ?? 0)})" : "")</dd>
+                <dt>Drift</dt><dd>@Number(sensor.DriftOffset) @sensor.Unit</dd>
+            }
+        </dl>
+        <p><a href="sensors">All sensors</a></p>
+    }
+    else if (_controllers.FirstOrDefault(c => c.Id == DeviceId) is { } controller)
+    {
+        <h3>@controller.Name</h3>
+        <dl class="facts">
+            <dt>State</dt><dd><StatusPill Text="@controller.State.ToString()" Kind="@(controller.State == ControllerState.Running ? "ok" : "warn")" /></dd>
+            <dt>Kind</dt><dd>@controller.Kind</dd>
+            <dt>Field comms</dt><dd class="pid-comms-text pid-comms-@CommsClass(controller.FieldCommunication)">@controller.FieldCommunication</dd>
+            <dt>Supervisory comms</dt><dd class="pid-comms-text pid-comms-@CommsClass(controller.SupervisoryCommunication)">@controller.SupervisoryCommunication</dd>
+            <dt>Scan</dt><dd>@controller.ScanCycleMilliseconds ms cycle · @controller.ScanCount scans</dd>
+            <dt>Failures</dt><dd>@controller.ConsecutiveFailures consecutive · @controller.TotalFailures total</dd>
+            <dt>Commands issued</dt><dd>@controller.CommandsIssued</dd>
+            <dt>Last error</dt><dd>@(controller.LastError ?? "—")</dd>
+            <dt>Actuators</dt><dd>@string.Join(", ", controller.ActuatorIds)</dd>
+            <dt>Sensors</dt><dd>@string.Join(", ", controller.SensorIds)</dd>
+        </dl>
+        <p><a href="controllers">All controllers</a></p>
+    }
     else
     {
         <p class="muted">No device @DeviceId in the current plant snapshot.</p>
+    }
+    @if (PidTags.PrimaryTag(_plant, DeviceId) is { } tag)
+    {
+        <h3>Trend</h3>
+        <div class="pid-sparkline-wrap">
+            <Sparkline Points="@Historian.GetSeries(tag, 60)" Label="@($"Recent reported values of {tag}")" />
+        </div>
+        <p class="muted">@tag · reported values from the telemetry historian.</p>
     }
     <ConfirmDialog Pending="Pending" Completed="CompleteAsync" />
 </aside>
@@ -84,13 +134,24 @@
 
     private readonly Dictionary<string, double> _targets = new(StringComparer.Ordinal);
     private PlantSnapshot _plant = default!;
+    private IReadOnlyList<ControllerSnapshot> _controllers = [];
 
-    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant];
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Plant, RealtimeTopics.Controllers];
 
     protected override bool Refresh()
     {
         _plant = Session.Plant();
+        _controllers = Engine.Read(world => world.Controllers.Select(controller => controller.Snapshot()).ToArray());
         return true;
+    }
+
+    private (double Inflow, double Outflow) Flows(string tankId)
+    {
+        var inflow = _plant.Valves.Where(v => v.TankId == tankId && v.Role == ValveRole.Inlet).Sum(v => v.FlowRate)
+            + _plant.Pumps.Where(p => p.TargetTankId == tankId).Sum(p => p.FlowRate);
+        var outflow = _plant.Valves.Where(v => v.TankId == tankId && v.Role is ValveRole.Outlet or ValveRole.Drain).Sum(v => v.FlowRate)
+            + _plant.Pumps.Where(p => p.SourceTankId == tankId).Sum(p => p.FlowRate);
+        return (inflow, outflow);
     }
 
     private string Target(ValveSnapshot valve) =>
@@ -126,6 +187,13 @@
             () => Task.FromResult(ActionOutcome.From(Commands.Execute(new OperatorCommand(valve.Id, type, null, CommandSource.Hmi), Session.Actor))),
             dangerous: false);
     }
+
+    private static string CommsClass(CommunicationState state) => state switch
+    {
+        CommunicationState.Online => "online",
+        CommunicationState.Degraded => "degraded",
+        _ => "offline"
+    };
 
     private static string Describe(OperatorCommandType type) => type switch
     {

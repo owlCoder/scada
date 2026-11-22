@@ -16,10 +16,10 @@ public sealed class DiagramPageTests
 
         var page = host.Context.Render<Diagram>();
 
-        Assert.Equal(plant.Tanks.Count, page.FindAll("rect.tank").Count);
-        Assert.Equal(plant.Pumps.Count, page.FindAll("circle.pump").Count);
-        Assert.Equal(plant.Valves.Count, page.FindAll("polygon.valve").Count);
-        page.FindAll("g.device").First(g => g.GetAttribute("aria-label") == plant.Pumps[0].Name).Click();
+        Assert.Equal(plant.Tanks.Count, page.FindAll(".pid-canvas rect.pid-tank").Count);
+        Assert.Equal(plant.Pumps.Count, page.FindAll(".pid-canvas circle.pid-pump").Count);
+        Assert.Equal(plant.Valves.Count, page.FindAll(".pid-canvas polygon.pid-valve").Count);
+        page.FindAll("g.pid-device").First(g => g.GetAttribute("aria-label") == plant.Pumps[0].Name).Click();
         Assert.Contains(plant.Pumps[0].Name, page.Find("aside.detail").TextContent);
     }
 
@@ -34,8 +34,8 @@ public sealed class DiagramPageTests
             await host.Rig.StepAsync();
         }
 
-        var operatorView = viewer.Context.Render<Diagram>().Find("text.value").TextContent;
-        var instructorView = instructor.Context.Render<Diagram>().Find("text.value").TextContent;
+        var operatorView = viewer.Context.Render<Diagram>().Find("text.pid-value").TextContent;
+        var instructorView = instructor.Context.Render<Diagram>().Find("text.pid-value").TextContent;
 
         Assert.Equal("99.0 %", operatorView);
         Assert.NotEqual("99.0 %", instructorView);

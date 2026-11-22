@@ -1,0 +1,57 @@
+@* Bottom dock of the water workspace: Alarms / Events / Commands / Trend tabs. *@
+@inherits RealtimeComponentBase
+@inject Application.Alarms.AlarmService AlarmService
+
+<section class="pid-dock" aria-label="Workspace dock">
+    <div class="pid-dock-tabs" role="tablist" aria-label="Dock panels">
+        @for (var tab = 0; tab < TabNames.Length; tab++)
+        {
+            var index = tab;
+            <button type="button" role="tab" id="pid-tab-@index" aria-selected="@(ActiveTab == index ? "true" : "false")" aria-controls="pid-dock-panel"
+                    class="pid-dock-tab @(ActiveTab == index ? "pid-dock-tab-active" : "")" @onclick="() => SetTabAsync(index)">
+                @TabNames[index]
+                @if (index == 0 && _unacknowledged > 0)
+                {
+                    <span class="pid-dock-badge" title="Unacknowledged active alarms">@_unacknowledged</span>
+                }
+            </button>
+        }
+    </div>
+    <div class="pid-dock-body" role="tabpanel" id="pid-dock-panel" aria-labelledby="pid-tab-@ActiveTab">
+        @if (ActiveTab == 0)
+        {
+            <PidAlarmsTab />
+        }
+        else if (ActiveTab == 1)
+        {
+            <PidEventsTab />
+        }
+        else if (ActiveTab == 2)
+        {
+            <PidCommandsTab />
+        }
+        else
+        {
+            <PidTrendTab TagRequest="TagRequest" />
+        }
+    </div>
+</section>
+
+@code {
+    private static readonly string[] TabNames = ["Alarms", "Events", "Commands", "Trend"];
+    private int _unacknowledged;
+
+    [Parameter] public int ActiveTab { get; set; }
+    [Parameter] public EventCallback<int> ActiveTabChanged { get; set; }
+    [Parameter] public (string Tag, long Id)? TagRequest { get; set; }
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Alarms, RealtimeTopics.Events, RealtimeTopics.EventsPersisted];
+
+    protected override bool Refresh()
+    {
+        _unacknowledged = AlarmService.GetCurrent().Count(a => a.IsActive && !a.IsAcknowledged);
+        return true;
+    }
+
+    private Task SetTabAsync(int tab) => ActiveTabChanged.InvokeAsync(tab);
+}

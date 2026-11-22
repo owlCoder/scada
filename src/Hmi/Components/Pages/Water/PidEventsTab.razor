@@ -1,0 +1,51 @@
+@* Events tab: live list of the most recent events (training events hidden from non-instructors). *@
+@inherits RealtimeComponentBase
+@using Application.Events
+@inject IEventStore EventStore
+
+@if (_events.Count == 0)
+{
+    <EmptyState Message="No events yet." />
+}
+else
+{
+    <table class="grid pid-event-table">
+        <thead>
+            <tr><th>Time</th><th>Category</th><th>Severity</th><th>Source</th><th>Actor</th><th>Device</th><th>Message</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var item in _events)
+            {
+                <tr>
+                    <td class="nowrap">@item.Timestamp.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                    <td>@item.Category</td>
+                    <td>@item.Severity</td>
+                    <td>@item.Source</td>
+                    <td>@item.Actor</td>
+                    <td>@(item.DeviceId ?? "—")</td>
+                    <td>@item.Message</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<SecurityEvent> _events = [];
+    private long _loadId;
+
+    protected override IReadOnlyCollection<string> Topics => [RealtimeTopics.Events, RealtimeTopics.EventsPersisted];
+
+    protected override bool Refresh() => true;
+
+    protected override Task RefreshAsync(CancellationToken cancellationToken) => LoadAsync(cancellationToken);
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var loadId = ++_loadId;
+        var result = await EventStore.QueryAsync(
+            new EventQuery(PageSize: 40) with { ExcludeTraining = !Session.IsInstructor }, cancellationToken);
+        if (loadId == _loadId && !cancellationToken.IsCancellationRequested)
+            _events = result.Items;
+    }
+}

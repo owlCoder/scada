@@ -1,0 +1,70 @@
+@* Minimap of the whole P&ID with the current viewport rectangle. Clicking centres the main view.
+   Rendered in canvas coordinates, so no JavaScript and no inline styles are needed. *@
+@inherits ComponentBase
+
+<svg class="pid-minimap" viewBox="0 0 @N(Layout.Width) @N(Layout.Height)" width="@MapWidth" height="@MapHeightPx"
+     preserveAspectRatio="none" role="img" aria-label="Minimap: click to centre the diagram view" @onclick="ClickAsync">
+    <title>Minimap</title>
+    @foreach (var pump in Plant.Pumps)
+    {
+        var (px, py) = Layout.Position(pump.Id);
+        var from = Layout.TankCenter(pump.SourceTankId);
+        var to = Layout.TankCenter(pump.TargetTankId);
+        var bottom = PlantLayout.TankTop + PlantLayout.TankHeight;
+        <polyline class="pid-pipe" points="@N(from),@N(bottom) @N(from),@N(py) @N(px),@N(py) @N(to),@N(py) @N(to),@N(bottom)" />
+    }
+    @foreach (var valve in Plant.Valves.Where(v => v.Role != ValveRole.Discharge))
+    {
+        var (vx, _) = Layout.Position(valve.Id);
+        var top = valve.Role == ValveRole.Inlet ? PlantLayout.InletY : PlantLayout.TankTop + PlantLayout.TankHeight;
+        var bottom = valve.Role == ValveRole.Inlet ? PlantLayout.TankTop : PlantLayout.OutletY;
+        <line class="pid-pipe" x1="@N(vx)" y1="@N(top)" x2="@N(vx)" y2="@N(bottom)" />
+    }
+    @foreach (var tank in Plant.Tanks)
+    {
+        var (tx, ty) = Layout.Position(tank.Id);
+        <rect class="pid-tank" x="@N(tx)" y="@N(ty)" width="@N(PlantLayout.TankWidth)" height="@N(PlantLayout.TankHeight)" rx="6" />
+    }
+    @foreach (var pump in Plant.Pumps)
+    {
+        var (px, py) = Layout.Position(pump.Id);
+        <circle class="pid-pump pid-stopped" cx="@N(px)" cy="@N(py)" r="9" />
+    }
+    @foreach (var valve in Plant.Valves)
+    {
+        var (vx, vy) = Layout.Position(valve.Id);
+        <polygon class="pid-valve pid-valve-closed" points="@N(vx - 7),@N(vy - 5) @N(vx + 7),@N(vy + 5) @N(vx + 7),@N(vy - 5) @N(vx - 7),@N(vy + 5)" />
+    }
+    @foreach (var sensor in Plant.Sensors)
+    {
+        var (bx, by, _, _) = Layout.SensorSlot(sensor.Id);
+        <circle class="pid-bubble" cx="@N(bx)" cy="@N(by)" r="5" />
+    }
+    @foreach (var controller in Controllers)
+    {
+        var (cx, cy) = Layout.ControllerPosition(controller.Id);
+        <rect class="pid-controller-box" x="@N(cx)" y="@N(cy)" width="@N(PlantLayout.ControllerBoxWidth)" height="@N(PlantLayout.ControllerBoxHeight)" rx="6" />
+    }
+    <rect class="pid-minimap-view" x="@N(ViewX)" y="@N(ViewY)" width="@N(ViewWidth)" height="@N(ViewHeight)" />
+</svg>
+
+@code {
+    private const int MapWidth = 200;
+
+    [Parameter, EditorRequired] public PlantSnapshot Plant { get; set; } = default!;
+    [Parameter, EditorRequired] public PlantLayout Layout { get; set; } = default!;
+    [Parameter] public IReadOnlyList<ControllerSnapshot> Controllers { get; set; } = [];
+    [Parameter] public double ViewX { get; set; }
+    [Parameter] public double ViewY { get; set; }
+    [Parameter] public double ViewWidth { get; set; }
+    [Parameter] public double ViewHeight { get; set; }
+    [Parameter] public EventCallback<(double X, double Y)> OnCenter { get; set; }
+
+    private double MapHeight => MapWidth * Layout.Height / Layout.Width;
+    private int MapHeightPx => Math.Max(40, (int)Math.Round(MapHeight));
+
+    private Task ClickAsync(MouseEventArgs e) =>
+        OnCenter.InvokeAsync((e.OffsetX * Layout.Width / MapWidth, e.OffsetY * Layout.Height / MapHeight));
+
+    private static string N(double value) => PlantLayout.Number(value);
+}
