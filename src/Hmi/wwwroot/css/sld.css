@@ -116,6 +116,12 @@
 .sld-qflag.q-b { fill: var(--c-invalid); font-weight: 700; }
 .sld-qflag.q-u { fill: var(--c-load-warn); font-weight: 700; }
 
+/* thin leader line from a displaced value box back to its element */
+.sld-leader {
+    stroke: var(--c-text-muted); stroke-width: 1px; stroke-dasharray: 3 3;
+    vector-effect: non-scaling-stroke; pointer-events: none;
+}
+
 /* ---- markers ---- */
 .sld-marker { pointer-events: none; }
 .sld-alarm path, .sld-alarm circle { fill: var(--c-p1); stroke: none; }

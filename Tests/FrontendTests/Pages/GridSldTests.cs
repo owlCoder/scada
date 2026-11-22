@@ -54,8 +54,8 @@ public sealed class GridSldTests
         // The station name is a small-caps label that appears from the medium LOD up, outside the frame.
         Assert.Empty(page.FindAll(".sld-frame-name"));
         var zoomIn = page.Find("button[title='Zoom in (+)']");
-        zoomIn.Click();
-        zoomIn.Click(); // ~1.8 px/unit -> medium LOD
+        for (var i = 0; i < 12 && page.FindAll(".sld-frame-name").Count == 0; i++)
+            zoomIn.Click(); // zoom in until the medium LOD (~1.5 px/unit) is reached
         var label = Assert.Single(page.FindAll(".sld-frame-name"));
         Assert.Contains("Station RTU", label.TextContent);
         var rect = frame.QuerySelector("rect")!;
@@ -287,16 +287,17 @@ public sealed class GridSldTests
         Assert.Contains("80.0 A · 20 %", keys);  // L1 feeder head current + loading
         Assert.Contains("90.0 A · 42 %", keys);  // T1 transformer current + loading
         var zoomIn = page.Find("button[title='Zoom in (+)']");
-        zoomIn.Click(); // ~1.47 px/unit — still low
+        zoomIn.Click(); // a little zoomed in — still low LOD
         Assert.NotEmpty(page.FindAll(".sld-lod-id"));
         Assert.Empty(page.FindAll(".sld-lod-name"));
-        zoomIn.Click(); // ~1.83 px/unit — medium: names appear, key values stay
+        for (var i = 0; i < 40 && page.FindAll(".sld-lod-name").Count == 0; i++)
+            zoomIn.Click(); // medium LOD (~1.5 px/unit): names appear, key values stay
         Assert.NotEmpty(page.FindAll(".sld-lod-name"));
         Assert.Empty(page.FindAll(".sld-value"));
         Assert.NotEmpty(page.FindAll(".sld-key text"));
         Assert.NotEmpty(page.FindAll(".sld-frame-name"));
-        zoomIn.Click();
-        zoomIn.Click(); // ~2.86 px/unit — high: full value boxes for every element incl. the tap box
+        for (var i = 0; i < 40 && page.FindAll(".sld-value").Count == 0; i++)
+            zoomIn.Click(); // high LOD (~2.5 px/unit): full value boxes for every element incl. the tap box
         Assert.NotEmpty(page.FindAll(".sld-value"));
         Assert.Empty(page.FindAll(".sld-key"));
         var boxTexts = page.FindAll(".sld-value text").Select(t => t.TextContent.Trim()).ToArray();

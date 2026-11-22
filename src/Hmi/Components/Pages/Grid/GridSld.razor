@@ -1,7 +1,6 @@
 @using Hmi.Services.Grid.Sld
 @using Hmi.Services.Shell
 @using Domain.Grid.Definition
-@using System.Globalization
 @using Microsoft.Extensions.Logging
 @using Hmi.Components.Pages.Grid.Sld
 @inject IJSRuntime JS
@@ -93,9 +92,11 @@
     private bool _showHeat;
     private bool _showStations = true;
     private bool _fitted;
+    private bool _userAdjusted;
+    private bool _disposed;
 
     /// <summary>Placer key suffix for the transformer tap value box.</summary>
-    public const string TapSuffix = "#tap";
+    public const string TapSuffix = SldLabelLayout.GridSldTapSuffix;
 
     private ElementReference _root;
     private ElementReference _canvas;
@@ -152,38 +153,19 @@
     }
 
     /// <summary>
-    /// Collision-free label placement for the current LOD. Boxes are sized in screen pixels and converted to SVG
-    /// units with the fixed scale, so they keep a constant on-screen size and never shrink below 11 px of text.
-    /// Low/medium zoom places the compact key values; high zoom places the full value boxes plus the tap box.
+    /// Collision-free label placement for the current LOD (see <see cref="SldLabelLayout"/>). Boxes are sized in screen
+    /// pixels and converted to SVG units with the fixed scale, so they keep a constant on-screen size; candidates also
+    /// avoid the bounding boxes of all symbols, busbars, markers and name labels, and the least important label is
+    /// dropped (not overlapped) when no free slot exists within the LOD search radius.
     /// </summary>
     private IReadOnlyDictionary<string, SldLabelPlacement> PlaceLabels()
     {
-        var scale = _viewport.FixedScale;
-        var candidates = new List<SldLabelCandidate>();
-        foreach (var element in _model.Elements)
-        {
-            var state = _states.GetValueOrDefault(element.Id);
-            if (_lod == SldLod.High)
-            {
-                if (state?.ValueText is { } value)
-                {
-                    var (width, height) = SldLabelPlacer.BoxSize(value, state.QualityFlag);
-                    candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
-                }
-                if (element.Kind == SldElementKind.Transformer && BranchTap(element.Id) is { } tap)
-                {
-                    var text = string.Create(CultureInfo.InvariantCulture, $"tap {tap}");
-                    var (width, height) = SldLabelPlacer.BoxSize(text, null);
-                    candidates.Add(new SldLabelCandidate(element.Id + TapSuffix, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
-                }
-            }
-            else if (state?.KeyText is { } key)
-            {
-                var (width, height) = SldLabelPlacer.BoxSize(key, null);
-                candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
-            }
-        }
-        return SldLabelPlacer.Place(candidates, scale).ToDictionary(p => p.Id);
+        var taps = _model.Elements
+            .Where(e => e.Kind == SldElementKind.Transformer)
+            .Select(e => (e.Id, Tap: BranchTap(e.Id)))
+            .Where(t => t.Tap is not null)
+            .ToDictionary(t => t.Id, t => t.Tap);
+        return SldLabelLayout.Place(_model, _states, taps, _lod, _scales, _viewport.PixelsPerUnit);
     }
 
     private int? BranchTap(string id) => Snapshot.Branch(id)?.TapPosition;
@@ -200,11 +182,15 @@
                 {
                     await module.InvokeAsync<bool>("observeSize", _dotNet, _root);
                     if (await module.InvokeAsync<SldClientRect?>("rect", _root) is { Width: > 0, Height: > 0 } rect)
-                        _viewport.SetContainer(rect.Width, rect.Height);
-                    if (!_fitted)
                     {
-                        _viewport.Fit(_model.Bounds);
-                        _fitted = true;
+                        _viewport.SetContainer(rect.Width, rect.Height);
+                        // Re-fit with the real container aspect so the network fills the whole canvas
+                        // (no letterboxing) until the dispatcher pans/zooms on their own.
+                        if (!_userAdjusted)
+                        {
+                            _viewport.Fit(_model.Bounds);
+                            _fitted = true;
+                        }
                     }
                 }
                 catch (Exception exception)
@@ -228,12 +214,13 @@
     [JSInvokable]
     public Task OnResize(double width, double height)
     {
+        // The observer's last callback can arrive while the component is being disposed (navigation away).
+        if (_disposed || width <= 0 || height <= 0)
+            return Task.CompletedTask;
         _viewport.SetContainer(width, height);
-        if (!_fitted)
-        {
+        // Keep the fit filling the (possibly rotated/resized) canvas until the user pans or zooms manually.
+        if (!_userAdjusted)
             _viewport.Fit(_model.Bounds);
-            _fitted = true;
-        }
         return InvokeAsync(StateHasChanged);
     }
 
@@ -328,6 +315,7 @@
 
     private bool ZoomCenter(double factor)
     {
+        _userAdjusted = true;
         _viewport.ZoomCenter(factor);
         return true;
     }
@@ -364,6 +352,7 @@
         // Hop onto the renderer dispatcher: the quick switcher / control window may raise this from any context.
         return InvokeAsync(async () =>
         {
+            _userAdjusted = true;
             _viewport.ZoomTo(element.Anchor, _model.Bounds);
             await SelectedIdChanged.InvokeAsync(element.Id);
             StateHasChanged();
@@ -372,6 +361,7 @@
 
     private bool Fit()
     {
+        _userAdjusted = false;
         _viewport.Fit(_model.Bounds);
         return true;
     }
@@ -379,6 +369,7 @@
     private async Task OnWheelAsync(WheelEventArgs e)
     {
         var point = await SvgPointAsync(e.ClientX, e.ClientY);
+        _userAdjusted = true;
         _viewport.ZoomAt(point, e.DeltaY < 0 ? 1.15 : 1 / 1.15);
     }
 
@@ -405,7 +396,10 @@
         var point = await SvgPointAsync(e.ClientX, e.ClientY);
         _viewport.PanBy(point.X - _panLast.X, point.Y - _panLast.Y);
         if (_panStart is { } start && Math.Abs(point.X - start.X) + Math.Abs(point.Y - start.Y) > 6)
+        {
             _dragged = true;
+            _userAdjusted = true;
+        }
         _panLast = point;
     }
 
@@ -490,18 +484,21 @@
 
     private async Task PickAsync(SldElement element)
     {
+        _userAdjusted = true;
         _viewport.ZoomTo(element.Anchor, _model.Bounds);
         await SelectedIdChanged.InvokeAsync(element.Id);
     }
 
     private Task NavigateBoundsAsync(SldBounds bounds)
     {
+        _userAdjusted = true;
         _viewport.ZoomToBounds(bounds);
         return Task.CompletedTask;
     }
 
     private Task NavigateMinimap((double Fx, double Fy) fraction)
     {
+        _userAdjusted = true;
         _viewport.NavigateFraction(fraction.Fx, fraction.Fy, _model.Bounds);
         return Task.CompletedTask;
     }
@@ -563,6 +560,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true; // the ResizeObserver's final callback may still arrive during navigation
         Shell.FocusRequested -= _onFocus;
         var module = await ModuleAsync();
         if (module is not null)

@@ -23,13 +23,13 @@ public sealed class GridSldModelTests
         Assert.NotNull(line);
         Assert.Equal(SldElementKind.Line, line!.Kind);
         var wire = Assert.Single(line.Wires);
-        Assert.Contains(new DiagramPosition(80, 280), wire); // from B-MV
-        Assert.Contains(new DiagramPosition(400, 280), wire); // to B-END
-        Assert.Contains(new DiagramPosition(240, 280), wire); // waypoint
+        Assert.Contains(new DiagramPosition(128, 392), wire); // from B-MV (2,7) at 64x56 per grid unit
+        Assert.Contains(new DiagramPosition(640, 392), wire); // to B-END (10,7)
+        Assert.Contains(new DiagramPosition(384, 392), wire); // waypoint (6,7)
         var transformer = model.Element("T1");
         Assert.Equal(2, transformer!.Wires.Count); // HV and LV stubs
         var load = model.Element("LD1");
-        Assert.Contains(new DiagramPosition(400, 360), Assert.Single(load!.Wires)); // through QL1
+        Assert.Contains(new DiagramPosition(640, 504), Assert.Single(load!.Wires)); // through QL1 (10,9)
         var rtu = Assert.Single(model.Frames);
         Assert.Equal("RTU1", rtu.RtuId);
         Assert.Contains("Q1", rtu.ElementIds);
@@ -42,13 +42,33 @@ public sealed class GridSldModelTests
     {
         var model = Model;
         var rtu = Assert.Single(model.Frames);
-        // Members: B-MV (80,280), L1 (240,280), Q1 (160,280), T1 (80,160) in SVG units.
+        // Members: B-MV, L1 (path midpoint), Q1, T1 — the frame is exactly their anchor bounds plus the padding.
         var memberAnchors = rtu.ElementIds.Select(model.Element).Select(e => e!.Anchor).ToArray();
         Assert.All(memberAnchors, a => Assert.InRange(a.X, rtu.X, rtu.X + rtu.Width));
         Assert.All(memberAnchors, a => Assert.InRange(a.Y, rtu.Y, rtu.Y + rtu.Height));
-        // The frame does not stretch over the wires that run to the shared feeder-end bus at x=400.
-        Assert.True(rtu.X + rtu.Width < 400, $"frame right {rtu.X + rtu.Width} swallows the feeder end");
-        Assert.True(rtu.Width < 300, $"frame width {rtu.Width} is padded over neighbours");
+        var minX = memberAnchors.Min(a => a.X);
+        var maxX = memberAnchors.Max(a => a.X);
+        var minY = memberAnchors.Min(a => a.Y);
+        var maxY = memberAnchors.Max(a => a.Y);
+        Assert.Equal(minX - 28, rtu.X, 3);
+        Assert.Equal(minY - 28, rtu.Y, 3);
+        Assert.Equal(maxX - minX + 56, rtu.Width, 3);
+        Assert.Equal(maxY - minY + 56, rtu.Height, 3);
+        // The frame does not stretch over the wires that run to the shared feeder-end bus.
+        Assert.True(rtu.X + rtu.Width < model.Element("B-END")!.Anchor.X,
+            $"frame right {rtu.X + rtu.Width} swallows the feeder end at {model.Element("B-END")!.Anchor.X}");
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task SldMapsGridUnitsWithItsOwnLargerSpacingThanTheEditor()
+    {
+        // The SLD canvas uses 64x56 per definition grid unit; the editor keeps GridDiagramGeometry.Unit (40).
+        Assert.Equal(64, SldModelBuilder.UnitX);
+        Assert.Equal(56, SldModelBuilder.UnitY);
+        Assert.Equal(40, GridDiagramGeometry.Unit);
+        Assert.Equal(new DiagramPosition(64, 56), SldModelBuilder.At(new DiagramPosition(1, 1)));
+        Assert.Equal("80,80", GridDiagramGeometry.Point(new DiagramPosition(2, 2))); // editor geometry unchanged
         return Task.CompletedTask;
     }
 
