@@ -28,7 +28,8 @@
         @if (State?.HasFlow == true && Element.Wires.Count > 0)
         {
             var (point, angle) = SldPathMath.PointAt(Element.Wires[0], 0.5);
-            <path class="sld-flow" transform="translate(@N(point.X) @N(point.Y)) rotate(@N(State.FlowFrom ? angle : angle + 180))" d="M7,0 L-5,-4.5 L-5,4.5 Z" />
+            @* The arrow sits inside the element group translated to the anchor, so use anchor-relative coordinates. *@
+            <path class="sld-flow" transform="translate(@N(point.X - Element.Anchor.X) @N(point.Y - Element.Anchor.Y)) rotate(@N(State.FlowFrom ? angle : angle + 180))" d="M7,0 L-5,-4.5 L-5,4.5 Z" />
         }
         @if (Lod >= SldLod.Medium && Element.Kind == SldElementKind.Transformer && Tap is { } tap)
         {
