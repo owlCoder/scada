@@ -38,6 +38,35 @@ public sealed class GridSldModelTests
     }
 
     [Fact]
+    public Task FrameIsTheBoundingBoxOfItsMemberAnchorsOnly()
+    {
+        var model = Model;
+        var rtu = Assert.Single(model.Frames);
+        // Members: B-MV (80,280), L1 (240,280), Q1 (160,280), T1 (80,160) in SVG units.
+        var memberAnchors = rtu.ElementIds.Select(model.Element).Select(e => e!.Anchor).ToArray();
+        Assert.All(memberAnchors, a => Assert.InRange(a.X, rtu.X, rtu.X + rtu.Width));
+        Assert.All(memberAnchors, a => Assert.InRange(a.Y, rtu.Y, rtu.Y + rtu.Height));
+        // The frame does not stretch over the wires that run to the shared feeder-end bus at x=400.
+        Assert.True(rtu.X + rtu.Width < 400, $"frame right {rtu.X + rtu.Width} swallows the feeder end");
+        Assert.True(rtu.Width < 300, $"frame width {rtu.Width} is padded over neighbours");
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task StateBuilderKeyTextCarriesBusKvAndBranchLoadingAtLowZoom()
+    {
+        var definition = new HmiFakeGridView().Definition;
+        var states = SldStateBuilder.Build(Snapshot, definition, [], null);
+        Assert.Equal("20.20 kV", states["B-MV"].KeyText);       // busbar kV
+        Assert.Equal("80.0 A · 20 %", states["L1"].KeyText);   // feeder head current + loading
+        Assert.Equal("90.0 A · 42 %", states["T1"].KeyText);   // transformer loading
+        Assert.Null(states["LD1"].KeyText);                    // load MW only in the full value box
+        Assert.Null(states["Q1"].KeyText);                     // switch state is the symbol itself
+        Assert.Equal("80.0 A · 20 %", states["L1"].ValueText);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
     public Task SearchMatchesIdsAndNamesCaseInsensitively()
     {
         var index = new SldSearchIndex(Model);

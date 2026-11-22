@@ -2,6 +2,7 @@
 @inject TimeProvider Clock
 @inject IGridControl Control
 @inject GridOptions Options
+@inject Hmi.Services.Shell.ShellState Shell
 
 @* Control window of the dispatcher workspace: the right dock for the selected element. Select-before-operate,
    per-type control sections, protection relays, measurements with mini trends and safety tags. *@
@@ -37,6 +38,8 @@
             <button type="button" role="tab" aria-selected="@(!_details)" class="dock-tab @(_details ? "" : "active")" @onclick="() => ShowControl()">Control</button>
             <button type="button" role="tab" aria-selected="@_details" class="dock-tab @(_details ? "active" : "")" @onclick="() => ShowDetails()">Details</button>
         </div>
+        <button type="button" class="btn cw-centre" title="Select this element and zoom to it on the diagram (same as Ctrl+K)"
+                @onclick="() => Shell.RequestFocus(ElementId)">Centre on diagram</button>
     </header>
     <OutcomeBanner Outcome="Outcome" />
     <RefreshErrorBanner Error="@RefreshError" />

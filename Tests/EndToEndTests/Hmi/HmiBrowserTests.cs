@@ -37,11 +37,13 @@ public sealed class HmiBrowserTests(ITestOutputHelper output)
         var diagnostics = new BrowserDiagnostics();
         await diagnostics.WatchAsync(page);
         await BrowserTestSession.LoginAsync(page, "administrator");
-        var links = await page.GetByRole(AriaRole.Navigation).GetByRole(AriaRole.Link).AllTextContentsAsync();
+        var links = await page.GetByRole(AriaRole.Navigation).GetByRole(AriaRole.Link).AllAsync();
         Assert.Equal(17, links.Count);
         foreach (var link in links)
         {
-            await BrowserTestSession.NavigateAsync(page, link.Trim());
+            // The rail shows short labels; the full display name is the link's aria-label (and tooltip).
+            var label = (await link.GetAttributeAsync("aria-label")) ?? (await link.TextContentAsync()) ?? "";
+            await BrowserTestSession.NavigateAsync(page, label.Trim());
             await diagnostics.AssertCleanAsync(page);
         }
     }, output);

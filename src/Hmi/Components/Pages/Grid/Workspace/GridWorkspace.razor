@@ -1,11 +1,14 @@
 @page "/grid/diagram"
 @inherits GridPageBase
 @inject IJSRuntime JS
+@inject Hmi.Services.Shell.ShellState Shell
+@inject Hmi.Services.Shell.ShellAlarmMonitor ShellAlarms
 
 @* Grid dispatcher workspace: full-viewport single-line diagram canvas hosted as-is (GridSld), a right dock with the
    control window for the selected element, and a resizable bottom dock with alarm/event/command/trend/tag tabs.
    Dock layout and sizes are remembered per user in localStorage through the workspace JS module; all state stays in C#. *@
 <PageTitle>Grid dispatcher workspace · SCADA</PageTitle>
+<h1 class="visually-hidden">Single-line diagram</h1>
 <div class="grid-workspace">
     <div class="workspace-canvas">
         <GridPageStatus Error="@RefreshError" Available="@(Snapshot is not null)" />
@@ -41,6 +44,11 @@
         <div class="dock-resize" @ref="_bottomHandle" role="separator" aria-orientation="horizontal" aria-label="Resize bottom dock" title="Drag to resize"></div>
         <div class="dock-head">
             <h2>@TabName(_layout.Tab) dock</h2>
+            @if (_layout.BottomCollapsed && _unackCount > 0)
+            {
+                <span class="dock-badge @_unackTopClass blink-unack" role="status"
+                      title="@_unackCount unacknowledged alarm(s) — expand the dock to review them">@_unackCount</span>
+            }
             <button type="button" class="btn dock-toggle" aria-expanded="@(!_layout.BottomCollapsed)"
                     aria-label="@(_layout.BottomCollapsed ? "Open bottom dock" : "Collapse bottom dock")"
                     title="@(_layout.BottomCollapsed ? "Open bottom dock" : "Collapse bottom dock")"
@@ -65,6 +73,8 @@
     private GridWorkspaceLayout _layout = GridWorkspaceLayout.Default;
     private string? _trendElement;
     private GridSldAction? _pendingRequest;
+    private int _unackCount;
+    private string? _unackTopClass;
 
     protected string? SelectedId { get; private set; }
     private IGridTagging? Tagging => Services.GetService<IGridTagging>();
@@ -73,17 +83,37 @@
 
     protected override IReadOnlyCollection<string> Topics => [.. base.Topics, RealtimeTopics.GridTags];
 
+    protected override bool Refresh()
+    {
+        var changed = base.Refresh();
+        // Unacknowledged alarm count for the collapsed-dock badge (highest priority first).
+        var counts = ShellAlarms.UnacknowledgedCounts();
+        _unackCount = counts.Sum(c => c.Count);
+        _unackTopClass = counts.Where(c => c.Count > 0)
+            .Select(c => c.Severity switch
+            {
+                Domain.Process.Alarms.AlarmSeverity.Critical => "p1",
+                Domain.Process.Alarms.AlarmSeverity.High => "p2",
+                Domain.Process.Alarms.AlarmSeverity.Medium => "p3",
+                _ => "p4"
+            })
+            .FirstOrDefault();
+        return changed;
+    }
+
     private bool Select(string? id)
     {
         SelectedId = id;
         _pendingRequest = null;
+        // Publish the selection to the shell so the status bar shows what the workspace has selected.
+        Shell.Selected = id is null ? null : $"{id} · {GridWorkspaceElements.Resolve(Snapshot, Definition, id)?.Name ?? id}";
         return true;
     }
 
     /// <summary>Handles a canvas action request (context menu / double-click / keyboard on the diagram).</summary>
     public bool HandleAction(GridSldAction action)
     {
-        SelectedId = action.ElementId;
+        Select(action.ElementId);
         switch (action.Kind)
         {
             case GridSldActionKind.OpenControl:
@@ -112,8 +142,7 @@
         switch (key)
         {
             case "Escape":
-                SelectedId = null;
-                _pendingRequest = null;
+                Select(null);
                 break;
             case "Enter":
                 if (SelectedId is not null)
@@ -172,7 +201,11 @@
                     var key = GridWorkspaceLayout.StorageKey(Session.Actor.Name);
                     var stored = await _module.InvokeAsync<GridWorkspaceLayout?>("load", key);
                     if (stored is not null)
+                    {
                         _layout = stored;
+                        // Re-render once so the remembered collapsed state / height / tab apply on first paint.
+                        await InvokeAsync(StateHasChanged);
+                    }
                     await _module.InvokeVoidAsync("attachKeys", _self);
                     await _module.InvokeVoidAsync("startBottomDrag", _bottomHandle, _bottomDock, _self);
                     if (_layout.BottomHeightPx is { } height)
@@ -229,6 +262,7 @@
 
     public override async ValueTask DisposeAsync()
     {
+        Shell.Selected = null;
         await base.DisposeAsync();
         _self?.Dispose();
         if (_module is not null)

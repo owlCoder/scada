@@ -35,12 +35,13 @@
 .sld-el.is-dead { color: var(--c-dead); }
 
 /* ---- wires ---- */
-.sld-wire { fill: none; stroke: currentColor; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; pointer-events: stroke; }
-.sld-el.kind-bus .sld-wire, .sld-el:not(.kind-line):not(.kind-transformer) .sld-wire { stroke-width: 2.5; }
+/* Line thickness is constant on screen (vector-effect: non-scaling-stroke); busbars stay thicker than lines
+   and HV thicker than MV/LV. Widths are screen px. */
+.sld-wire { fill: none; stroke: currentColor; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.sld-el.v-110 .sld-wire { stroke-width: 3.5px; }
+.sld-el.v-35 .sld-wire { stroke-width: 3px; }
+.sld-el.v-04 .sld-wire { stroke-width: 1.5px; }
 .sld-wire.is-dead { stroke: var(--c-dead); stroke-dasharray: 8 5; }
-.sld-el.v-110 .sld-wire { stroke-width: 5; }
-.sld-el.v-35 .sld-wire { stroke-width: 4; }
-.sld-el.v-04 .sld-wire { stroke-width: 2; }
 
 /* energisation view: live wires bright, dead grey */
 .mode-energisation .sld-el:not(.is-dead) .sld-wire { color: var(--c-text); }
@@ -56,17 +57,17 @@
 /* ---- element groups ---- */
 .sld-el { cursor: pointer; }
 .sld-el:focus { outline: none; }
-.sld-halo { fill: none; stroke: var(--c-focus); stroke-width: 2; stroke-dasharray: 5 4; }
+.sld-halo { fill: none; stroke: var(--c-focus); stroke-width: 2px; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 
-/* symbols */
-.sym { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* symbols: outlines keep a constant screen thickness; the group transform scales (capped) the shapes themselves */
+.sym { fill: none; stroke: currentColor; stroke-width: 1.8px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .sym-fill { fill: currentColor; }
-.busbar { stroke-width: 6; }
-.sld-el.v-110 .busbar { stroke-width: 10; }
-.sld-el.v-35 .busbar { stroke-width: 8; }
-.sld-el.v-20 .busbar { stroke-width: 6; }
-.sld-el.v-10 .busbar { stroke-width: 5; }
-.sld-el.v-04 .busbar { stroke-width: 4; }
+.busbar { stroke-width: 5px; }
+.sld-el.v-110 .busbar { stroke-width: 8px; }
+.sld-el.v-35 .busbar { stroke-width: 7px; }
+.sld-el.v-20 .busbar { stroke-width: 6px; }
+.sld-el.v-10 .busbar { stroke-width: 5px; }
+.sld-el.v-04 .busbar { stroke-width: 4px; }
 
 /* switching devices: closed = filled with the voltage colour, open = hollow with --c-open */
 .sld-el.closed .sym-switch { fill: currentColor; stroke: currentColor; }
@@ -90,14 +91,28 @@
 .sld-flow { fill: currentColor; stroke: none; pointer-events: none; }
 .sld-el.is-dead .sld-flow { fill: var(--c-dead); }
 
-/* ---- labels ---- */
-.sld-lod-id, .sld-lod-name, .sld-tap { fill: var(--c-text); font-size: var(--fs-sm); pointer-events: none; }
-.sld-lod-id { fill: var(--c-text-muted); font-size: var(--fs-xs); font-family: var(--font-value); }
-.sld-el.is-dead .sld-lod-id, .sld-el.is-dead .sld-lod-name, .sld-el.is-dead .sld-tap { fill: var(--c-dead); }
+/* ---- labels (counter-scaled groups: font sizes are px, the group transform keeps them legible on screen) ---- */
+.sld-lod-id, .sld-lod-name { fill: var(--c-text); pointer-events: none; }
+.sld-lod-name { font-size: 12px; }
+.sld-lod-id { fill: var(--c-text-muted); font-size: 11px; font-family: var(--font-value); }
+.sld-el.is-dead .sld-lod-id, .sld-el.is-dead .sld-lod-name { fill: var(--c-dead); }
 
-/* ---- value boxes (high zoom) ---- */
-.sld-value rect { fill: var(--c-panel); stroke: var(--c-border); }
-.sld-value text { fill: var(--c-text); font-family: var(--font-value); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+/* compact key value at low/medium zoom (bus kV, branch A·%): constant on-screen size, canvas halo for legibility */
+.sld-key text {
+    fill: var(--c-text);
+    font-family: var(--font-value);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    paint-order: stroke;
+    stroke: var(--c-canvas);
+    stroke-width: 3px;
+    pointer-events: none;
+}
+.sld-el.is-dead .sld-key text { fill: var(--c-dead); }
+
+/* ---- value boxes (high zoom, fixed screen size via the group scale) ---- */
+.sld-value rect { fill: var(--c-panel); stroke: var(--c-border); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.sld-value text { fill: var(--c-text); font-family: var(--font-value); font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .sld-qflag.q-b { fill: var(--c-invalid); font-weight: 700; }
 .sld-qflag.q-u { fill: var(--c-load-warn); font-weight: 700; }
 
@@ -121,9 +136,9 @@
 .sld-tag.tag-info rect { fill: var(--c-focus); }
 .sld-tag.tag-info text { fill: var(--c-canvas); }
 
-/* ---- substation frames ---- */
-.sld-frame rect { fill: none; stroke: var(--c-border); stroke-width: 1.5; stroke-dasharray: 10 6; }
-.sld-frame-name { fill: var(--c-text-muted); font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase; }
+/* ---- substation frames: subtle thin dashed rect (constant 1 px on screen), small-caps name OUTSIDE top-left ---- */
+.sld-frame rect { fill: none; stroke: var(--c-border); stroke-width: 1px; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+.sld-frame-name { fill: var(--c-text-muted); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; pointer-events: none; }
 
 /* ---- overlays ---- */
 .sld-search { position: absolute; top: 10px; left: 10px; z-index: 20; width: 260px; display: flex; flex-direction: column; gap: 6px; }

@@ -10,7 +10,10 @@ namespace Hmi.Services.Grid.Sld;
 public static class SldModelBuilder
 {
     private const double Unit = GridDiagramGeometry.Unit;
-    private const double FramePadding = 70;
+
+    /// <summary>Small inset around the member anchors only — large padding (or wire endpoints that run to a shared
+    /// bus) would swallow neighbouring feeders into one RTU frame.</summary>
+    private const double FramePadding = 28;
 
     public static SldStaticModel Build(GridDefinition definition)
     {
@@ -82,8 +85,9 @@ public static class SldModelBuilder
         var members = elements.Where(e => rtu.ElementIds.Contains(e.Id)).ToArray();
         if (members.Length == 0)
             return null;
-        var points = members.SelectMany(e => e.Wires.SelectMany(w => w)).Concat(members.Select(e => e.Anchor));
-        var bounds = SldBounds.Of(points, FramePadding);
+        // Bounding box of the member anchors only: the connecting wires run to (shared) buses outside the station
+        // and must not stretch the frame over neighbouring feeders.
+        var bounds = SldBounds.Of(members.Select(m => m.Anchor), FramePadding);
         return new SldFrame(rtu.Id, rtu.Name, bounds.X, bounds.Y, bounds.Width, bounds.Height, members.Select(m => m.Id).ToArray());
     }
 

@@ -13,6 +13,18 @@ public sealed class SldViewport
     public const double MinWidth = 60;
     public const double MaxWidth = 40000;
 
+    /// <summary>Pixels per unit at which element names appear (about 1.5x the "fit" zoom on a 1520 px canvas).</summary>
+    public const double MediumAt = 1.5;
+
+    /// <summary>Pixels per unit at which full value boxes appear (about 2.5x the "fit" zoom).</summary>
+    public const double HighAt = 2.5;
+
+    /// <summary>Smallest on-screen text size the diagram guarantees (px).</summary>
+    public const double MinTextPx = 11;
+
+    /// <summary>Largest on-screen text size before labels stop growing with the zoom (px).</summary>
+    public const double MaxTextPx = 16;
+
     public double X { get; private set; }
     public double Y { get; private set; }
     public double Width { get; private set; } = 1200;
@@ -23,7 +35,24 @@ public sealed class SldViewport
     /// <summary>Screen pixels per SVG unit — drives the level of detail.</summary>
     public double PixelsPerUnit => ContainerWidth <= 0 ? 1 : ContainerWidth / Width;
 
-    public SldLod Lod => PixelsPerUnit < 1.5 ? SldLod.Low : PixelsPerUnit < 6 ? SldLod.Medium : SldLod.High;
+    /// <summary>
+    /// Level of detail. At "fit" on a ~1520 px canvas PixelsPerUnit is about 1.0, so the dispatcher already sees
+    /// busbar/feeder ids and the key values; names appear around 1.5x and full value boxes around 2.5x.
+    /// </summary>
+    public SldLod Lod => PixelsPerUnit < MediumAt ? SldLod.Low : PixelsPerUnit < HighAt ? SldLod.Medium : SldLod.High;
+
+    /// <summary>Counter-scale that keeps a fixed screen size (px) for value boxes at any zoom: 1 / pixels per unit.</summary>
+    public double FixedScale => PixelsPerUnit <= 0 ? 1 : 1 / PixelsPerUnit;
+
+    /// <summary>Counter-scale that caps a symbol's on-screen size at the <see cref="HighAt"/> zoom level.</summary>
+    public double SymbolScale => Math.Min(1, HighAt / Math.Max(PixelsPerUnit, 1e-6));
+
+    /// <summary>Counter-scale that keeps a label of the given design size legible on screen (clamped to 11–16 px).</summary>
+    public double TextScale(double fontPx)
+    {
+        var screen = fontPx * PixelsPerUnit;
+        return screen <= 0 ? 1 : Math.Clamp(screen, MinTextPx, MaxTextPx) / screen;
+    }
 
     public string ViewBox => string.Create(CultureInfo.InvariantCulture, $"{N(X)} {N(Y)} {N(Width)} {N(Height)}");
 

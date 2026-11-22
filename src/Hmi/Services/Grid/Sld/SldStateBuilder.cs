@@ -21,15 +21,17 @@ public static class SldStateBuilder
         {
             var snap = snapshot.Bus(bus.Id);
             var quality = Quality(snapshot, bus.Id, GridMeasurementKind.Voltage);
+            var kV = snap is null ? null : Invariant($"{snap.VoltageKv:0.00} kV");
             result[bus.Id] = new SldElementState(bus.Id, snap?.Energized == true, null, quality == MeasurementQuality.Bad,
-                Flag(quality), snap is null ? null : Invariant($"{snap.VoltageKv:0.00} kV"), null, false, false, false,
-                Alarm(snapshot, definition, bus.Id), Unack(snapshot, definition, bus.Id), Tags(tags, bus.Id), bus.Id == selectedId);
+                Flag(quality), kV, null, false, false, false,
+                Alarm(snapshot, definition, bus.Id), Unack(snapshot, definition, bus.Id), Tags(tags, bus.Id), bus.Id == selectedId,
+                KeyText: kV);
         }
         foreach (var line in definition.Lines)
-            result[line.Id] = Branch(snapshot, definition, tags, selectedId, line.Id, line.Name, line.FromBusId, line.ToBusId, false);
+            result[line.Id] = Branch(snapshot, definition, tags, selectedId, line.Id, line.Name, line.FromBusId, line.ToBusId);
         foreach (var transformer in definition.Transformers)
             result[transformer.Id] = Branch(snapshot, definition, tags, selectedId, transformer.Id, transformer.Name,
-                transformer.HvBusId, transformer.LvBusId, true);
+                transformer.HvBusId, transformer.LvBusId);
         foreach (var source in definition.Sources)
         {
             var snap = snapshot.Bus(source.BusId);
@@ -82,20 +84,19 @@ public static class SldStateBuilder
     }
 
     private static SldElementState Branch(GridSnapshot snapshot, GridDefinition definition, IReadOnlyList<GridTag> tags,
-        string? selectedId, string id, string name, string fromBusId, string toBusId, bool transformer)
+        string? selectedId, string id, string name, string fromBusId, string toBusId)
     {
         var branch = snapshot.Branch(id);
         var quality = Quality(snapshot, id, GridMeasurementKind.Current, GridMeasurementKind.ActivePower);
         var energized = branch?.Energized == true || (snapshot.Bus(fromBusId)?.Energized == true && snapshot.Bus(toBusId)?.Energized == true);
         var power = branch?.ActivePowerFromMw ?? 0;
-        var value = branch is null
-            ? null
-            : transformer
-                ? Invariant($"{branch.CurrentA:0.0} A · {branch.LoadingPercent:0} % · tap {branch.TapPosition?.ToString(CultureInfo.InvariantCulture) ?? "-"}")
-                : Invariant($"{branch.CurrentA:0.0} A · {branch.LoadingPercent:0} %");
+        var key = branch is null ? null : Invariant($"{branch.CurrentA:0.0} A · {branch.LoadingPercent:0} %");
+        // The tap position gets its own placed value box at high zoom (see SldElementG), not a suffix here.
+        var value = key;
         return new SldElementState(id, energized, null, quality == MeasurementQuality.Bad, Flag(quality), value,
             branch?.LoadingPercent, energized && Math.Abs(power) > 0.001, power > 0, false,
-            Alarm(snapshot, definition, id), Unack(snapshot, definition, id), Tags(tags, id), id == selectedId);
+            Alarm(snapshot, definition, id), Unack(snapshot, definition, id), Tags(tags, id), id == selectedId,
+            KeyText: key);
     }
 
     private static string Invariant(FormattableString value) => FormattableString.Invariant(value);

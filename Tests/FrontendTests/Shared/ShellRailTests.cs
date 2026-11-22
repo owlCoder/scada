@@ -68,4 +68,28 @@ public sealed class ShellRailTests
         var rail = host.Context.Render<Rail>();
         Assert.Contains("active", rail.Find("a[aria-label='Overview']").ClassList); // bUnit starts at /
     }
+
+    [Fact]
+    public async Task RailLabelsAreShortAndKeepTheFullTitleAsTooltipAndAriaLabel()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
+        var rail = host.Context.Render<Rail>();
+        var labels = rail.FindAll(".rail-label").Select(l => l.TextContent.Trim()).ToArray();
+        Assert.All(labels, label => Assert.InRange(label.Length, 1, 9)); // never truncated in the 56 px rail
+        var sld = rail.Find("a[aria-label='Single-line diagram']");
+        Assert.Equal("Diagram", sld.QuerySelector(".rail-label")!.TextContent.Trim());
+        Assert.Equal("Single-line diagram", sld.GetAttribute("title"));
+        Assert.Equal("Single-line diagram", sld.GetAttribute("aria-label"));
+        var transformers = rail.Find("a[aria-label='Transformers']");
+        Assert.Equal("Xformers", transformers.QuerySelector(".rail-label")!.TextContent.Trim());
+    }
+
+    [Fact]
+    public Task EveryDisplayEntryOfBothModesHasAShortRailLabel()
+    {
+        foreach (var mode in new[] { Application.Common.SimulationMode.Water, Application.Common.SimulationMode.Grid })
+            foreach (var entry in Hmi.Services.Shell.DisplayCatalog.For(mode))
+                Assert.InRange(entry.ShortLabel.Length, 1, 9);
+        return Task.CompletedTask;
+    }
 }

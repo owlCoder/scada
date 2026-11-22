@@ -8,9 +8,11 @@ using Domain.Grid.Commands;
 using Domain.Grid.Snapshots;
 using Domain.Process.Alarms;
 using FrontendTests.Support;
+using Hmi.Components.Layout;
 using Hmi.Components.Pages.Grid.Workspace;
 using Hmi.Services.Grid;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace FrontendTests.Pages;
@@ -329,6 +331,19 @@ public sealed class GridWorkspaceTests
     }
 
     [Fact]
+    public async Task StoredLayoutRestoresCollapsedBottomDockHeightAndTab()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
+        var module = host.Context.JSInterop.SetupModule("./_content/Hmi/js/workspace-dock.js");
+        module.Setup<Hmi.Services.Grid.Workspace.GridWorkspaceLayout?>("load", _ => true)
+            .SetResult(new Hmi.Services.Grid.Workspace.GridWorkspaceLayout(false, true, 210, Hmi.Services.Grid.Workspace.GridWorkspaceTab.Tags));
+        var page = host.Context.Render<GridWorkspace>();
+        // The collapsed state, height and active tab are remembered per user (localStorage via the JS module).
+        page.WaitForAssertion(() => Assert.NotNull(page.Find(".dock-bottom.collapsed")));
+        page.WaitForAssertion(() => Assert.Equal("Tags dock", page.Find(".dock-bottom .dock-head h2").TextContent.Trim()));
+    }
+
+    [Fact]
     public async Task ViewerSeesReadOnlyWorkspace()
     {
         await using var host = HmiTestHost.Create(AccessRole.Viewer, mode: SimulationMode.Grid);
@@ -364,6 +379,79 @@ public sealed class GridWorkspaceTests
             .Add(x => x.History, host.GridHistory));
         page.WaitForAssertion(() => Assert.Single(page.FindAll(".cw-measurement .sparkline-mini polyline")));
         Assert.Contains("Uncertain", page.Find(".control-window").TextContent);
+    }
+
+    [Fact]
+    public async Task WorkspaceSelectionIsPublishedToTheShellStatusBar()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
+        var shell = host.Context.Services.GetRequiredService<Hmi.Services.Shell.ShellState>();
+        var page = host.Context.Render<GridWorkspace>();
+        Assert.Null(shell.Selected);
+        page.FindAll(".dock-table .linklike").Single(b => b.TextContent.Trim() == "B-MV").Click();
+        page.WaitForAssertion(() => Assert.Equal("B-MV · MV bus", shell.Selected));
+        var bar = host.Context.Render<StatusBar>();
+        bar.WaitForAssertion(() => Assert.Contains("selected B-MV · MV bus", bar.Find(".status-selected").TextContent));
+        // Escape clears the selection everywhere.
+        await page.InvokeAsync(() => page.Instance.OnWorkspaceKey("Escape"));
+        page.WaitForAssertion(() => Assert.Null(shell.Selected));
+    }
+
+    [Fact]
+    public async Task ShellFocusRequestSelectsAndZoomsTheCanvasToTheElement()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
+        var shell = host.Context.Services.GetRequiredService<Hmi.Services.Shell.ShellState>();
+        var page = host.Context.Render<GridWorkspace>();
+        var svg = page.Find("svg.sld-canvas");
+        var fit = svg.GetAttribute("viewBox");
+        shell.RequestFocus("L1"); // Ctrl+K element jump
+        page.WaitForAssertion(() => Assert.Equal("L1", page.Find(".workspace-canvas .grid-sld").GetAttribute("data-selected")));
+        Assert.NotEqual(fit, svg.GetAttribute("viewBox"));
+        page.WaitForAssertion(() => Assert.Equal("L1 · North feeder", shell.Selected));
+    }
+
+    [Fact]
+    public async Task CollapsedBottomDockShowsUnacknowledgedAlarmBadge()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
+        var page = host.Context.Render<GridWorkspace>();
+        // AL1 (High, unacknowledged) is active in the fake snapshot.
+        Assert.Empty(page.FindAll(".dock-badge")); // not collapsed yet
+        page.Find(".dock-bottom .dock-toggle").Click();
+        page.WaitForAssertion(() => Assert.Single(page.FindAll(".dock-bottom .dock-badge")));
+        var badge = page.Find(".dock-bottom .dock-badge");
+        Assert.Equal("1", badge.TextContent.Trim());
+        Assert.Contains("p2", badge.GetAttribute("class")); // highest unacknowledged priority
+        Assert.Contains("blink-unack", badge.GetAttribute("class"));
+        page.Find(".dock-bottom .dock-toggle").Click(); // expand again
+        page.WaitForAssertion(() => Assert.Empty(page.FindAll(".dock-badge")));
+    }
+
+    [Fact]
+    public async Task CentreOnDiagramButtonInTheControlWindowRequestsCanvasFocus()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
+        var shell = host.Context.Services.GetRequiredService<Hmi.Services.Shell.ShellState>();
+        string? focused = null;
+        shell.FocusRequested += id => focused = id;
+        var page = host.Context.Render<GridWorkspace>();
+        page.FindAll(".dock-table .linklike").Single(b => b.TextContent.Trim() == "B-MV").Click();
+        page.WaitForAssertion(() => Assert.Contains("MV bus", page.Find(".control-window").TextContent));
+        Button(page, "Centre on diagram").Click();
+        Assert.Equal("B-MV", focused);
+    }
+
+    [Fact]
+    public async Task ControlWindowInTheWorkspaceRendersSparklineFromGridHistory()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, "eva", mode: SimulationMode.Grid);
+        host.GridHistory!.Seed("V1", 19, .1, 60);
+        var page = host.Context.Render<GridWorkspace>();
+        page.FindAll(".dock-table .linklike").Single(b => b.TextContent.Trim() == "B-MV").Click();
+        page.WaitForAssertion(() => Assert.Contains("MV bus", page.Find(".control-window").TextContent));
+        // The control window of the workspace renders the real IGridHistory series (last 60 points).
+        page.WaitForAssertion(() => Assert.Single(page.FindAll(".control-window .cw-measurement .sparkline-mini polyline")));
     }
 
     private static AngleSharp.Dom.IElement Button<T>(IRenderedComponent<T> page, string text) where T : IComponent =>
