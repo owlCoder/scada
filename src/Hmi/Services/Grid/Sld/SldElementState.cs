@@ -5,7 +5,11 @@ using Domain.Process.Devices;
 
 namespace Hmi.Services.Grid.Sld;
 
-/// <summary>Dynamic, per-tick visual state of one element. Records give value equality so child components can skip re-renders.</summary>
+/// <summary>
+/// Dynamic, per-tick visual state of one element. Records give value equality so child components can skip re-renders.
+/// <see cref="KeyText"/> is the compact value shown at low/medium zoom (bus kV, branch A·%, transformer loading);
+/// <see cref="ValueText"/> is the full value box content at high zoom (kV, A·%, MW, switch state, tap).
+/// </summary>
 public sealed record SldElementState(
     string Id,
     bool Energized,
@@ -20,7 +24,8 @@ public sealed record SldElementState(
     AlarmSeverity? AlarmSeverity,
     bool AlarmUnacknowledged,
     IReadOnlyList<GridTag> Tags,
-    bool Selected)
+    bool Selected,
+    string? KeyText = null)
 {
     public string LoadingClass => LoadingPercent is { } p ? p <= 75 ? "heat-ok" : p <= 90 ? "heat-warn" : p <= 100 ? "heat-high" : "heat-over" : "heat-ok";
 

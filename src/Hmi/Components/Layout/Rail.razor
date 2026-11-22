@@ -30,7 +30,7 @@
 
     private static NavLinkMatch MatchFor(DisplayEntry entry) => entry.Href is "" or "grid" ? NavLinkMatch.All : NavLinkMatch.Prefix;
 
-    private RenderFragment Link(DisplayEntry entry) => @<NavLink href="@entry.Href" Match="@MatchFor(entry)" class="rail-item" title="@entry.Title" aria-label="@entry.Title">@Icon(entry.Icon)<span class="rail-label">@entry.Title</span></NavLink>;
+    private RenderFragment Link(DisplayEntry entry) => @<NavLink href="@entry.Href" Match="@MatchFor(entry)" class="rail-item" title="@entry.Title" aria-label="@entry.Title">@Icon(entry.Icon)<span class="rail-label">@entry.ShortLabel</span></NavLink>;
 
     private static MarkupString Icon(string name) => new(name switch
     {

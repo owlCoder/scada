@@ -1,10 +1,12 @@
 @using Hmi.Services.Grid.Sld
+@using Hmi.Services.Shell
 @using Domain.Grid.Definition
 @using System.Globalization
 @using Microsoft.Extensions.Logging
 @using Hmi.Components.Pages.Grid.Sld
 @inject IJSRuntime JS
 @inject ILogger<GridSld> Log
+@inject ShellState Shell
 @implements IAsyncDisposable
 
 @* Single-line diagram canvas. Fills its container; pan by dragging empty space, wheel zoom around the cursor,
@@ -19,21 +21,23 @@
          @onkeydown="OnKeyDownAsync" @onkeydown:preventDefault
          @onclick="OnBackgroundClickAsync"
          @oncontextmenu="OnBackgroundContextMenu" @oncontextmenu:preventDefault>
-        <SldFramesLayer Model="_model" />
+        <SldFramesLayer Model="_model" Show="_showStations" Lod="_lod" LabelScale="_scales.Id" />
         @foreach (var element in _model.Elements)
         {
             <SldElementG @key="element.Id" Element="element" State="_states.GetValueOrDefault(element.Id)"
                          Lod="_lod" ViewMode="_viewMode" ShowHeat="_showHeat" Tap="BranchTap(element.Id)"
+                         Scales="_scales"
                          Placement="_placements is null ? null : _placements.GetValueOrDefault(element.Id)"
+                         TapPlacement="_placements is null ? null : _placements.GetValueOrDefault(element.Id + TapSuffix)"
                          OnSelect="SelectAsync" OnOpenControl="id => RaiseActionAsync(id, GridSldActionKind.OpenControl)"
                          OnContextMenu="OnElementMenuAsync" OnHover="OnElementHover" OnUnhover="OnElementUnhover" />
         }
     </svg>
 
     <SldSearchBox Index="_index" Model="_model" OnPick="PickAsync" OnNavigateBounds="NavigateBoundsAsync" />
-    <SldToolbar ViewMode="_viewMode" ShowHeat="_showHeat"
+    <SldToolbar ViewMode="_viewMode" ShowHeat="_showHeat" ShowStations="_showStations"
                 OnZoomIn="() => ZoomCenter(1.25)" OnZoomOut="() => ZoomCenter(0.8)" OnFit="() => Fit()"
-                OnViewMode="SetViewMode" OnToggleHeat="SetHeatAsync" />
+                OnViewMode="SetViewMode" OnToggleHeat="SetHeatAsync" OnToggleStations="SetStations" />
     <SldMinimap Model="_model" Viewport="_viewport" OnNavigate="NavigateMinimap" />
 
     @if (_hover is { } hover && _model.Element(hover.ElementId) is { } hoverElement)
@@ -84,9 +88,14 @@
     private IReadOnlyDictionary<string, SldElementState> _states = new Dictionary<string, SldElementState>();
     private IReadOnlyDictionary<string, SldLabelPlacement>? _placements;
     private SldLod _lod;
+    private SldScales _scales = new(1, 1, 1, 1);
     private SldViewMode _viewMode = SldViewMode.VoltageLevels;
     private bool _showHeat;
+    private bool _showStations = true;
     private bool _fitted;
+
+    /// <summary>Placer key suffix for the transformer tap value box.</summary>
+    public const string TapSuffix = "#tap";
 
     private ElementReference _root;
     private ElementReference _canvas;
@@ -100,6 +109,7 @@
     private bool _menuDirty;
     private SldPointerRequest? _hover;
     private bool _hoverDirty;
+    private Action<string> _onFocus = static _ => { };
 
     private bool _panning;
     private bool _dragged;
@@ -136,21 +146,44 @@
     private bool RefreshZoomDerived()
     {
         _lod = _viewport.Lod;
-        _placements = _lod == SldLod.High ? PlaceLabels() : null;
+        _scales = SldScales.Of(_viewport);
+        _placements = PlaceLabels();
         return true;
     }
 
+    /// <summary>
+    /// Collision-free label placement for the current LOD. Boxes are sized in screen pixels and converted to SVG
+    /// units with the fixed scale, so they keep a constant on-screen size and never shrink below 11 px of text.
+    /// Low/medium zoom places the compact key values; high zoom places the full value boxes plus the tap box.
+    /// </summary>
     private IReadOnlyDictionary<string, SldLabelPlacement> PlaceLabels()
     {
+        var scale = _viewport.FixedScale;
         var candidates = new List<SldLabelCandidate>();
         foreach (var element in _model.Elements)
         {
-            if (_states.GetValueOrDefault(element.Id)?.ValueText is not { } value)
-                continue;
-            var (width, height) = SldLabelPlacer.BoxSize(value, _states.GetValueOrDefault(element.Id)?.QualityFlag);
-            candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width, height));
+            var state = _states.GetValueOrDefault(element.Id);
+            if (_lod == SldLod.High)
+            {
+                if (state?.ValueText is { } value)
+                {
+                    var (width, height) = SldLabelPlacer.BoxSize(value, state.QualityFlag);
+                    candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
+                }
+                if (element.Kind == SldElementKind.Transformer && BranchTap(element.Id) is { } tap)
+                {
+                    var text = string.Create(CultureInfo.InvariantCulture, $"tap {tap}");
+                    var (width, height) = SldLabelPlacer.BoxSize(text, null);
+                    candidates.Add(new SldLabelCandidate(element.Id + TapSuffix, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
+                }
+            }
+            else if (state?.KeyText is { } key)
+            {
+                var (width, height) = SldLabelPlacer.BoxSize(key, null);
+                candidates.Add(new SldLabelCandidate(element.Id, element.Anchor.X, element.Anchor.Y, width * scale, height * scale));
+            }
         }
-        return SldLabelPlacer.Place(candidates).ToDictionary(p => p.Id);
+        return SldLabelPlacer.Place(candidates, scale).ToDictionary(p => p.Id);
     }
 
     private int? BranchTap(string id) => Snapshot.Branch(id)?.TapPosition;
@@ -309,6 +342,32 @@
     {
         _showHeat = heat;
         return Task.CompletedTask;
+    }
+
+    private Task SetStations(bool show)
+    {
+        _showStations = show;
+        return Task.CompletedTask;
+    }
+
+    protected override void OnInitialized()
+    {
+        // Ctrl+K element jump (quick switcher / "Centre on diagram"): select the element and zoom to it.
+        _onFocus = id => _ = OnFocusRequestedAsync(id);
+        Shell.FocusRequested += _onFocus;
+    }
+
+    private Task OnFocusRequestedAsync(string elementId)
+    {
+        if (_model.Element(elementId) is not { } element)
+            return Task.CompletedTask;
+        // Hop onto the renderer dispatcher: the quick switcher / control window may raise this from any context.
+        return InvokeAsync(async () =>
+        {
+            _viewport.ZoomTo(element.Anchor, _model.Bounds);
+            await SelectedIdChanged.InvokeAsync(element.Id);
+            StateHasChanged();
+        });
     }
 
     private bool Fit()
@@ -504,6 +563,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        Shell.FocusRequested -= _onFocus;
         var module = await ModuleAsync();
         if (module is not null)
         {

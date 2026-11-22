@@ -16,20 +16,28 @@
     <label class="sld-heat-toggle" title="Overlay loading heat colours on lines">
         <input type="checkbox" @bind="_heat" @bind:after="HeatChangedAsync" /> Loading colours
     </label>
+    <div class="sld-modes" role="group" aria-label="Overlays">
+        <button type="button" class="sld-btn @(ShowStations ? "active" : "")" aria-pressed="@(ShowStations)"
+                title="Show substation (RTU) frames" @onclick="() => StationsChangedAsync(!ShowStations)">Stations</button>
+    </div>
 </div>
 
 @code {
     [Parameter] public SldViewMode ViewMode { get; set; }
     [Parameter] public bool ShowHeat { get; set; }
+    [Parameter] public bool ShowStations { get; set; } = true;
     [Parameter] public EventCallback OnZoomIn { get; set; }
     [Parameter] public EventCallback OnZoomOut { get; set; }
     [Parameter] public EventCallback OnFit { get; set; }
     [Parameter] public EventCallback<SldViewMode> OnViewMode { get; set; }
     [Parameter] public EventCallback<bool> OnToggleHeat { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleStations { get; set; }
 
     private bool _heat;
 
     protected override void OnParametersSet() => _heat = ShowHeat;
 
     private Task HeatChangedAsync() => OnToggleHeat.InvokeAsync(_heat);
+
+    private Task StationsChangedAsync(bool show) => OnToggleStations.InvokeAsync(show);
 }

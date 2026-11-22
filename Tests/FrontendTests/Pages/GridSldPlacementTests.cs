@@ -50,6 +50,23 @@ public sealed class GridSldPlacementTests
         return Task.CompletedTask;
     }
 
+    [Fact]
+    public Task UnitScalePlacesBoxesTighterInSvgUnitsButStillWithoutOverlap()
+    {
+        // At high zoom the caller shrinks box sizes and slot distances by 1/ppu so boxes keep their screen size.
+        var candidates = Enumerable.Range(0, 60)
+            .Select(i => new SldLabelCandidate($"e{i}", 200, 200, (40 + (i % 7) * 10) / 2.0, 18 / 2.0))
+            .ToArray();
+        var placements = SldLabelPlacer.Place(candidates, 0.5);
+        AssertNoOverlap(placements, candidates);
+        var unscaled = SldLabelPlacer.Place(Enumerable.Range(0, 60)
+            .Select(i => new SldLabelCandidate($"e{i}", 200, 200, 40 + (i % 7) * 10, 18)));
+        var scaledSpread = placements.Max(p => Math.Max(Math.Abs(p.X - 200), Math.Abs(p.Y - 200)));
+        var unscaledSpread = unscaled.Max(p => Math.Max(Math.Abs(p.X - 200), Math.Abs(p.Y - 200)));
+        Assert.True(scaledSpread < unscaledSpread, $"{scaledSpread} should be tighter than {unscaledSpread}");
+        return Task.CompletedTask;
+    }
+
     private static Task AssertNoOverlap(IReadOnlyList<SldLabelPlacement> placements, IReadOnlyList<SldLabelCandidate> candidates)
     {
         Assert.Equal(candidates.Count, placements.Count);

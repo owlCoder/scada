@@ -101,4 +101,41 @@ public sealed class GridSldViewportTests
         Assert.Equal(SldLod.High, v.Lod); // ~9.4 px/unit
         return Task.CompletedTask;
     }
+
+    [Fact]
+    public Task LodThresholdsAreNamesAt15AndValueBoxesAt25PixelsPerUnit()
+    {
+        var v = new SldViewport();
+        v.SetContainer(1500, 900);
+        Assert.Equal(1.25, v.PixelsPerUnit, 6); // default width 1200
+        Assert.Equal(SldLod.Low, v.Lod);         // fit on a 1520 px canvas is about 1.0 px/unit: ids + key values
+        v.ZoomCenter(1.5 / 1.25);
+        Assert.Equal(1.5, v.PixelsPerUnit, 6);
+        Assert.Equal(SldLod.Medium, v.Lod);      // ~1.5x: names appear
+        v.ZoomCenter(2.5 / 1.5);
+        Assert.Equal(2.5, v.PixelsPerUnit, 6);
+        Assert.Equal(SldLod.High, v.Lod);        // ~2.5x: full value boxes
+        v.ZoomCenter(1.4 / 2.5);
+        Assert.Equal(1.4, v.PixelsPerUnit, 6);
+        Assert.Equal(SldLod.Low, v.Lod);
+        return Task.CompletedTask;
+    }
+
+    [Fact]
+    public Task CounterScalesKeepTextLegibleAndSymbolsCapped()
+    {
+        var v = new SldViewport();
+        v.SetContainer(1500, 900); // ppu 1.25
+        Assert.Equal(1.25, v.PixelsPerUnit, 6);
+        Assert.Equal(1, v.SymbolScale, 6);            // below the cap the symbol scales with the zoom
+        Assert.Equal(1 / 1.25, v.FixedScale, 6);     // value boxes keep a fixed screen size
+        // 12 px design text stays within the 11-16 px on-screen window at any zoom.
+        Assert.Equal(Math.Clamp(12 * 1.25, SldViewport.MinTextPx, SldViewport.MaxTextPx), 12 * v.PixelsPerUnit * v.TextScale(12), 6);
+        v.ZoomCenter(0.25); // ppu 0.3125 -> 12 px design text would be 3.75 px on screen
+        Assert.Equal(SldViewport.MinTextPx, 12 * v.PixelsPerUnit * v.TextScale(12), 6); // clamped to 11 px
+        v.ZoomCenter(16.0); // ppu 5 -> text would be 60 px on screen
+        Assert.Equal(SldViewport.MaxTextPx, 12 * v.PixelsPerUnit * v.TextScale(12), 6); // clamped to 16 px
+        Assert.Equal(2.5 / 5.0, v.SymbolScale, 6);   // symbol screen size capped at the 2.5x zoom level
+        return Task.CompletedTask;
+    }
 }

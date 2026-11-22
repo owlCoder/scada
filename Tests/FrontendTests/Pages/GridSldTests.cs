@@ -9,8 +9,10 @@ using Domain.Process.Devices;
 using FrontendTests.Support;
 using Hmi.Components.Pages.Grid;
 using Hmi.Services.Grid;
+using Hmi.Services.Shell;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace FrontendTests.Pages;
@@ -48,7 +50,21 @@ public sealed class GridSldTests
         foreach (var kind in new[] { "bus", "source", "line", "transformer", "switch", "load", "generator", "capacitor" })
             Assert.NotEmpty(page.FindAll($"g.sld-el.kind-{kind}"));
         var frame = Assert.Single(page.FindAll(".sld-frame"));
-        Assert.Contains("Station RTU", frame.TextContent);
+        Assert.NotEmpty(frame.QuerySelectorAll("rect"));
+        // The station name is a small-caps label that appears from the medium LOD up, outside the frame.
+        Assert.Empty(page.FindAll(".sld-frame-name"));
+        var zoomIn = page.Find("button[title='Zoom in (+)']");
+        zoomIn.Click();
+        zoomIn.Click(); // ~1.8 px/unit -> medium LOD
+        var label = Assert.Single(page.FindAll(".sld-frame-name"));
+        Assert.Contains("Station RTU", label.TextContent);
+        var rect = frame.QuerySelector("rect")!;
+        var transform = label.ParentElement!.GetAttribute("transform") ?? "";
+        var match = System.Text.RegularExpressions.Regex.Match(transform, @"translate\(([-\d.]+) ([-\d.]+)\)");
+        Assert.True(match.Success, transform);
+        Assert.Equal(rect.GetAttribute("x"), match.Groups[1].Value); // same left edge as the frame
+        Assert.True(double.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture)
+            < double.Parse(rect.GetAttribute("y")!, System.Globalization.CultureInfo.InvariantCulture)); // above the frame, outside it
         Assert.NotEmpty(page.FindAll("svg.sld-minimap .mm-wire"));
         Assert.NotEmpty(page.FindAll("svg.sld-minimap .mm-view"));
         Assert.NotEmpty(page.FindAll(".sld-search-input"));
@@ -256,28 +272,73 @@ public sealed class GridSldTests
     }
 
     [Fact]
-    public async Task LevelOfDetailHidesAndShowsLabelsWithZoom()
+    public async Task LevelOfDetailShowsIdsAndKeyValuesAtFitNamesAtMediumAndValueBoxesAtHigh()
     {
         await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
         var (page, _, _) = RenderSld(host);
-        // Fit view is the low LOD: ids of busbars/feeders only.
+        // Fit view is the low LOD (~1.17 px/unit): busbar/feeder ids AND key values, no names, no full value boxes.
         Assert.NotEmpty(page.FindAll(".sld-lod-id"));
         Assert.Empty(page.FindAll(".sld-lod-name"));
         Assert.Empty(page.FindAll(".sld-value"));
+        Assert.Empty(page.FindAll(".sld-tap-box"));
+        var keys = page.FindAll(".sld-key text").Select(t => t.TextContent.Trim()).ToArray();
+        Assert.Contains("110.00 kV", keys);      // B-HV busbar kV
+        Assert.Contains("20.20 kV", keys);       // B-MV busbar kV
+        Assert.Contains("80.0 A · 20 %", keys);  // L1 feeder head current + loading
+        Assert.Contains("90.0 A · 42 %", keys);  // T1 transformer current + loading
         var zoomIn = page.Find("button[title='Zoom in (+)']");
-        for (var i = 0; i < 4; i++)
-            zoomIn.Click();
-        // Medium LOD: names.
+        zoomIn.Click(); // ~1.47 px/unit — still low
+        Assert.NotEmpty(page.FindAll(".sld-lod-id"));
+        Assert.Empty(page.FindAll(".sld-lod-name"));
+        zoomIn.Click(); // ~1.83 px/unit — medium: names appear, key values stay
         Assert.NotEmpty(page.FindAll(".sld-lod-name"));
         Assert.Empty(page.FindAll(".sld-value"));
-        for (var i = 0; i < 6; i++)
-            zoomIn.Click();
-        // High LOD: measurement value boxes.
+        Assert.NotEmpty(page.FindAll(".sld-key text"));
+        Assert.NotEmpty(page.FindAll(".sld-frame-name"));
+        zoomIn.Click();
+        zoomIn.Click(); // ~2.86 px/unit — high: full value boxes for every element incl. the tap box
         Assert.NotEmpty(page.FindAll(".sld-value"));
-        Assert.Contains("20.20 kV", page.Markup); // B-MV voltage in the instructor snapshot
-        Assert.Contains("80.0 A · 20 %", page.Markup); // L1 branch current/loading
-        Assert.Contains("1.50 MW", page.Markup); // LD1 load
-        Assert.Contains("tap 0", page.Markup); // transformer tap
+        Assert.Empty(page.FindAll(".sld-key"));
+        var boxTexts = page.FindAll(".sld-value text").Select(t => t.TextContent.Trim()).ToArray();
+        Assert.Contains("20.20 kV", boxTexts);   // kV at buses
+        Assert.Contains("80.0 A · 20 %", boxTexts); // A/% at branches
+        Assert.Contains("1.50 MW", boxTexts);    // MW at loads
+        var tapBox = Assert.Single(page.FindAll(".sld-tap-box"));
+        Assert.Contains("tap 0", tapBox.TextContent); // transformer tap in its own value box
+        // Value boxes keep a constant on-screen size: the group scale is the inverse of the pixels per unit.
+        var box = page.Find(".sld-value");
+        var scale = double.Parse(System.Text.RegularExpressions.Regex.Match(box.GetAttribute("transform")!, @"scale\(([-\d.]+)\)").Groups[1].Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+        var viewBoxWidth = double.Parse(page.Find("svg.sld-canvas").GetAttribute("viewBox")!.Split(' ')[2], System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(Math.Abs(1400 / viewBoxWidth - 1 / scale) < 0.01, $"scale {scale} vs ppu {1400 / viewBoxWidth}"); // 1400 px container -> scale = 1/ppu
+    }
+
+    [Fact]
+    public async Task StationsToggleHidesAndShowsSubstationFrames()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
+        var (page, _, _) = RenderSld(host);
+        Assert.Single(page.FindAll(".sld-frame"));
+        Button(page, "Stations").Click();
+        Assert.Empty(page.FindAll(".sld-frame"));
+        Button(page, "Stations").Click();
+        Assert.Single(page.FindAll(".sld-frame"));
+    }
+
+    [Fact]
+    public async Task FocusRequestFromTheShellSelectsAndZoomsToTheElement()
+    {
+        await using var host = HmiTestHost.Create(AccessRole.Operator, mode: SimulationMode.Grid);
+        var shell = host.Context.Services.GetRequiredService<ShellState>();
+        var (page, selected, _) = RenderSld(host);
+        var svg = page.Find("svg.sld-canvas");
+        var before = svg.GetAttribute("viewBox");
+        shell.RequestFocus("L1"); // Ctrl+K element jump / "Centre on diagram"
+        Assert.Equal("L1", Assert.Single(selected));
+        Assert.NotEqual(before, svg.GetAttribute("viewBox"));
+        // Unknown ids are ignored.
+        shell.RequestFocus("NOPE");
+        Assert.Single(selected);
     }
 
     [Fact]
